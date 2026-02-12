@@ -1,0 +1,16 @@
+{
+  "configurations": [
+    {
+      "name": "Deploy Cloud Function",
+      "type": "cloudcode.cloudfunctions",
+      "request": "launch",
+      "functionName": "changeStatus",
+      "region": "europe-west1",
+      "gen": "GEN_2",
+      "revision": "changestatus-00001-gub",
+      "entryPoint": "changeStatus",
+      "runtime": "nodejs24",
+      "testInput": ""
+    }
+  ]
+}
