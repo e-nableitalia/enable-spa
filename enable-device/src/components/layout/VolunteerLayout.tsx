@@ -1,30 +1,41 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate, Routes, Route, Navigate } from "react-router-dom";
-import { onAuthStateChanged, type Auth, signOut } from "firebase/auth";
+import { useNavigate, Routes, Route, Navigate } from "react-router-dom";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getDoc, doc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { PanelMenu } from "primereact/panelmenu";
 import { Button } from "primereact/button";
-import { Badge } from "primereact/badge";
+import { Avatar } from "primereact/avatar";
+import { Dialog } from "primereact/dialog";
 import logo from "../../assets/logo.png";
+import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
 
 import VolunteerDashboard from "../../pages/volunteer/VolunteerDashboard";
 import MyRequests from "../../pages/volunteer/MyRequests";
 import Production from "../../pages/volunteer/Production";
 import Shipping from "../../pages/volunteer/Shipping";
 import Archive from "../../pages/volunteer/Archive";
+import VolunteerProfile from "../../pages/volunteer/VolunteerProfile";
+import MyPrinters from "../../pages/volunteer/MyPrinters";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 
 export default function VolunteerLayout() {
     const navigate = useNavigate();
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [authorized, setAuthorized] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [active, setActive] = useState(true);
+    const [requests, setRequests] = useState<any[]>([]);
+    const [shippingRequests, setShippingRequests] = useState<any[]>([]);
+    const [productionRequests, setProductionRequests] = useState<any[]>([]);
+    // const [completedRequests, setCompletedRequests] = useState<any[]>([]);
+    const [showInfo, setShowInfo] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
-
-        const unsub = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
+        let unsub: (() => void) | undefined;
+        const unsubAuth = onAuthStateChanged(auth, async (user) => {
+            if (!user || !user.uid) {
                 navigate("/login", { replace: true });
                 return;
             }
@@ -41,13 +52,26 @@ export default function VolunteerLayout() {
                 }
                 setUserEmail(user.email);
                 setAuthorized(true);
+                setActive(userDoc.data()?.active !== false); // default true
+                // Fetch requests assigned to this volunteer
+                const q = query(
+                    collection(db, "deviceRequests"),
+                    where("assignedVolunteer", "==", user.uid)
+                );
+                unsub = onSnapshot(q, (snapshot) => {
+                    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as { id: string; status?: string }));
+                    setRequests(data);
+                    setShippingRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["fabbricazione in corso"].includes(r.status) && ["pronta per spedizione", "spedita"].includes(r.status)));
+                    setProductionRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["fabbricazione in corso"].includes(r.status) && !["pronta per spedizione", "spedita"].includes(r.status)));
+                    // setCompletedRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["completati"].includes(r.status)));
+                });
             } finally {
                 if (!cancelled) setLoading(false);
             }
         });
-
         return () => {
             cancelled = true;
+            if (unsubAuth) unsubAuth();
             if (unsub) unsub();
         };
     }, [navigate]);
@@ -58,6 +82,16 @@ export default function VolunteerLayout() {
     };
 
     const items = [
+        {
+            label: "Le mie informazioni",
+            icon: "pi pi-user",
+            command: () => navigate("/volunteer/profile")
+        },
+        {
+            label: "Le mie stampanti",
+            icon: "pi pi-print",
+            command: () => navigate("/volunteer/my-printers")
+        },
         {
             label: "Dashboard",
             icon: "pi pi-home",
@@ -88,6 +122,56 @@ export default function VolunteerLayout() {
     if (loading) return <div>Loading...</div>;
     if (!authorized) return null;
 
+    // Se non attivo, mostra solo il profilo
+    if (!active) {
+        return (
+            <div style={{ display: "flex", minHeight: "100vh" }}>
+                <div style={{ width: 250, padding: 20, borderRight: "1px solid #ddd" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                        <img src={logo} alt="Logo" style={{ width: 32, height: 32 }} />
+                        <h3 style={{ margin: 0 }}>Volunteer</h3>
+                    </div>
+                    <PanelMenu model={[{
+                        label: "Le mie informazioni",
+                        icon: "pi pi-user",
+                        command: () => navigate("/volunteer/profile")
+                    }]} />
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                    {/* Topbar */}
+                    <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "0 24px",
+                        height: 60,
+                        borderBottom: "1px solid #ddd",
+                        background: "#fff"
+                    }}>
+                        <div style={{ fontWeight: "bold", fontSize: 20 }}>e-Nable Italia Volunteer</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                            {userEmail && (
+                                <>
+                                    <Avatar label={userEmail?.[0]?.toUpperCase() || "U"} size="normal" shape="circle" />
+                                    <span style={{ fontWeight: "bold" }}>{userEmail}</span>
+                                </>
+                            )}
+                            <Button icon="pi pi-info-circle" className="p-button-text" onClick={() => setShowInfo(true)} aria-label="Info" />
+                            <Button label="Logout" icon="pi pi-sign-out" onClick={logout} className="p-button-text" />
+                        </div>
+                    </div>
+                    {/* Content */}
+                    <div style={{ flex: 1, padding: 24, background: "#fafbfc", overflow: "auto" }}>
+                        <Routes>
+                            <Route path="profile" element={<VolunteerProfile />} />
+                            <Route path="*" element={<Navigate to="/volunteer/profile" />} />
+                        </Routes>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={{ display: "flex", minHeight: "100vh" }}>
             <div style={{ width: 250, padding: 20, borderRight: "1px solid #ddd" }}>
@@ -98,22 +182,51 @@ export default function VolunteerLayout() {
                 <PanelMenu model={items} />
             </div>
 
-            <div style={{ flex: 1, padding: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-                    <div>
-                        <strong>{userEmail}</strong>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                {/* Topbar */}
+                <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0 24px",
+                    height: 60,
+                    borderBottom: "1px solid #ddd",
+                    background: "#fff"
+                }}>
+                    <div style={{ fontWeight: "bold", fontSize: 20 }}>e-Nable Italia Volunteer</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        {userEmail && (
+                            <>
+                                <Avatar label={userEmail?.[0]?.toUpperCase() || "U"} size="normal" shape="circle" />
+                                <span style={{ fontWeight: "bold" }}>{userEmail}</span>
+                            </>
+                        )}
+                        <Button icon="pi pi-info-circle" className="p-button-text" onClick={() => setShowInfo(true)} aria-label="Info" />   
+                        <Button label="Logout" icon="pi pi-sign-out" onClick={logout} className="p-button-text" />
                     </div>
-                    <Button label="Logout" icon="pi pi-sign-out" onClick={logout} />
                 </div>
-
-                <Routes>
-                    <Route index element={<VolunteerDashboard />} />
-                    <Route path="my-requests" element={<MyRequests />} />
-                    <Route path="production" element={<Production />} />
-                    <Route path="shipping" element={<Shipping />} />
-                    <Route path="archive" element={<Archive />} />
-                    <Route path="*" element={<Navigate to="/volunteer" />} />
-                </Routes>
+                {/* Content */}
+                <div style={{ flex: 1, padding: 24, background: "#fafbfc", overflow: "auto" }}>
+                    <Routes>
+                        <Route index element={<VolunteerDashboard />} />
+                        <Route path="my-requests" element={<MyRequests requests={requests} />} />
+                        <Route path="production" element={<Production requests={productionRequests} />} />
+                        <Route path="shipping" element={<Shipping requests={shippingRequests} />} />
+                        <Route path="archive" element={<Archive />} />
+                        <Route path="profile" element={<VolunteerProfile />} />
+                        <Route path="my-printers" element={<MyPrinters />} />
+                        <Route path="*" element={<Navigate to="/volunteer" />} />
+                    </Routes>
+                    <Dialog header="Informazioni sull'applicazione" visible={showInfo} style={{ width: "500px" }} onHide={() => setShowInfo(false)}>
+                        <div>
+                            <h3>e-Nable Italia Volunteer</h3>
+                            <p>Versione: 1.0.0</p>
+                            <p>Gestione richieste, profilo volontario e stampanti.</p>
+                            <p>Per supporto o segnalazioni: <a href="mailto:info@e-nableitalia.it">info@e-nableitalia.it</a></p>
+                            <p>© {new Date().getFullYear()} e-Nable Italia</p>
+                        </div>
+                    </Dialog>
+                </div>
             </div>
         </div>
     );

@@ -1,4 +1,4 @@
-export default function AdminVolunteers({ requests }: { requests?: any[] }) {
+export default function AdminVolunteers() {
   return (
     <div style={{ padding: 20 }}>
       <h2>Volontari</h2>

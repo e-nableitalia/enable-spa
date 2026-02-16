@@ -10,6 +10,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin/*" element={<AdminLayout />} />
         <Route path="/volunteer/*" element={<VolunteerLayout />} />
+        <Route path="*" element={<Login />} />
       </Routes>
     </BrowserRouter>
   );

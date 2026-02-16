@@ -1,6 +1,3 @@
-import { useEffect, useState } from "react";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { db } from "../../firebase";
 import RequestTable from "../../components/requests/RequestTable";
 import { useNavigate } from "react-router-dom";
 
