@@ -29,7 +29,7 @@ export default function VolunteerLayout() {
     const [requests, setRequests] = useState<any[]>([]);
     const [shippingRequests, setShippingRequests] = useState<any[]>([]);
     const [productionRequests, setProductionRequests] = useState<any[]>([]);
-    // const [completedRequests, setCompletedRequests] = useState<any[]>([]);
+    const [role, setRole] = useState<string | null>(null);
     const [showInfo, setShowInfo] = useState(false);
     const [sidebarVisible, setSidebarVisible] = useState(false);
 
@@ -44,13 +44,12 @@ export default function VolunteerLayout() {
             try {
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 const role = userDoc.exists() ? userDoc.data()?.role : null;
+                setRole(role);
                 if (role !== "volunteer") {
-                    if (role === "admin") {
-                        navigate("/admin", { replace: true });
-                    } else {
+                    if (role != "admin") {
                         navigate("/login", { replace: true });
+                        return;
                     }
-                    return;
                 }
                 setUserEmail(user.email);
                 setAuthorized(true);
@@ -121,8 +120,18 @@ export default function VolunteerLayout() {
         }
     ];
 
+    // Aggiungi voce admin dashboard se l'utente è admin
+    if (role === "admin") {
+        items.unshift({
+            label: "Admin Dashboard",
+            icon: "pi pi-shield",
+            command: () => navigate("/admin")
+        });
+    }
+
     if (loading) return <div>Loading...</div>;
     if (!authorized) return null;
+    console.log("Active status:", active);
 
     // Se non attivo, mostra solo il profilo
     if (!active) {

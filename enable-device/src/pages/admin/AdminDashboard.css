@@ -1,0 +1,14 @@
+/* Rimuove sfondo grigio della board */
+.react-kanban-board {
+  background: transparent !important;
+}
+
+/* Rimuove sfondo di default colonne */
+.react-kanban-column {
+  background: transparent !important;
+}
+
+/* Rimuove padding extra interno */
+.react-kanban-column > div {
+  background: transparent !important;
+}

@@ -23,6 +23,7 @@ import RequestDetail from "../../pages/admin/requests/RequestDetail";
 
 import logo from "../../assets/logo.png";
 import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
+import AdminDashboard from "../../pages/admin/AdminDashboard";
 
 export default function AdminLayout() {
   const [user, setUser] = useState<any | null>(null);
@@ -123,12 +124,17 @@ export default function AdminLayout() {
 
   const panelMenuItems = [
     {
+      label: "Dashboard",
+      icon: "pi pi-home",
+      command: () => navigate("/admin/dashboard"),
+    }, 
+    {
       label: "Richieste",
-      icon: "pi pi-folder",
+      icon: "pi pi-folder-open", // folder open per richieste
       items: [
         {
           label: `Tutte (${requests.length})`,
-          icon: "pi pi-home",
+          icon: "pi pi-list", // elenco
           command: () => navigate("/admin"),
         },
         {
@@ -148,40 +154,45 @@ export default function AdminLayout() {
         },
         {
           label: `Spedite (${shippingRequests.length})`,
-          icon: "pi pi-truck",
+          icon: "pi pi-send", // spedizione
           command: () => navigate("/admin/requests/shipping"),
         },
         {
           label: `Completate (${completedRequests.length})`,
-          icon: "pi pi-check",
+          icon: "pi pi-check-circle", // completate
           command: () => navigate("/admin/requests/completed"),
         },
         {
           label: `Annullate / KO (${cancelledRequests.length})`,
-          icon: "pi pi-times",
+          icon: "pi pi-ban", // annullate
           command: () => navigate("/admin/requests/cancelled"),
         },
       ],
     },
     {
       label: "Volontari",
-      icon: "pi pi-users",
+      icon: "pi pi-users", // gruppo utenti
       items: [
         {
           label: `Elenco (${volunteers.length})`,
-          icon: "pi pi-list",
+          icon: "pi pi-address-book", // elenco volontari
           command: () => navigate("/admin/volunteers/all"),
         },
         {
           label: `Attesa attivazione (${pendingVolunteers.length})`,
-          icon: "pi pi-clock",
+          icon: "pi pi-user-plus", // attesa attivazione
           command: () => navigate("/admin/volunteers/pending"),
         },
+        {
+          label: "Dashboard volontari",
+          icon: "pi pi-id-card", // dashboard volontari
+          command: () => navigate("/volunteer"),
+        },        
       ],
     },
     {
       label: "Statistiche",
-      icon: "pi pi-chart-bar",
+      icon: "pi pi-chart-bar", // statistiche
       command: () => navigate("/admin/stats"),
     },
   ];
@@ -276,12 +287,12 @@ export default function AdminLayout() {
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             {user && (
               <>
-          <Avatar
-            label={user.email?.[0]?.toUpperCase() || "U"}
-            size="normal"
-            shape="circle"
-          />
-          <span>{user.email}</span>
+                <Avatar
+                  label={user.email?.[0]?.toUpperCase() || "U"}
+                  size="normal"
+                  shape="circle"
+                />
+                <span>{user.email}</span>
               </>
             )}
 
@@ -321,6 +332,7 @@ export default function AdminLayout() {
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
             <Route path="stats" element={<AdminStats />} />
             <Route path="request/:id" element={<RequestDetail />} />
+            <Route path="dashboard" element={<AdminDashboard requests={requests}/>} />
             <Route path="*" element={<Navigate to="/admin/requests" replace />} />
           </Routes>
         </div>
