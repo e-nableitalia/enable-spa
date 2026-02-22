@@ -10,7 +10,6 @@ import RequestTimeline from "../../../components/timeline/RequestTimeline";
 import { Toast } from "primereact/toast";
 import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
-import { AutoComplete } from "primereact/autocomplete";
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -87,8 +86,7 @@ export default function RequestDetail() {
 
     // Filtra solo i volontari e ordina per firstName
     const list = userProfiles
-      .filter((u): u is NonNullable<typeof u> => !!u)
-      .sort((a, b) => (a.firstName || "").localeCompare(b.firstName || ""));
+      .filter((u): u is NonNullable<typeof u> => !!u);
     setVolunteers(list);
   }, []);
 
@@ -117,6 +115,7 @@ export default function RequestDetail() {
 
   const handleAssignVolunteer = async () => {
     if (!selectedVolunteer) return;
+    if (!id) return; // Ensure id is defined
     await getDoc(doc(db, "deviceRequests", id)); // just to ensure request exists
     console.log("Assigning volunteer:", selectedVolunteer);
     await (await import("firebase/firestore")).updateDoc(
@@ -340,7 +339,7 @@ export default function RequestDetail() {
         header="Timeline"
         toggleable
         collapsed={!timelineOpen}
-        onToggle={(e) => setTimelineOpen(!timelineOpen)}
+        onToggle={() => setTimelineOpen(!timelineOpen)}
         style={{ marginBottom: 30 }}
       >
         <RequestTimeline events={events} />
