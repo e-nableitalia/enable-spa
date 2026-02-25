@@ -6,12 +6,14 @@ import Register from "./pages/Register";
 import CompleteRegistration from "./pages/CompleteRegistration";
 import SetPassword from "./pages/SetPassword";
 import Home from "./pages/Home";
+import RequestDevice from "./pages/RequestDevice";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/request-device" element={<RequestDevice />} />
         <Route path="/admin/*" element={<AdminLayout />} />
         <Route path="/volunteer/*" element={<VolunteerLayout />} />
         <Route path="/register" element={<Register />} />

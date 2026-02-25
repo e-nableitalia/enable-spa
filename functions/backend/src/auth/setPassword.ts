@@ -2,12 +2,15 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
+import { getInvokeId } from "../utils/invoke";
 
 const REGION = "europe-west1";
 
 export const setPassword = onCall(
   { region: REGION },
   async (req) => {
+    const invokeId = getInvokeId(req);
+    console.log(`[setPassword] Invoke ID: ${invokeId} - Function called`);
     if (!req.auth?.uid) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
@@ -25,11 +28,21 @@ export const setPassword = onCall(
 
       if (!hasPasswordProvider) {
         await logSecurityEvent({
-          action: "set_password_failed",
-          uid,
-          email: userRecord.email,
-          reason: "Password provider not linked",
-          timestamp: Timestamp.now()
+          type: "auth",
+          action: "set_password",
+          outcome: "failure",
+          severity: "medium",
+          actor: {
+            uid,
+            email: userRecord.email ?? undefined,
+          },
+          context: {
+            function: "setPassword",
+            invokeId,
+            metadata: {
+              reason: "Password provider not linked",
+            },
+          },
         });
         throw new HttpsError(
           "failed-precondition",
@@ -43,10 +56,18 @@ export const setPassword = onCall(
       });
 
       await logSecurityEvent({
-        action: "set_password_success",
-        uid,
-        email: userRecord.email,
-        timestamp: Timestamp.now()
+        type: "auth",
+        action: "set_password",
+        outcome: "success",
+        severity: "medium",
+        actor: {
+          uid,
+          email: userRecord.email ?? undefined,
+        },
+        context: {
+          function: "setPassword",
+          invokeId,
+        },
       });
 
       console.log(
@@ -55,10 +76,21 @@ export const setPassword = onCall(
       return { success: true };
     } catch (err) {
       await logSecurityEvent({
+        type: "auth",
         action: "set_password_error",
-        uid,
-        error: err instanceof Error ? err.message : String(err),
-        timestamp: Timestamp.now()
+        outcome: "failure",
+        severity: "high",
+        actor: {
+          uid,
+          email: req.auth?.token?.email ?? undefined,
+        },
+        context: {
+          function: "setPassword",
+          invokeId,
+          metadata: {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        },
       });
       console.error(`[setPassword] KO:`, err);
       throw err;

@@ -27,7 +27,7 @@ export default function Register() {
     setLoading(true);
 
     try {
-      secureCallable("register", {
+      await secureCallable("register", {
         email
       }, "register_email");
 

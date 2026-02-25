@@ -5,6 +5,7 @@ import { verifyRecaptcha } from "../security/recaptcha";
 import { checkEmailRateLimit, checkIpRateLimit } from "../security/rateLimit";
 import { logSecurityEvent } from "../security/securityLog";
 import { sendRegistrationEmail } from "../utils/email";
+import { getInvokeId } from "../utils/invoke";
 
 // Utility: Estrae oobCode dal link generato (gestisce link annidati e url encoded)
 function extractOobCode(link: string): string | null {
@@ -43,15 +44,17 @@ export const register = onCall(
       "MAIL_FROM_ADDRESS"
     ]
   },
-  async (request) => {
+  async (req) => {
+    const invokeId = getInvokeId(req);
+    console.log(`[register] Invoke ID: ${invokeId} - Function called`);
     try {
-      const { email, recaptchaToken } = request.data;
+      const { email, recaptchaToken } = req.data;
 
       if (!email || !recaptchaToken) {
         throw new HttpsError("invalid-argument", "Missing data");
       }
 
-      const ip = request.rawRequest.ip ?? "unknown";
+      const ip = req.rawRequest.ip ?? "unknown";
       const apiKey = process.env.RECAPTCHA_API_KEY;
       const siteKey = process.env.RECAPTCHA_SITE_KEY;
 
@@ -66,11 +69,22 @@ export const register = onCall(
         apiKey
       );
       await logSecurityEvent({
-        action: "register_email",
-        score,
-        reasons,
-        ip,
-        email,
+        type: "security",
+        action: "register_recaptcha_check",
+        outcome: score < 0.6 ? "blocked" : "success",
+        severity: score < 0.6 ? "high" : "low",
+        actor: {
+          email,
+          ip,
+        },
+        context: {
+          function: "register",
+          invokeId,
+          metadata: {
+            score,
+            reasons,
+          },
+        },
       });
       if (score < 0.6) throw new HttpsError("permission-denied", "Spam detected");
 
@@ -115,10 +129,41 @@ export const register = onCall(
       // Send email
       await sendRegistrationEmail(email, link);
 
+      await logSecurityEvent({
+        type: "auth",
+        action: "register",
+        outcome: "success",
+        severity: "medium",
+        actor: {
+          email,
+          ip,
+        },
+        context: {
+          function: "register",
+          invokeId,
+          requestId: oobCode,
+        },
+      });
+
       console.log(`[register] OK: pending registration for ${email} (${oobCode}) saved and email sent`);
       return { success: true };
     } catch (err) {
       console.error(`[register] KO:`, err);
+      await logSecurityEvent({
+        type: "auth",
+        action: "register",
+        outcome: "failure",
+        severity: "high",
+        actor: {
+          email: req?.auth?.token?.email ?? "unknown",
+          ip: req?.rawRequest?.ip ?? "unknown",
+        },
+        context: {
+          function: "register",
+          invokeId,
+          requestId: req?.data?.oobCode,
+        },
+      });
       throw err;
     }
   }
@@ -132,6 +177,7 @@ export const checkRegistration = onCall(
     secrets: []
   },
   async (req) => {
+    const invokeId = getInvokeId(req);
     try {
       const { oobCode } = req.data;
       if (!oobCode) throw new HttpsError("invalid-argument", "Missing oobCode");
@@ -163,10 +209,39 @@ export const checkRegistration = onCall(
         validatedAt: now
       });
 
+      await logSecurityEvent({
+        type: "auth",
+        action: "check_registration",
+        outcome: "success",
+        severity: "medium",
+        actor: {
+          email: pending.email,
+        },
+        context: {
+          function: "checkRegistration",
+          invokeId,
+          requestId: oobCode,
+        },
+      });
+
       console.log(`[checkRegistration] OK: oobCode ${oobCode} validated for ${pending.email}`);
       return { success: true, email: pending.email };
     } catch (err) {
       console.error(`[checkRegistration] KO:`, err);
+      await logSecurityEvent({
+        type: "auth",
+        action: "check_registration",
+        outcome: "failure",
+        severity: "high",
+        actor: {
+          email: req.auth?.token.email ?? "unknown",
+        },
+        context: {
+          function: "checkRegistration",
+          invokeId,
+          requestId: req.data.oobCode,
+        },
+      });
       throw err;
     }
   }
@@ -179,6 +254,7 @@ export const completeRegistration = onCall(
     secrets: []
   },
   async (req) => {
+    const invokeId = getInvokeId(req);
     try {
       const auth = getAuth();
       const db = getFirestore();
@@ -199,10 +275,41 @@ export const completeRegistration = onCall(
         provider: req?.auth?.token.firebase?.sign_in_provider,
       });
 
+      await logSecurityEvent({
+        type: "auth",
+        action: "complete_registration",
+        outcome: "success",
+        severity: "medium",
+        actor: {
+          uid,
+          email,
+          provider: req?.auth?.token.firebase?.sign_in_provider,
+        },
+        context: {
+          function: "completeRegistration",
+          invokeId,
+        },
+      });
+
       console.log(`[completeRegistration] OK: user ${uid} (${email}) created`);
       return { success: true };
     } catch (err) {
       console.error(`[completeRegistration] KO:`, err);
+      await logSecurityEvent({
+        type: "auth",
+        action: "complete_registration",
+        outcome: "failure",
+        severity: "high",
+        actor: {
+          uid: req.auth?.uid ?? "unknown",
+          email: req.auth?.token.email ?? "unknown",
+          provider: req?.auth?.token.firebase?.sign_in_provider ?? "unknown",
+        },
+        context: {
+          function: "completeRegistration",
+          invokeId,
+        },
+      });
       throw err;
     }
   }
@@ -211,6 +318,8 @@ export const completeRegistration = onCall(
 export const registerWithIntegratedAuth = onCall(
   { region: REGION },
   async (req) => {
+    const invokeId = getInvokeId(req);
+    console.log(`[registerWithIntegratedAuth] Invoke ID: ${invokeId} - Function called`);
     if (!req.auth?.uid) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
@@ -228,6 +337,22 @@ export const registerWithIntegratedAuth = onCall(
 
     // Se utente già esiste → non fare nulla
     if (snap.exists) {
+      await logSecurityEvent({
+        type: "auth",
+        action: "register_integrated_auth",
+        outcome: "success",
+        severity: "low",
+        actor: {
+          uid,
+          email,
+          provider: req?.auth?.token.firebase?.sign_in_provider ?? "unknown"
+        },
+        context: {
+          function: "registerWithIntegratedAuth",
+          invokeId,
+          requestId: userRef.id,
+        },
+      });
       return { alreadyExists: true };
     }
 
@@ -246,11 +371,19 @@ export const registerWithIntegratedAuth = onCall(
     });
 
     await logSecurityEvent({
+      type: "security",
       action: "register_integrated_auth",
-      uid,
-      email,
-      provider: req.auth.token.firebase?.sign_in_provider,
-      timestamp: Timestamp.now()
+      outcome: "success",
+      severity: "low",
+      actor: {
+        uid: req.auth.uid,
+        email,
+        provider: req?.auth?.token?.firebase?.sign_in_provider ?? "unknown"
+      },
+      context: {
+        function: "registerWithIntegratedAuth",
+        requestId: userRef.id,
+      }
     });
 
     return { success: true };
