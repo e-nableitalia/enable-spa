@@ -125,7 +125,34 @@ export default function AdminDashboard({
 
   return (
     <div style={{ padding: 24 }}>
-      <h2>Dashboard Amministratore</h2>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          background: "linear-gradient(90deg, #38bdf8 0%, #c084fc 100%)",
+          color: "#fff",
+          padding: "20px 32px",
+          borderRadius: 16,
+          marginBottom: 24,
+          boxShadow: "0 2px 8px rgba(56,189,248,0.15)",
+        }}
+      >
+        <Avatar
+          icon="pi pi-shield"
+          shape="circle"
+          size="large"
+          style={{ background: "#fff", color: "#38bdf8", fontSize: 24 }}
+        />
+        <div>
+          <h2 style={{ margin: 0, fontWeight: 700, fontSize: 28 }}>
+        Dashboard Amministratore
+          </h2>
+          <div style={{ fontSize: 16, opacity: 0.85 }}>
+        Overview delle richieste e gestione del processo di abbinamento
+          </div>
+        </div>
+      </div>
 
       <div style={{ overflowX: "auto" }}>
         <UncontrolledBoard

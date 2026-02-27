@@ -12,6 +12,7 @@
   "dependencies": {
     "@caldwell619/react-kanban": "^0.0.12",
     "@google-cloud/recaptcha-enterprise": "^6.4.0",
+    "chart.js": "^4.5.1",
     "firebase": "^12.6.0",
     "primeicons": "^7.0.0",
     "primereact": "^10.9.7",
