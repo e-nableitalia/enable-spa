@@ -7,10 +7,7 @@ import { Column } from "primereact/column";
 import { Chart } from "primereact/chart";
 import { Card } from "primereact/card";
 import { Messages, type MessagesMessage } from "primereact/messages";
-import { Message } from "primereact/message";
-import RequestTable from "../../components/requests/RequestTable";
 import { Tag } from "primereact/tag";
-import { field } from "firebase/firestore/pipelines";
 
 export default function VolunteerDashboard() {
   const [privateProfile, setPrivateProfile] = useState<VolunteerPrivateProfile | null>(null);
@@ -108,7 +105,7 @@ export default function VolunteerDashboard() {
   };
 
   // Banner: richieste private da gestire
-  const pendingPrivateRequests = myPrivateRequests.filter(r => r.status !== "closed" && r.status !== "completed");
+  //const pendingPrivateRequests = myPrivateRequests.filter(r => r.status !== "closed" && r.status !== "completed");
 
   const messages: Array<MessagesMessage> = [];
 
@@ -187,9 +184,12 @@ export default function VolunteerDashboard() {
       {myPrivateRequests.length !== 0 && (
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 32 }}>
 
-          <Card title="Riepilogo delle mie richieste private per stato" style={{ flex: "1 1 350px", minWidth: 300 }}>
+            <Card title="Riepilogo delle mie richieste private per stato" style={{ flex: "1 1 350px", minWidth: 300 }}>
+            <div style={{ marginBottom: 16, fontWeight: 500, fontSize: 18 }}>
+              Totale richieste: {myPrivateRequests.length}
+            </div>
             <Chart type="pie" data={privateChartData} style={{ maxWidth: 400 }} />
-          </Card>
+            </Card>
           <Card title="Le mie richieste" style={{ flex: "2 1 500px", minWidth: 350 }}>
             <DataTable value={myPrivateRequests} paginator rows={10} filterDisplay="row">
               <Column field="province" header="Provincia"/>
@@ -240,6 +240,9 @@ export default function VolunteerDashboard() {
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 32 }}>
         <Card title="Riepilogo richieste pubbliche per stato" style={{ flex: "1 1 350px", minWidth: 300 }}>
+          <div style={{ marginBottom: 16, fontWeight: 500, fontSize: 18 }}>
+            Totale richieste: {publicRequests.length}
+          </div>
           <Chart type="pie" data={chartData} style={{ maxWidth: 400 }} />
         </Card>
 

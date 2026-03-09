@@ -11,6 +11,7 @@ import { Toast } from "primereact/toast";
 import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
+import { Toolbar } from "primereact/toolbar";
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -198,11 +199,25 @@ export default function RequestDetail() {
     }
   };
 
+  const goBack = () => {
+    window.history.back();
+  };
+
+  const leftToolbarTemplate = () => (
+    <Button
+      label="Indietro"
+      icon="pi pi-arrow-left"
+      className="p-button-text"
+      onClick={goBack}
+    />
+  );
+
   if (!request) return <div>Loading...</div>;
 
   return (
     <div style={{ padding: 20 }}>
       <Toast ref={toast} />
+      <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />
       <h2>Request Detail</h2>
 
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>

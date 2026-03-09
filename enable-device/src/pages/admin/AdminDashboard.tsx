@@ -8,10 +8,16 @@ import { Card } from "primereact/card";
 import { Tag } from "primereact/tag";
 import { Avatar } from "primereact/avatar";
 import { db } from "../../firebase";
+import { mapInternalStatusToPublic } from "../../helpers/requestStatus";
 
 type Request = {
   id?: string;
   requestId?: string;
+  firstName?: string;
+  lastName?: string;
+  age?: number;
+  gender?: string;
+  amputationType?: string;
   deviceType?: string;
   province?: string;
   publicStatus?: string;
@@ -24,6 +30,9 @@ type KanbanCard = {
   id: string;
   title: string;
   description?: string;
+  name?: string;
+  age?: number;
+  gender?: string;
   publicStatus?: string;
   status?: string;
   assignedVolunteer?: string;
@@ -39,19 +48,17 @@ type Board = {
 
 const ALL_STATUSES = [
   "da gestire",
-  "in attesa",
-  "in lavorazione",
-  "completata",
-  "rifiutata",
+  "fabbricazione in corso",
+  "completati",
+  "annullate / non completabili",
   "senza stato",
 ];
 
 const COLUMN_COLORS: Record<string, string> = {
   "da gestire": "#f87171",
-  "in attesa": "#facc15",
-  "in lavorazione": "#34d399",
-  "completata": "#38bdf8",
-  "rifiutata": "#c084fc",
+  "fabbricazione in corso": "#facc15",
+  "completati": "#34d399",
+  "annullate / non completabili": "#c084fc",
   "senza stato": "#94a3b8",
 };
 
@@ -70,9 +77,16 @@ async function getUserFullName(userId: string): Promise<string> {
 async function buildBoard(requests: Request[]): Promise<Board> {
   const statusMap: Record<string, Request[]> = {};
 
+  console.debug("Building board with requests:", requests); // Log per debug
+
   requests.forEach((req) => {
-    const status = ALL_STATUSES.includes(req.publicStatus || "")
-      ? req.publicStatus!
+    // Usa requestStatus e mapInternalStatusToPublic per valutare lo stato pubblico
+    const publicStatus = mapInternalStatusToPublic(req.status || "")
+      ? mapInternalStatusToPublic(req.status || "")
+      : req.publicStatus || "";
+
+    const status = ALL_STATUSES.includes(publicStatus)
+      ? publicStatus
       : "senza stato";
 
     if (!statusMap[status]) statusMap[status] = [];
@@ -87,6 +101,9 @@ async function buildBoard(requests: Request[]): Promise<Board> {
             statusMap[status].map(async (r) => ({
               id: r.id || r.requestId || Math.random().toString(),
               title: r.deviceType || "Richiesta",
+              name: r.firstName ? `${r.firstName} ${r.lastName || ""}`.trim() : "Richiedente",
+              age: r.age,
+              gender: r.gender,
               description:
                 r.description ||
                 (r.province ? `Provincia: ${r.province}` : ""),
@@ -146,10 +163,10 @@ export default function AdminDashboard({
         />
         <div>
           <h2 style={{ margin: 0, fontWeight: 700, fontSize: 28 }}>
-        Dashboard Amministratore
+            Dashboard Amministratore
           </h2>
           <div style={{ fontSize: 16, opacity: 0.85 }}>
-        Overview delle richieste e gestione del processo di abbinamento
+            Overview delle richieste e gestione del processo di abbinamento
           </div>
         </div>
       </div>
@@ -172,105 +189,125 @@ export default function AdminDashboard({
               {column.title}
             </div>
           )}
-          // renderColumn={(column, { children }) => (
-          //   <div
-          //     style={{
-          //       width: 320,
-          //       marginRight: 16,
-          //       borderRadius: 12,
-          //       display: "flex",
-          //       flexDirection: "column",
-          //       maxHeight: "80vh",
-          //       background: "#f4f5f7", // corpo colonna Trello
-          //       boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-          //     }}
-          //   >
-          //     {/* HEADER */}
-          //     <div
-          //       style={{
-          //         background: COLUMN_COLORS[column.id],
-          //         color: "#fff",
-          //         padding: "12px 16px",
-          //         borderTopLeftRadius: 12,
-          //         borderTopRightRadius: 12,
-          //         fontWeight: 600,
-          //         textTransform: "capitalize",
-          //       }}
-          //     >
-          //       {column.title}
-          //     </div>
-
-          //     {/* BODY */}
-          //     <div
-          //       style={{
-          //         padding: 8,
-          //         overflowY: "auto",
-          //         flexGrow: 1,
-          //       }}
-          //     >
-          //       {children}
-
-          //       {column.cards.length === 0 && (
-          //         <div
-          //           style={{
-          //             padding: 12,
-          //             color: "#6b7280",
-          //             fontStyle: "italic",
-          //           }}
-          //         >
-          //           Nessuna richiesta
-          //         </div>
-          //       )}
-          //     </div>
-          //   </div>
-          // )}
 
           renderCard={(card: KanbanCard) => (
-            <div style={{ padding: 8, maxWidth: "25vw" }}>
+            <div style={{ padding: 8, width: "20vw", minWidth: 220, maxWidth: 320 }}>
               <Card
-              style={{
-                borderRadius: 12,
-                boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-                border: "none",
-                maxWidth: "100%",
-              }}
-              >
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                {card.title}
-              </div>
-
-              <div
                 style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: 8,
+                  borderRadius: 12,
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                  border: "none",
+                  maxWidth: "100%",
                 }}
               >
-                <Tag value={card.publicStatus} severity="info" />
-                <Tag value={card.status} severity="secondary" />
-              </div>
-
-              <div style={{ fontSize: 14, marginBottom: 12 }}>
-                {card.description}
-              </div>
-
-              {card.assignedVolunteer && (
-                <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 13,
-                }}
-                >
-                <Avatar
-                  label={card.assignedVolunteer[0]}
-                  shape="circle"
-                  size="normal"
-                />
-                {card.assignedVolunteer}
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                  {card.title}
                 </div>
-              )}
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: 8,
+                  }}
+                >
+                  <Tag value={card.publicStatus} severity="info" />
+                  <Tag value={card.status} severity="secondary" />
+                </div>
+                <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid #e5e7eb" }} />
+                <table
+                  style={{
+                    width: "100%",
+                    marginBottom: 8,
+                    borderCollapse: "collapse",
+                    background: "#f3f4f6",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ background: "#b4d1f3" }}>
+                      <th
+                        style={{
+                          textAlign: "left",
+                          fontWeight: 600,
+                          fontSize: 13,
+                          padding: "6px 8px",
+                          paddingBottom: 4,
+                        }}
+                      >
+                        Richiedente
+                      </th>
+                      <th
+                        style={{
+                          textAlign: "left",
+                          fontWeight: 600,
+                          fontSize: 13,
+                          padding: "6px 8px",
+                          paddingBottom: 4,
+                        }}
+                      >
+                        Età
+                      </th>
+                      <th
+                        style={{
+                          textAlign: "left",
+                          fontWeight: 600,
+                          fontSize: 13,
+                          padding: "6px 8px",
+                          paddingBottom: 4,
+                        }}
+                      >
+                        Genere
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      style={{
+                        background: "#fff",
+                        borderBottom: "1px solid #e5e7eb",
+                        transition: "background 0.2s",
+                      }}
+                    >
+                      <td style={{ padding: "6px 8px", paddingRight: 12 }}>
+                        {card.name ? card.name.toLowerCase() : "-"}
+                      </td>
+                      <td style={{ padding: "6px 8px", paddingRight: 12 }}>
+                        {card.age || "-"}
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        {card.gender || "-"}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ fontSize: 14, marginBottom: 12, fontStyle: "italic" }}>
+                  {card.description}
+                </div>
+
+                {card.assignedVolunteer && (
+                  <>
+                    <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid #e5e7eb" }} />
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 13,
+                      }}
+                    >
+                      <Avatar
+                        label={card.assignedVolunteer[0]}
+                        shape="circle"
+                        size="normal"
+                      />
+                      {card.assignedVolunteer}
+                    </div>
+                  </>
+                )}
               </Card>
             </div>
           )}

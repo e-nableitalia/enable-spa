@@ -20,6 +20,7 @@ import AdminVolunteers from "../../pages/admin/volunteers/AdminVolunteers";
 import PendingVolunteers from "../../pages/admin/volunteers/PendingVolunteers";
 import AdminStats from "../../pages/admin/AdminStats";
 import RequestDetail from "../../pages/admin/requests/RequestDetail";
+import AdminMaintenanceRequests from "../../pages/admin/requests/AdminMaintenanceRequests";
 
 import logo from "../../assets/logo.png";
 import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
@@ -49,11 +50,16 @@ export default function AdminLayout() {
           collection(db, "deviceRequests"),
           orderBy("createdAt", "desc")
         );
-        unsubRequests = onSnapshot(q, (snapshot) => {
-          const data = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data()
-          }));
+        unsubRequests = onSnapshot(q, async (snapshot) => {
+          const data = await Promise.all(
+            snapshot.docs.map(async (docSnap) => {
+              const baseData = { id: docSnap.id, ...docSnap.data() };
+              const privateRef = doc(db, `deviceRequests/${docSnap.id}/private/data`);
+              const privateSnap = await getDoc(privateRef);
+              const privateData = privateSnap.exists() ? privateSnap.data() : {};
+              return { ...baseData, ...privateData };
+            })
+          );
           setRequests(data);
           setLoading(false);
         });
@@ -166,6 +172,11 @@ export default function AdminLayout() {
           label: `Annullate / KO (${cancelledRequests.length})`,
           icon: "pi pi-ban", // annullate
           command: () => navigate("/admin/requests/cancelled"),
+        },
+        {
+          label: "Manutenzione (Import CSV)",
+          icon: "pi pi-wrench",
+          command: () => navigate("/admin/requests/maintenance"),
         },
       ],
     },
@@ -328,6 +339,7 @@ export default function AdminLayout() {
             <Route path="requests/shipping" element={<AdminShipping requests={shippingRequests} />} />
             <Route path="requests/completed" element={<AdminCompleted requests={completedRequests} />} />
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
+            <Route path="requests/maintenance" element={<AdminMaintenanceRequests />} />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
             <Route path="stats" element={<AdminStats />} />

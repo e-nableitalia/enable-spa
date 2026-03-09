@@ -5,6 +5,7 @@ import { verifyRecaptcha } from "../security/recaptcha";
 import { checkEmailRateLimit, checkIpRateLimit } from "../security/rateLimit";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
+import { sendEmailToDeviceAdmins } from "../utils/email";
 
 const REGION = "europe-west1";
 
@@ -129,7 +130,8 @@ export const createDeviceRequest = onCall(
       console.log(`[createDeviceRequest] Creating device request document ${requestRef.id}`);
       await db.runTransaction(async (tx) => {
         tx.set(requestRef, {
-          province: data.province,
+          age: data.age || null,
+          gender: data.gender || null,
           status: "inviata",
           publicStatus: mapToPublicStatus("inviata"),
           assignedVolunteer: null,
@@ -144,8 +146,7 @@ export const createDeviceRequest = onCall(
           lastName: data.lastName || null,
           phone: data.phone || null,
           relation: data.relation || null,
-          age: data.age || null,
-          gender: data.gender || null,
+          province: data.province,
           therapy: data.therapy || false,
           amputationType: data.amputationType,
           description: data.description || null,
@@ -204,6 +205,23 @@ export const createDeviceRequest = onCall(
         console.error("[createDeviceRequest] KO: Failed to enqueue confirmation email", emailError);
         // Non blocca la richiesta, logga solo l'errore
       }
+
+      await sendEmailToDeviceAdmins(
+        "Nuova richiesta dispositivo",
+        `<div>
+          <h2>Nuova richiesta device</h2>
+          <ul>
+            <li><strong>Email:</strong> ${data.email}</li>
+            <li><strong>Nome:</strong> ${data.firstName}</li>
+            <li><strong>Cognome:</strong> ${data.lastName}</li>
+            <li><strong>Telefono:</strong> ${data.phone}</li>
+            <li><strong>Provincia:</strong> ${data.province}</li>
+            <li><strong>Relazione:</strong> ${data.relation || "-"}</li>
+            <li><strong>Descrizione:</strong> ${data.description || "-"}</li>
+            <li><strong>Preferenze:</strong> ${data.preferences || "-"}</li>
+          </ul>
+        </div>`
+      );
 
       console.log(`[createDeviceRequest] OK: device request ${requestRef.id} created`);
       return { success: true };

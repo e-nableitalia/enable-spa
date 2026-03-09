@@ -4,7 +4,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { verifyRecaptcha } from "../security/recaptcha";
 import { checkEmailRateLimit, checkIpRateLimit } from "../security/rateLimit";
 import { logSecurityEvent } from "../security/securityLog";
-import { sendRegistrationEmail } from "../utils/email";
+import { sendEmailToVolunteersAdmins, sendRegistrationEmail } from "../utils/email";
 import { getInvokeId } from "../utils/invoke";
 
 // Utility: Estrae oobCode dal link generato (gestisce link annidati e url encoded)
@@ -144,6 +144,11 @@ export const register = onCall(
           requestId: oobCode,
         },
       });
+
+      await sendEmailToVolunteersAdmins(
+        "Nuova registrazione",
+        `È stata effettuata una nuova registrazione per l'email: ${email}`
+      );
 
       console.log(`[register] OK: pending registration for ${email} (${oobCode}) saved and email sent`);
       return { success: true };
@@ -291,6 +296,11 @@ export const completeRegistration = onCall(
         },
       });
 
+      await sendEmailToVolunteersAdmins(
+        "Nuova registrazione completata",
+        `<p>La registrazione per l'email <b>${email}</b> è stata completata con successo.</p>`
+      );
+
       console.log(`[completeRegistration] OK: user ${uid} (${email}) created`);
       return { success: true };
     } catch (err) {
@@ -319,75 +329,81 @@ export const registerWithIntegratedAuth = onCall(
   { region: REGION },
   async (req) => {
     try {
-    const invokeId = getInvokeId(req);
-    console.log(`[registerWithIntegratedAuth] Invoke ID: ${invokeId} - Function called`);
-    if (!req.auth?.uid) {
-      throw new HttpsError("unauthenticated", "User must be authenticated");
-    }
+      const invokeId = getInvokeId(req);
+      console.log(`[registerWithIntegratedAuth] Invoke ID: ${invokeId} - Function called`);
+      if (!req.auth?.uid) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+      }
 
-    const uid = req.auth.uid;
-    const email = req.auth.token.email;
+      const uid = req.auth.uid;
+      const email = req.auth.token.email;
 
-    if (!email) {
-      throw new HttpsError("internal", "Authenticated user has no email");
-    }
+      if (!email) {
+        throw new HttpsError("internal", "Authenticated user has no email");
+      }
 
-    const db = getFirestore();
-    const userRef = db.collection("users").doc(uid);
-    const snap = await userRef.get();
+      const db = getFirestore();
+      const userRef = db.collection("users").doc(uid);
+      const snap = await userRef.get();
 
-    // Se utente già esiste → non fare nulla
-    if (snap.exists) {
+      // Se utente già esiste → non fare nulla
+      if (snap.exists) {
+        await logSecurityEvent({
+          type: "auth",
+          action: "login",
+          outcome: "success",
+          severity: "low",
+          actor: {
+            uid,
+            email,
+            provider: req?.auth?.token.firebase?.sign_in_provider ?? "unknown"
+          },
+          context: {
+            function: "registerWithIntegratedAuth",
+            invokeId,
+            requestId: userRef.id,
+          },
+        });
+        return { alreadyExists: true };
+      }
+
+      // Eventuale controllo dominio (esempio)
+      // if (!email.endsWith("@enableitalia.it")) {
+      //   throw new HttpsError("permission-denied", "Invalid email domain");
+      // }
+
+      // Invia una mail a volontari@e-nableitalia.it per notificare la registrazione del nuovo utente
+      await sendEmailToVolunteersAdmins(
+        "Nuova registrazione",
+        `<p>Nuova registrazione: <b>${email}</b> (uid: <code>${uid}</code>)</p>`
+      );
+
+      await userRef.set({
+        email,
+        role: "volunteer",
+        active: false,
+        mustSetPassword: false,
+        createdAt: Timestamp.now(),
+        authProvider: req.auth.token.firebase?.sign_in_provider ?? "unknown"
+      });
+
       await logSecurityEvent({
-        type: "auth",
-        action: "login",
+        type: "security",
+        action: "register_integrated_auth",
         outcome: "success",
         severity: "low",
         actor: {
-          uid,
+          uid: req.auth.uid,
           email,
-          provider: req?.auth?.token.firebase?.sign_in_provider ?? "unknown"
+          provider: req?.auth?.token?.firebase?.sign_in_provider ?? "unknown"
         },
         context: {
           function: "registerWithIntegratedAuth",
-          invokeId,
           requestId: userRef.id,
-        },
+        }
       });
-      return { alreadyExists: true };
-    }
 
-    // Eventuale controllo dominio (esempio)
-    // if (!email.endsWith("@enableitalia.it")) {
-    //   throw new HttpsError("permission-denied", "Invalid email domain");
-    // }
-
-    await userRef.set({
-      email,
-      role: "volunteer",
-      active: false,
-      mustSetPassword: false,
-      createdAt: Timestamp.now(),
-      authProvider: req.auth.token.firebase?.sign_in_provider ?? "unknown"
-    });
-
-    await logSecurityEvent({
-      type: "security",
-      action: "register_integrated_auth",
-      outcome: "success",
-      severity: "low",
-      actor: {
-        uid: req.auth.uid,
-        email,
-        provider: req?.auth?.token?.firebase?.sign_in_provider ?? "unknown"
-      },
-      context: {
-        function: "registerWithIntegratedAuth",
-        requestId: userRef.id,
-      }
-    });
-
-    return { success: true };
+      return { success: true };
     } catch (err) {
       console.error(`[registerWithIntegratedAuth] KO:`, err);
       await logSecurityEvent({
@@ -397,14 +413,14 @@ export const registerWithIntegratedAuth = onCall(
         severity: "high",
         actor: {
           uid: req.auth?.uid ?? "unknown",
-          email: req.auth?.token?.email ?? "unknown", 
+          email: req.auth?.token?.email ?? "unknown",
           provider: req?.auth?.token.firebase?.sign_in_provider ?? "unknown"
         },
         context: {
           function: "registerWithIntegratedAuth",
           invokeId: getInvokeId(req),
           requestId: req.auth?.uid ?? "unknown"
-        } 
+        }
       });
       throw err;
     }
@@ -415,44 +431,44 @@ export const doLogin = onCall(
   { region: REGION },
   async (req) => {
     try {
-    const invokeId = getInvokeId(req);
-    console.log(`[doLogin] Invoke ID: ${invokeId} - Function called`);
-    if (!req.auth?.uid) {
-      throw new HttpsError("unauthenticated", "User must be authenticated");
-    }
-    const uid = req.auth?.uid ?? "unknown";
-    const email = req.auth?.token?.email ?? "unknown";
-    const provider = req.auth?.token?.firebase?.sign_in_provider ?? "unknown";
-    const ip = req.rawRequest?.ip ?? "unknown";
+      const invokeId = getInvokeId(req);
+      console.log(`[doLogin] Invoke ID: ${invokeId} - Function called`);
+      if (!req.auth?.uid) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+      }
+      const uid = req.auth?.uid ?? "unknown";
+      const email = req.auth?.token?.email ?? "unknown";
+      const provider = req.auth?.token?.firebase?.sign_in_provider ?? "unknown";
+      const ip = req.rawRequest?.ip ?? "unknown";
 
-    await logSecurityEvent({
-      type: "auth",
-      action: "login",
-      outcome: "success",
-      severity: "low",
-      actor: {
-        uid,
-        email,
-        provider,
-        ip,
-      },
-      context: {
-        function: "logLoginEvent",
-        invokeId,
-      },
-    });
+      await logSecurityEvent({
+        type: "auth",
+        action: "login",
+        outcome: "success",
+        severity: "low",
+        actor: {
+          uid,
+          email,
+          provider,
+          ip,
+        },
+        context: {
+          function: "logLoginEvent",
+          invokeId,
+        },
+      });
 
-    return { logged: true };
+      return { logged: true };
     } catch (err) {
       console.error(`[doLogin] KO:`, err);
-      await logSecurityEvent({  
+      await logSecurityEvent({
         type: "auth",
         action: "login",
         outcome: "failure",
         severity: "high",
         actor: {
           uid: req.auth?.uid ?? "unknown",
-          email: req.auth?.token?.email ?? "unknown", 
+          email: req.auth?.token?.email ?? "unknown",
           provider: req.auth?.token?.firebase?.sign_in_provider ?? "unknown",
           ip: req.rawRequest?.ip ?? "unknown",
         },

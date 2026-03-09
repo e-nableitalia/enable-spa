@@ -39,3 +39,45 @@ export async function sendRegistrationEmail(
     return false;
   }
 }
+
+export async function sendEmailToVolunteersAdmins(
+  subject: string,
+  html: string
+) {
+  const db = getFirestore();
+  try {
+    await db.collection('mail').add({
+      to: ['volontari@e-nableitalia.it'],
+      message: {
+        subject,
+        html,
+      },
+    });
+    console.log(`Email sent to volontari@e-nableitalia.it`);
+    return true;
+  } catch (error) {
+    console.error("Error sending email to volunteers admins:", error);
+    return false;
+  }
+}
+
+export async function sendEmailToDeviceAdmins(
+  subject: string,
+  html: string
+) {
+  const db = getFirestore();
+  try {
+    await db.collection('mail').add({
+      to: ['devices@e-nableitalia.it'],
+      message: {
+        subject,
+        html,
+      },
+    });
+    console.log(`Email sent to devices@e-nableitalia.it`);
+    return true;
+  } catch (error) {
+    console.error("Error sending email to device admins:", error);
+    return false;
+  }
+}

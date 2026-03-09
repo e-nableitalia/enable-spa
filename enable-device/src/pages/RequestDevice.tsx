@@ -12,6 +12,8 @@ import logo from "../assets/logo.png";
 import { httpsCallable } from "@firebase/functions";
 import { functions } from "../firebase";
 import { getRecaptchaToken } from "../services/security/recaptcha";
+import Footer from "../components/layout/Footer";
+import PROVINCE from "../helpers/province.json";
 
 type FormData = {
     email: string;
@@ -31,32 +33,6 @@ type FormData = {
     preferences: string;
     consentPrivacy: boolean;
 };
-
-const PROVINCE = [
-    "Altro / Estero",
-    "Agrigento",
-    "Alessandria",
-    "Ancona",
-    "Aosta",
-    "Arezzo",
-    "Ascoli Piceno",
-    "Asti",
-    "Avellino",
-    "Bari",
-    "Bologna",
-    "Bolzano",
-    "Brescia",
-    "Cagliari",
-    "Catania",
-    "Firenze",
-    "Genova",
-    "Milano",
-    "Napoli",
-    "Roma",
-    "Torino",
-    "Venezia",
-    // puoi completare con tutte le province
-];
 
 const AMPUTATIONS = [
     "Mano, polso funzionale con parte residua di palmo",
@@ -123,8 +99,8 @@ export default function RequestDevice() {
             };
 
             console.log("FORM SENT:", formDataToSubmit);
-            
-            await callable(formDataToSubmit);   
+
+            await callable(formDataToSubmit);
 
             toast.current?.show({
                 severity: "success",
@@ -171,24 +147,33 @@ export default function RequestDevice() {
                     display: "flex",
                     alignItems: "center",
                     gap: 24,
-                    flexWrap: "wrap",
+                    flexWrap: "wrap"
                 }}
             >
-                <img
-                    src={logo}
-                    alt="e-Nable Italia"
-                    style={{ height: 56, marginLeft: 24, marginRight: 8 }}
-                />
-                <div>
-                    <div
-                        style={{
-                            fontWeight: 700,
-                            fontSize: 22,
-                            color: "#2d3a4a",
-                        }}
-                    >
-                        Richiesta Device e-Nable Italia #2
+                <div style={{
+                    flex: 1,
+                    textAlign: "center"
+                }}>
+                    <img
+                        src={logo}
+                        alt="e-Nable Italia"
+                        style={{ height: 56, marginLeft: 24, marginRight: 8 }}
+                    />
+                    <div>
+                        <div
+                            style={{
+                                fontWeight: 700,
+                                fontSize: 22,
+                                color: "#2d3a4a",
+                            }}
+                        >
+                            Richiesta Device e-Nable Italia
+                        </div>
                     </div>
+                </div>
+                <div style={{
+                    textAlign: "center"
+                }}>
                     <div
                         style={{
                             fontSize: 16,
@@ -196,16 +181,15 @@ export default function RequestDevice() {
                             marginTop: 4,
                         }}
                     >
-                        Sei nella pagina di richiesta di un device gratuito realizzato
-                        dalla comunità <b>e-Nable Italia</b>
-                        .<br />
-                        Qui puoi inviare una richiesta per te o per un'altra persona,
-                        compilando il modulo sottostante.
-                        <br />
+                        <i>
+                            I device sono progettati e realizzati <b>a titolo completamente gratuito</b> da volontari — ingegneri, tecnici e maker — di <b>e-Nable Italia</b> che mettono a disposizione il proprio tempo e le proprie competenze per supportare bambini e adulti con problemi di limb difference.<br /><br />
+                            L’iniziativa è <b>coordinata e sostenuta da Energy Family Project APS</b>
+                        </i>, associazione di famiglie impegnata nel promuovere soluzioni accessibili e inclusive.<br /><br />
+
+                        Compilando il modulo sottostante puoi inviare una richiesta per te o per un’altra persona.<br /><br />
                         <span style={{ color: "#1976d2" }}>
-                            Dopo l'invio sarai ricontattato via email dal nostro team di
-                            volontari.
-                        </span>
+                            Dopo l’invio sarai ricontattato via email dal nostro team di volontari per valutare insieme la fattibilità della richiesta.
+                        </span>                    
                     </div>
                 </div>
             </div>
@@ -242,7 +226,7 @@ export default function RequestDevice() {
                                     <div>
                                         <b>
                                             <i style={{ fontSize: 20 }}>
-                                                &nbsp;I device e-Nable sono dispositivi assistivi sperimentali, non sono ausili protesici.
+                                                &nbsp;I device e-Nable sono dispositivi assistivi sperimentali realizzati a partire da progetti Open Source, non sono ausili protesici.
                                             </i>
                                         </b>
                                         <p>
@@ -403,7 +387,11 @@ export default function RequestDevice() {
                                                 onChange={(e) => update("consentPrivacy", e.checked)}
                                             />
                                             <label style={{ marginLeft: 8 }}>
-                                                Dichiaro ai sensi dell’ex art 13 del Regolamento UE 2016/679 di aver preso visione della informativa sulla privacy e di essere informato sulle finalità e le modalità di trattamento cui sono destinati i dati, i soggetti a cui gli stessi potranno essere comunicati, anche in qualità di incaricati, nonché sul diritto di accesso ai dati personali forniti con facoltà di chiederne l’aggiornamento, la rettifica, l’integrazione e la cancellazione. Per quanto sopra, con l’invio della mia richiesta, esprimo il mio consenso al trattamento dei miei dati personali nelle modalità e per le finalità strettamente connesse e strumentali alla gestione della richiesta di un device e-Nable ed acconsento espressamente alla trasmissione dei dati in essa contenuti. *
+                                                * Dichiaro ai sensi dell’ex art 13 del Regolamento UE 2016/679 di aver preso visione della &nbsp;
+                                                <a href="https://e-nableitalia.it/it_it/privacy-policy-2/" target="_blank" rel="noopener noreferrer" style={{ color: "#888", textDecoration: "underline" }}>
+                                                informativa sulla privacy
+                                                </a>&nbsp;
+                                                e di essere informato sulle finalità e le modalità di trattamento cui sono destinati i dati, i soggetti a cui gli stessi potranno essere comunicati, anche in qualità di incaricati, nonché sul diritto di accesso ai dati personali forniti con facoltà di chiederne l’aggiornamento, la rettifica, l’integrazione e la cancellazione. Per quanto sopra, con l’invio della mia richiesta, esprimo il mio consenso al trattamento dei miei dati personali nelle modalità e per le finalità strettamente connesse e strumentali alla gestione della richiesta di un device e-Nable ed acconsento espressamente alla trasmissione dei dati in essa contenuti.
                                             </label>
                                         </div>
                                     </div>
@@ -446,6 +434,7 @@ export default function RequestDevice() {
                     </div>
                 </Card>
             </div>
+            <Footer />
         </div>
     );
 }

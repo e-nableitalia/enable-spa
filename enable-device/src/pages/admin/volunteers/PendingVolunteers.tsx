@@ -34,7 +34,7 @@ export default function PendingVolunteers({ volunteers }: { volunteers: any[] })
   );
 
   const handleActivate = async () => {
-    const functions = getFunctions();
+    const functions = getFunctions(undefined, "europe-west1");
     const activateVolunteersFn = httpsCallable(functions, "activateVolunteers");
     const ids = selectedVolunteers.map(v => v.id);
     try {

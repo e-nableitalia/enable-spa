@@ -10,6 +10,9 @@ interface Props {
 }
 
 export default function RequestTable({ requests, onOpen }: Props) {
+
+  console.log("Rendering RequestTable with requests:", requests);
+
   const statusTemplate = (row: any) => (
     <Tag value={row.publicStatus} severity="info" />
   );

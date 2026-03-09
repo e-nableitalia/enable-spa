@@ -79,3 +79,44 @@ export function mapInternalStatusToPublic(status: string): string {
   }
   return "da gestire"; // Default se non trovato
 }
+
+export const REQUEST_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
+  "inviata": "info",
+  "famiglia contattata": "info",
+  "definizione richiesta": "info",
+  "valutazione fattibilità": "warning",
+  "followup famiglia ko": "danger",
+  "followup famiglia troppo piccolo": "warning",
+  "attesa volontario": "warning",
+  "scelta device e dimensionamento": "info",
+  "personalizzazione": "info",
+  "attesa materiali": "warning",
+  "fabbricazione": "info",
+  "pronta per spedizione": "success",
+  "spedita": "success",
+  "followup famiglia": "secondary",
+  "completata": "success",
+  "annullata": "danger"
+};
+
+export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
+  "da gestire": "warning",
+  "fabbricazione in corso": "secondary",
+  "completati": "success",
+  "annullate / non completabili": "danger"
+};
+
+export function shortAmputationType(amputationType: string): "avambraccio" | "braccio" | "mano" | "altro" {
+  const type = amputationType.toLowerCase();
+
+  if (type.includes("braccio") && type.includes("sotto") && type.includes("gomito")) {
+    return "avambraccio";
+  }
+  if (type.includes("braccio") && type.includes("sopra") && type.includes("gomito")) {
+    return "braccio";
+  }
+  if (type.includes("mano") && (type.includes("polso"))) {
+    return "mano";
+  }
+  return "altro";
+}

@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { Toast } from "primereact/toast";
 import { httpsCallable } from "firebase/functions";
 
+import Footer from "../components/layout/Footer";
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,40 +57,109 @@ export default function Login() {
   };
 
   return (
-    <div style={{ maxWidth: 600, margin: "100px auto" }}>
-      <div style={{ maxWidth: 400, margin: "36px auto" }}>
+    <div style={{ maxWidth: 600, margin: "10px auto" }}>
+      <div style={{ maxWidth: 600, margin: "36px auto" }}>
         <Toast ref={toast} />
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 16, justifyContent: "center" }}>
-          <img src={logo} alt="Logo" style={{ width: 64, height: 64 }} />
-          <h2>e-Nable Italia</h2>
-          <h3 style={{ color: "#888", textAlign: "center" }}>Portale di Accesso volontari</h3>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 24,
+            justifyContent: "center",
+            background: "linear-gradient(135deg, #e6f7ff 60%, #fff 100%)",
+            borderRadius: 12,
+            boxShadow: "0 4px 16px rgba(0,80,179,0.08)",
+            padding: "32px 16px",
+          }}
+        >
+          <img
+            src={logo}
+            alt="Logo"
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              boxShadow: "0 2px 8px rgba(0,80,179,0.12)",
+              marginBottom: 8,
+              background: "#fff",
+            }}
+          />
+          <h2 style={{
+            fontWeight: 700,
+            color: "#0050b3",
+            margin: 0,
+            fontSize: "2em",
+            letterSpacing: "0.02em",
+          }}>
+            e-Nable Italia
+          </h2>
+          <h3 style={{
+            color: "#888",
+            textAlign: "center",
+            margin: "8px 0 0 0",
+            fontWeight: 500,
+            fontSize: "1.15em",
+            letterSpacing: "0.01em",
+          }}>
+            Portale di Accesso Volontari
+          </h3>
         </div>
-        <div className="p-fluid">
-          <InputText
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mb-3"
-          />
-          <InputText
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mb-3"
-          />
-          <Button label="Login" onClick={handleLogin} />
-          <div style={{ textAlign: "center", margin: "16px 0" }}>
-            <span>Oppure accedi con il tuo account Google</span>
-          </div>
-          <Button
-            label="Continua con Google"
-            icon="pi pi-google"
-            onClick={handleGoogleLogin}
-            className="p-button-danger w-full"
-          />
+        <div
+          style={{
+            background: "#e6f7ff",
+            border: "1px solid #91d5ff",
+            borderRadius: 6,
+            padding: "8px 16px",
+            marginTop: 8,
+            color: "#0050b3",
+            fontWeight: 500,
+            fontSize: "1.1em",
+            textAlign: "center",
+            width: "100%"
+          }}
+        >
+          <span>
+            Benvenuto nel portale dedicato ai volontari della community di<br /> 
+            e-Nable Italia!<br />
+            <a
+              href="https://e-nableitalia.it"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: "underline", color: "#0050b3" }}
+            >
+              Visita il sito ufficiale
+            </a>
+          </span>
         </div>
       </div>
+      <div className="p-fluid" style={{ maxWidth: 400, margin: "0 auto" }}>
+        <InputText
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="mb-3"
+        />
+        <InputText
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="mb-3"
+        />
+        <Button label="Login" onClick={handleLogin} />
+        <div style={{ textAlign: "center", margin: "16px 0" }}>
+          <span>Oppure accedi con il tuo account Google</span>
+        </div>
+        <Button
+          label="Continua con Google"
+          icon="pi pi-google"
+          onClick={handleGoogleLogin}
+          className="p-button-danger w-full"
+        />
+      </div>
+
       <div className="login-info-message" style={{ marginTop: 12, background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: 6, padding: 16, color: "#614700" }}>
         <strong style={{ display: "block", textAlign: "center" }}>Accesso Volontari</strong><br />
         Questo portale è riservato ai volontari della community e-Nable Italia.<br /><br />
@@ -104,7 +175,7 @@ export default function Login() {
           Informazioni per i volontari
         </a>.<br /><br />
 
-        
+
         <span style={{ fontStyle: "italic" }}>
           Puoi accedere con <b>le tue credenziali</b> oppure utilizzando <b>Google</b>.<br /><br />
           Se non sei ancora registrato, puoi creare un account in modo semplice:
@@ -129,25 +200,7 @@ export default function Login() {
           onClick={() => navigate("/request-device")}
         />
       </div>
-      <footer style={{ marginTop: 40, padding: "16px 0", fontSize: "0.9em", color: "#888", textAlign: "center" }}>
-        <div>
-          Copyright © 2026 |{" "}
-          <a href="https://e-nableitalia.it" target="_blank" rel="noopener noreferrer" style={{ color: "#888", textDecoration: "underline" }}>
-            e-Nable Italia
-          </a>{" "}
-          /{" "}
-          <a href="https://energyfamilyproject.org" target="_blank" rel="noopener noreferrer" style={{ color: "#888", textDecoration: "underline" }}>
-            Energy Family Project APS
-          </a>{" "}
-          | CF 96433270582
-        </div>
-        <div>
-          <a href="https://e-nableitalia.it/it_it/privacy-policy-2/" target="_blank" rel="noopener noreferrer" style={{ color: "#888", textDecoration: "underline" }}>
-            Privacy Policy
-          </a>{" "}
-          | Email: <a href="mailto:info@e-nableitalia.it" style={{ color: "#888", textDecoration: "underline" }}>info@e-nableitalia.it</a>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
