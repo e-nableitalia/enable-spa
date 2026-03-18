@@ -10,5 +10,6 @@ export { setPassword } from "./auth/setPassword";
 export { activateVolunteers, deactivateVolunteers } from "./volunteer/volunteerState";
 export { updateVolunteerProfile } from "./volunteer/updateVolunteerProfile";
 export { addPrinter } from "./volunteer/addPrinter";
+export { inviteVolunteer } from "./volunteer/invite";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());

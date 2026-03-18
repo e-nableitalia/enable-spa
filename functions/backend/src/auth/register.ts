@@ -6,6 +6,7 @@ import { checkEmailRateLimit, checkIpRateLimit } from "../security/rateLimit";
 import { logSecurityEvent } from "../security/securityLog";
 import { sendEmailToVolunteersAdmins, sendRegistrationEmail } from "../utils/email";
 import { getInvokeId } from "../utils/invoke";
+import { sendTelegramMessage } from "../utils/telegram";
 
 // Utility: Estrae oobCode dal link generato (gestisce link annidati e url encoded)
 function extractOobCode(link: string): string | null {
@@ -39,8 +40,6 @@ export const register = onCall(
     secrets: [
       "RECAPTCHA_API_KEY",
       "RECAPTCHA_SITE_KEY",
-      "MAILJET_API_KEY",
-      "MAILJET_API_SECRET",
       "MAIL_FROM_ADDRESS"
     ]
   },
@@ -256,7 +255,11 @@ export const checkRegistration = onCall(
 export const completeRegistration = onCall(
   {
     region: REGION,
-    secrets: []
+    secrets: [
+      "MAIL_FROM_ADDRESS",
+      "TELEGRAM_API_URL",
+      "TELEGRAM_API_SECRET"
+    ]
   },
   async (req) => {
     const invokeId = getInvokeId(req);
@@ -301,6 +304,36 @@ export const completeRegistration = onCall(
         `<p>La registrazione per l'email <b>${email}</b> è stata completata con successo.</p>`
       );
 
+      try {
+        const telegramApiUrl = process.env.TELEGRAM_API_URL;
+        const telegramApiSecret = process.env.TELEGRAM_API_SECRET;
+        if (telegramApiUrl && telegramApiSecret) {
+          await sendTelegramMessage(
+            telegramApiUrl,
+            telegramApiSecret,
+            `🚀 Nuovo volontario in arrivo!\nUn nuovo volontario si è registrato sul portale.`
+          );
+          console.log("[completeRegistration] Telegram notification sent");
+        } else {
+          console.warn("[completeRegistration] Telegram credentials not set, skipping notification");
+        }
+      } catch (telegramError) {
+        console.error("[completeRegistration] KO: Failed to send Telegram notification", telegramError);
+      }
+
+      // --- Send confirmation email ---
+      try {
+        const emailDoc = {
+          to: user.email,
+          template: "attivazioneVolontario",
+          createdAt: Timestamp.now()
+        };
+        await db.collection("mail").add(emailDoc);
+        console.log("[registerWithIntegratedAuth] Confirmation email queued");
+      } catch (emailErr) {
+        console.error("[registerWithIntegratedAuth] Failed to queue confirmation email", emailErr);
+      }
+
       console.log(`[completeRegistration] OK: user ${uid} (${email}) created`);
       return { success: true };
     } catch (err) {
@@ -326,7 +359,14 @@ export const completeRegistration = onCall(
 );
 
 export const registerWithIntegratedAuth = onCall(
-  { region: REGION },
+  {
+    region: REGION,
+    secrets: [
+      "MAIL_FROM_ADDRESS",
+      "TELEGRAM_API_URL",
+      "TELEGRAM_API_SECRET"
+    ]
+  },
   async (req) => {
     try {
       const invokeId = getInvokeId(req);
@@ -378,6 +418,24 @@ export const registerWithIntegratedAuth = onCall(
         `<p>Nuova registrazione: <b>${email}</b> (uid: <code>${uid}</code>)</p>`
       );
 
+      // Invia notifica Telegram come in completeRegistration
+      try {
+        const telegramApiUrl = process.env.TELEGRAM_API_URL;
+        const telegramApiSecret = process.env.TELEGRAM_API_SECRET;
+        if (telegramApiUrl && telegramApiSecret) {
+          await sendTelegramMessage(
+            telegramApiUrl,
+            telegramApiSecret,
+            `🚀 Nuovo volontario in arrivo!\nUn nuovo volontario si è registrato sul portale.`
+          );
+          console.log("[registerWithIntegratedAuth] Telegram notification sent");
+        } else {
+          console.warn("[registerWithIntegratedAuth] Telegram credentials not set, skipping notification");
+        }
+      } catch (telegramError) {
+        console.error("[registerWithIntegratedAuth] KO: Failed to send Telegram notification", telegramError);
+      }
+
       await userRef.set({
         email,
         role: "volunteer",
@@ -402,6 +460,21 @@ export const registerWithIntegratedAuth = onCall(
           requestId: userRef.id,
         }
       });
+
+      // --- Send confirmation email ---
+      try {
+        const userSnap = await userRef.get();
+        const userData = userSnap.data() as { email: string; firstName?: string; lastName?: string };
+        const emailDoc = {
+          to: userData.email,
+          template: "attivazioneVolontario",
+          createdAt: Timestamp.now()
+        };
+        await db.collection("mail").add(emailDoc);
+        console.log("[registerWithIntegratedAuth] Confirmation email queued");
+      } catch (emailErr) {
+        console.error("[registerWithIntegratedAuth] Failed to queue confirmation email", emailErr);
+      }
 
       return { success: true };
     } catch (err) {

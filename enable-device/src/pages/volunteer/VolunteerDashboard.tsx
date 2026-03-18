@@ -107,6 +107,12 @@ export default function VolunteerDashboard() {
   // Banner: richieste private da gestire
   //const pendingPrivateRequests = myPrivateRequests.filter(r => r.status !== "closed" && r.status !== "completed");
 
+  // Filtra le richieste pubbliche "da gestire" (ad esempio, status "open" o "in_progress")
+  const manageableStatuses = ["da gestire"];
+  const manageablePublicRequests = publicRequests.filter(
+    req => manageableStatuses.includes(req.publicStatus)
+  );
+
   const messages: Array<MessagesMessage> = [];
 
   // Messaggi per sezioni mancanti
@@ -239,34 +245,49 @@ export default function VolunteerDashboard() {
       )}
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 32 }}>
-        <Card title="Riepilogo richieste pubbliche per stato" style={{ flex: "1 1 350px", minWidth: 300 }}>
+        <Card title="Riepilogo richieste della comunity per stato" style={{ flex: "1 1 350px", minWidth: 300 }}>
           <div style={{ marginBottom: 16, fontWeight: 500, fontSize: 18 }}>
             Totale richieste: {publicRequests.length}
           </div>
           <Chart type="pie" data={chartData} style={{ maxWidth: 400 }} />
         </Card>
 
-        <Card title="Elenco richieste pubbliche da gestire" style={{ flex: "2 1 500px", minWidth: 350 }}>
-          <DataTable value={publicRequests} paginator rows={10} style={{ marginTop: 16 }}>
-            <Column field="province" header="Provincia" />
-            <Column field="publicStatus" header="Stato" />
-            <Column
+        <Card title="Elenco richieste da gestire" style={{ flex: "2 1 500px", minWidth: 350 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontWeight: 500, fontSize: 16 }}>
+              Totale richieste: {manageablePublicRequests.length}
+            </div>
+            
+            </div>
+            <DataTable
+              value={manageablePublicRequests}
+              paginator
+              rows={10}
+              rowsPerPageOptions={[5, 10, 20, 50]}
+              style={{ marginTop: 8 }}
+              sortField="createdAt"
+              sortOrder={-1}
+            >
+              <Column field="province" header="Provincia" sortable />
+              <Column field="publicStatus" header="Stato" sortable />
+              <Column
               field="createdAt"
               header="Data creazione"
+              sortable
               body={(row) => {
                 if (!row.createdAt) return "-";
                 const date =
-                  typeof row.createdAt === "string"
-                    ? new Date(row.createdAt)
-                    : row.createdAt.toDate
-                      ? row.createdAt.toDate()
-                      : row.createdAt;
+                typeof row.createdAt === "string"
+                  ? new Date(row.createdAt)
+                  : row.createdAt.toDate
+                  ? row.createdAt.toDate()
+                  : row.createdAt;
                 return date instanceof Date && !isNaN(date.getTime())
-                  ? date.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
-                  : "-";
+                ? date.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
+                : "-";
               }}
-            />
-          </DataTable>
+              />
+            </DataTable>
         </Card>
       </div>
     </div>

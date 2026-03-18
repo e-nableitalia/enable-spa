@@ -12,13 +12,14 @@ import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import { ToggleButton } from "primereact/togglebutton";
 import { mapInternalStatusToPublic } from "../../../helpers/requestStatus";
+import { TabView, TabPanel } from "primereact/tabview";
 
 export default function AdminMaintenanceRequests() {
   const [csvRows, setCsvRows] = useState<any[]>([]);
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
-  const [dryRunMode, setDryRunMode] = useState(false);
+  //const [dryRunMode, setDryRunMode] = useState(false);
   const [progress, setProgress] = useState(0);
   const [successCount, setSuccessCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
@@ -27,6 +28,7 @@ export default function AdminMaintenanceRequests() {
   const [deleteAllText, setDeleteAllText] = useState("");
   const [deleteAllLoading, setDeleteAllLoading] = useState(false);
   const [legacyMode, setLegacyMode] = useState(false);
+  const [logsTab, setLogsTab] = useState(true);
   const toast = useRef<any>(null);
 
   // CSV file input handler
@@ -133,8 +135,9 @@ export default function AdminMaintenanceRequests() {
     const consentPrivacy = true; // Nel legacy assumiamo che il consenso sia sempre dato, in quanto i dati erano già trattati secondo le normative vigenti al tempo. Se invece vogliamo mappare da un campo specifico, possiamo fare così:
 
     // --- Device status mapping ---
+    const stato = (row["Stato"] || "").trim().toLowerCase();
     const mappedStatus = mapInternalStatusToPublic(
-      row["Stato"] || ""
+      stato
     );
 
     // --- Build status note ---
@@ -184,13 +187,14 @@ export default function AdminMaintenanceRequests() {
       age: Number(row["Anni"] || 0),
       gender: row["Sesso del destinatatio"] || "",
       assignedVolunteer: (row["Volontario"] || "").trim() || null,
-      status: mappedStatus,
+      status: stato,
+      publicStatus: mappedStatus,
     };
 
     // --- Status Change (array come richiesto) ---
     const statusChange = [
       {
-        newStatus: mappedStatus,
+        newStatus: stato,
         note,
         changedAt: createdAt,
         changedBy: "legacy-import",
@@ -219,7 +223,6 @@ export default function AdminMaintenanceRequests() {
 
   // Dry run: just transform and log
   const handleDryRun = () => {
-    setDryRunMode(true);
     setLogs([]);
     const transformed = csvRows.map((row, idx) => {
       try {
@@ -233,7 +236,7 @@ export default function AdminMaintenanceRequests() {
     setLogs(transformed.map((r) =>
       r.error
         ? `Row ${r.idx + 1}: ERROR - ${r.error}`
-        : `Row ${r.idx + 1}: OK - ${JSON.stringify(r.obj)}`
+        : `Row ${r.idx + 1}: OK`
     ));
     toast.current?.show({
       severity: "info",
@@ -264,7 +267,6 @@ export default function AdminMaintenanceRequests() {
   // Import handler
   const handleImport = async () => {
     setImporting(true);
-    setDryRunMode(false);
     setLogs([]);
     setProgress(0);
     setSuccessCount(0);
@@ -284,11 +286,22 @@ export default function AdminMaintenanceRequests() {
 
         // Step 3: call changeStatus function
         const changeStatusFn = httpsCallable(functions, "changeStatus");
-        await changeStatusFn({
-          requestId: docRef.id,
-          newStatus: statusChange.newStatus,
-          note: statusChange.note,
-        });
+
+        if (Array.isArray(statusChange)) {
+          for (const sc of statusChange) {
+            await changeStatusFn({
+              requestId: docRef.id,
+              newStatus: sc.newStatus,
+              note: sc.note,
+            });
+          }
+        } else {
+          await changeStatusFn({
+            requestId: docRef.id,
+            newStatus: statusChange.newStatus,
+            note: statusChange.note,
+          });
+        }
 
         // Step 4: assign volunteer if present
         if (volunteerName) {
@@ -483,12 +496,32 @@ export default function AdminMaintenanceRequests() {
         {importing && (
           <ProgressBar value={progress} showValue={true} style={{ marginBottom: 16 }} />
         )}
-        <Panel header="Log importazione" style={{ maxHeight: 300, overflowY: "auto" }}>
-          <pre style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>
-            {logs.map((log, idx) => (
-              <div key={idx}>{log}</div>
-            ))}
-          </pre>
+        <Panel header="Risultati" style={{ overflowY: "auto" }}>
+              <TabView activeIndex={logsTab ? 0 : 1} onTabChange={e => setLogsTab(e.index === 0)}>
+                <TabPanel header="Log importazione">
+                  <Panel header="" style={{ boxShadow: "none", marginBottom: 0 }}>
+                    <pre style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>
+                      {logs.map((log, idx) => (
+                        <div key={idx}>{log}</div>
+                      ))}
+                    </pre>
+                  </Panel>
+                </TabPanel>
+                <TabPanel header="Parsed Data">
+                  <Panel header="" style={{ boxShadow: "none", marginBottom: 0 }}>
+                    <pre style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>
+                      {parsedData.map((row, idx) => (
+                        <div key={idx}>
+                          {row.error
+                            ? `Row ${idx + 1}: ERROR - ${row.error}`
+                            : `Row ${idx + 1}: ${JSON.stringify(row.obj, null, 2)}`}
+                        </div>
+                      ))}
+                    </pre>
+                  </Panel>
+                </TabPanel>
+              </TabView>
+              
         </Panel>
       </Panel>
     </div>

@@ -118,7 +118,7 @@ async function buildBoard(requests: Request[]): Promise<Board> {
 
       return {
         id: status,
-        title: status,
+        title: cards.length > 0 ? `${status} (${cards.length})` : status,
         cards,
       };
     })

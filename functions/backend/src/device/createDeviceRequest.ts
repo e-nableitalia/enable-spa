@@ -6,6 +6,7 @@ import { checkEmailRateLimit, checkIpRateLimit } from "../security/rateLimit";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import { sendEmailToDeviceAdmins } from "../utils/email";
+import { sendTelegramMessage } from "../utils/telegram";
 
 const REGION = "europe-west1";
 
@@ -39,9 +40,9 @@ export const createDeviceRequest = onCall(
     secrets: [
       "RECAPTCHA_API_KEY",
       "RECAPTCHA_SITE_KEY",
-      "MAILJET_API_KEY",
-      "MAILJET_API_SECRET",
-      "MAIL_FROM_ADDRESS"
+      "MAIL_FROM_ADDRESS",
+      "TELEGRAM_API_URL",
+      "TELEGRAM_API_SECRET"
     ]
   },
   async (request) => {
@@ -184,7 +185,7 @@ export const createDeviceRequest = onCall(
           },
           createdAt: FieldValue.serverTimestamp()
         };
-        await db.collection("emails").add(emailDoc);
+        await db.collection("mail").add(emailDoc);
         console.log(`[createDeviceRequest] Confirmation email enqueued for ${data.email}`);
         await logSecurityEvent({
           type: "system",
@@ -222,6 +223,23 @@ export const createDeviceRequest = onCall(
           </ul>
         </div>`
       );
+
+      try {
+        const telegramApiUrl = process.env.TELEGRAM_API_URL;
+        const telegramApiSecret = process.env.TELEGRAM_API_SECRET;
+        if (telegramApiUrl && telegramApiSecret) {
+            await sendTelegramMessage(
+            telegramApiUrl,
+            telegramApiSecret,
+            `📥 E' stata ricevuta una nuova richiesta di device da ${data.firstName} in provincia di ${data.province}`
+            );
+          console.log("[createDeviceRequest] Telegram notification sent");
+        } else {
+          console.warn("[createDeviceRequest] Telegram credentials not set, skipping notification");
+        }
+      } catch (telegramError) {
+        console.error("[createDeviceRequest] KO: Failed to send Telegram notification", telegramError);
+      }
 
       console.log(`[createDeviceRequest] OK: device request ${requestRef.id} created`);
       return { success: true };

@@ -12,6 +12,7 @@ import { Dialog } from "primereact/dialog";
 import { MultiSelect } from "primereact/multiselect";
 import { REQUEST_STATUSES } from "../../helpers/requestStatus";
 import { FilterMatchMode } from "primereact/api";
+import type { DataTableFilterMeta } from "primereact/datatable";
 import { REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType } from "../../helpers/requestStatus";
 
 interface AdminRequestTableProps {
@@ -126,9 +127,17 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
   );
 
   // Stato dei filtri
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<DataTableFilterMeta>({
     status: { value: null, matchMode: FilterMatchMode.IN },
-    // ...aggiungi altri filtri se necessario...
+    firstName: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    lastName: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    age: { value: null, matchMode: FilterMatchMode.EQUALS },
+    gender: { value: null, matchMode: FilterMatchMode.EQUALS },
+    amputationType: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    publicStatus: { value: null, matchMode: FilterMatchMode.EQUALS },
+    province: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    createdAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
+    updatedAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
   });
 
   // Multiselect filter template for status
@@ -138,7 +147,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
       options={REQUEST_STATUSES.map(s => ({ label: s, value: s }))}
       onChange={(e) => {
         // Aggiorna i filtri con il valore selezionato
-        setFilters((prev) => ({
+        setFilters((prev: any) => ({
           ...prev,
           status: { value: e.value, matchMode: FilterMatchMode.IN }
         }));
@@ -181,6 +190,27 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
         filters={filters}
         onFilter={(e) => setFilters(e.filters)}
       >
+        <Column
+          header="Copia ID"
+          body={(row) => (
+            <Button
+              icon="pi pi-copy"
+              tooltip="Copia ID"
+              tooltipOptions={{ position: "top" }}
+              rounded
+              text
+              onClick={async () => {
+                await navigator.clipboard.writeText(row.id);
+                toast.current?.show({
+                  severity: "info",
+                  summary: "ID copiato",
+                  detail: `ID ${row.id} copiato negli appunti.`,
+                  life: 2000,
+                });
+              }}
+            />
+          )}
+        />
         <Column field="firstName" header="Nome" filter sortable />
         <Column field="lastName" header="Cognome" filter sortable />
         <Column field="age" header="Età" filter sortable />
@@ -191,16 +221,16 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           filter
           sortable
           body={(row) => (
-        <>
-          <span
-            title={row.amputationType}
-            data-pr-tooltip={row.amputationType}
-            data-pr-position="top"
-            className="amputation-type-tooltip"
-          >
-            {shortAmputationType(row.amputationType)}
-          </span>
-        </>
+            <>
+              <span
+                title={row.amputationType}
+                data-pr-tooltip={row.amputationType}
+                data-pr-position="top"
+                className="amputation-type-tooltip"
+              >
+                {shortAmputationType(row.amputationType)}
+              </span>
+            </>
           )}
         />
         <Column
@@ -220,6 +250,24 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           filter
           field="publicStatus"
           sortable
+          filterElement={(options) => (
+            <MultiSelect
+              value={options.value || []}
+              options={Object.keys(PUBLIC_STATUS_SEVERITY).map(s => ({ label: s, value: s }))}
+              onChange={(e) => {
+                setFilters((prev: DataTableFilterMeta) => ({
+                  ...prev,
+                  publicStatus: { value: e.value, matchMode: FilterMatchMode.IN }
+                }));
+                options.filterCallback(e.value, options.index);
+              }}
+              placeholder="Filtra stato pubblico"
+              display="chip"
+              style={{ minWidth: 180 }}
+            />
+          )}
+          showFilterMenu={false}
+          filterMatchMode={FilterMatchMode.IN}
         />
         <Column field="province" header="Provincia" filter sortable />
         <Column
