@@ -183,7 +183,19 @@ export default function ContactsList() {
           selectionMode="multiple"
         >
           <Column selectionMode="multiple" headerStyle={{ width: '3em' }} />
-          <Column field="receivedAt" header="Ricevuto il" sortable style={{ minWidth: 180 }} />
+          <Column
+            field="receivedAt"
+            header="Ricevuto il"
+            sortable
+            style={{ minWidth: 180 }}
+            sortFunction={(e) => {
+              return [...e.data].sort((a, b) => {
+          const dateA = a.receivedAt ? new Date(a.receivedAt).getTime() : 0;
+          const dateB = b.receivedAt ? new Date(b.receivedAt).getTime() : 0;
+          return e.order! * (dateA - dateB);
+              });
+            }}
+          />
           <Column field="firstName" header="Nome" sortable style={{ minWidth: 120 }} />
           <Column field="lastName" header="Cognome" sortable style={{ minWidth: 120 }} />
           <Column field="status" header="Stato" body={statusBody} sortable style={{ minWidth: 100 }} />
