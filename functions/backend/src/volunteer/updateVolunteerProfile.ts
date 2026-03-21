@@ -47,6 +47,25 @@ export const updateVolunteerProfile = onCall(
       throw new HttpsError("failed-precondition", "consentPrivacy must be true");
     }
 
+    // Normalize and validate notificationPreferences
+    if (privateProfile) {
+      const prefs = privateProfile.notificationPreferences;
+      if (prefs) {
+        // Validate channel requirements
+        if (prefs.telegram && !privateProfile.telegramUsername) {
+          throw new HttpsError("failed-precondition", "Telegram selected but username missing");
+        }
+        if (prefs.whatsapp && !privateProfile.phone) {
+          throw new HttpsError("failed-precondition", "WhatsApp selected but phone missing");
+        }
+        // Force at least one channel active
+        const hasAny = prefs.email || prefs.telegram || prefs.whatsapp;
+        if (!hasAny) {
+          privateProfile.notificationPreferences = { email: true };
+        }
+      }
+    }
+
     let errorMsg = undefined;
     try {
       await db.runTransaction(async (tx) => {

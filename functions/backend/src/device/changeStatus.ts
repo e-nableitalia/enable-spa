@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {getFirestore, FieldValue} from "firebase-admin/firestore";
 import {mapToPublicStatus} from "../utils/mapToPublicStatus";
+import {requireVolunteerConsents} from "../utils/consents";
 
 export const changeStatus = onCall(
   {region: "europe-west1"},
@@ -10,6 +11,7 @@ export const changeStatus = onCall(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
+    await requireVolunteerConsents(uid);
     const {requestId, newStatus, note} = request.data;
 
     if (!requestId || !newStatus) {

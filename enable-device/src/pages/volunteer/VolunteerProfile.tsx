@@ -106,10 +106,6 @@ export default function VolunteerProfile() {
   };
 
   const handleSave = async () => {
-    if (!privateProfile?.consentPrivacy) {
-      toastRef.current?.show({ severity: "error", summary: "Errore", detail: "Devi accettare la privacy", life: 2000 });
-      return;
-    }
     setSaving(true);
     try {
       const user = auth.currentUser;
@@ -160,11 +156,22 @@ export default function VolunteerProfile() {
                   <label htmlFor="telegramUsername" style={{ width: 200, textAlign: "left", marginRight: 16 }}>Telegram</label>
                   <InputText id="telegramUsername" value={privateProfile.telegramUsername} onChange={e => handlePrivateChange("telegramUsername", e.target.value)} style={{ flex: 1 }} />
                 </div>
-              </div>
-              <div className="p-col-12 p-md-6">
                 <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
-                  <Checkbox inputId="privacy" checked={privateProfile.consentPrivacy} onChange={e => handlePrivateChange("consentPrivacy", e.checked)} className="mr-2" />
-                  <label htmlFor="privacy" style={{ textAlign: "left" }}>Accetto la privacy</label>
+                  <label style={{ width: 200, textAlign: "left", marginRight: 16 }}>Notifiche</label>
+                  <div style={{ display: "flex", gap: 24 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Checkbox inputId="notifEmail" checked={privateProfile.notificationPreferences?.email ?? true} onChange={e => handlePrivateChange("notificationPreferences", { ...privateProfile.notificationPreferences, email: e.checked })} />
+                      <label htmlFor="notifEmail">Email</label>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Checkbox inputId="notifTelegram" checked={privateProfile.notificationPreferences?.telegram ?? false} onChange={e => handlePrivateChange("notificationPreferences", { ...privateProfile.notificationPreferences, telegram: e.checked })} disabled={!privateProfile.telegramUsername} />
+                      <label htmlFor="notifTelegram" style={{ color: !privateProfile.telegramUsername ? "#aaa" : undefined }}>Telegram</label>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Checkbox inputId="notifWhatsapp" checked={privateProfile.notificationPreferences?.whatsapp ?? false} onChange={e => handlePrivateChange("notificationPreferences", { ...privateProfile.notificationPreferences, whatsapp: e.checked })} disabled={!privateProfile.phone} />
+                      <label htmlFor="notifWhatsapp" style={{ color: !privateProfile.phone ? "#aaa" : undefined }}>WhatsApp</label>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

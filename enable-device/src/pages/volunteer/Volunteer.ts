@@ -8,6 +8,11 @@ export interface VolunteerPrivateProfile {
   continuityType: string;
   desiredInvolvementLevel: string;
   consentPrivacy: boolean;
+  notificationPreferences?: {
+    email?: boolean;
+    telegram?: boolean;
+    whatsapp?: boolean;
+  };
 }
 
 export interface VolunteerSkills {

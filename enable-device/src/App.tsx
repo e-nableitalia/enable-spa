@@ -7,6 +7,7 @@ import CompleteRegistration from "./pages/CompleteRegistration";
 import SetPassword from "./pages/SetPassword";
 import Home from "./pages/Home";
 import RequestDevice from "./pages/RequestDevice";
+import VolunteerConsentPage from "./pages/VolunteerConsentPage";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/complete-registration" element={<CompleteRegistration />} />
         <Route path="/set-password" element={<SetPassword />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/volunteer-consent" element={<VolunteerConsentPage />} />
         <Route path="*" element={<Login />} />
       </Routes>
     </BrowserRouter>

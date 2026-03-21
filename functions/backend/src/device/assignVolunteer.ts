@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { requireVolunteerConsents } from "../utils/consents";
 
 export const assignVolunteer = onCall(
   { region: "europe-west1" },
@@ -10,6 +11,8 @@ export const assignVolunteer = onCall(
     if (!authUid) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
+
+    await requireVolunteerConsents(authUid);
     if (!deviceId || !userId) {
       throw new HttpsError("invalid-argument", "Missing parameters");
     }
