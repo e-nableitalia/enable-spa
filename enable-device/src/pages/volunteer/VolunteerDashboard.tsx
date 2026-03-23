@@ -1,13 +1,51 @@
-import { useEffect, useRef, useState } from "react";
-import { getDoc, doc, getDocs, collection, query } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { getDoc, doc, getDocs, setDoc, updateDoc, collection, query, where, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import type { VolunteerPrivateProfile, VolunteerSkills, VolunteerPublicProfile } from "./Volunteer";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Chart } from "primereact/chart";
 import { Card } from "primereact/card";
-import { Messages, type MessagesMessage } from "primereact/messages";
+import { type MessagesMessage } from "primereact/messages";
 import { Tag } from "primereact/tag";
+import { Button } from "primereact/button";
+import { Divider } from "primereact/divider";
+import { Panel } from "primereact/panel";
+import { Badge } from "primereact/badge";
+import type { GlobalMessage, PersonalMessage, EnrichedMessage } from "../../shared/types/messageData";
+
+// ---- Helpers ----
+
+function toDate(val: unknown): Date | null {
+  if (!val) return null;
+  if (typeof (val as Record<string, unknown>)?.toDate === "function")
+    return (val as { toDate: () => Date }).toDate();
+  if (
+    typeof val === "object" &&
+    typeof (val as Record<string, unknown>).seconds === "number"
+  )
+    return new Date(((val as Record<string, unknown>).seconds as number) * 1000);
+  const d = new Date(val as string | number);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatMsgDate(val: unknown): string {
+  const d = toDate(val);
+  if (!d) return "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
+const SYSTEM_MSG_STYLES: Record<string, { bg: string; border: string; icon: string; color: string }> = {
+  info:    { bg: "#e8f4ff", border: "#b3d4f5", icon: "pi-info-circle",         color: "#084298" },
+  success: { bg: "#f0faf0", border: "#a3d9a5", icon: "pi-check-circle",        color: "#155724" },
+  warn:    { bg: "#fffbe6", border: "#ffe58f", icon: "pi-exclamation-triangle", color: "#664d03" },
+  error:   { bg: "#fff1f0", border: "#ffccc7", icon: "pi-times-circle",         color: "#721c24" },
+};
 
 export default function VolunteerDashboard() {
   const [privateProfile, setPrivateProfile] = useState<VolunteerPrivateProfile | null>(null);
@@ -19,7 +57,11 @@ export default function VolunteerDashboard() {
   const [privateRequests, setPrivateRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
 
-  const msgs = useRef<Messages>(null);
+  const [globalMessages, setGlobalMessages] = useState<GlobalMessage[]>([]);
+  const [personalMessages, setPersonalMessages] = useState<PersonalMessage[]>([]);
+  const [messageStatusMap, setMessageStatusMap] = useState<Record<string, boolean>>({});
+  const [loadingMessages, setLoadingMessages] = useState(true);
+  const [hideRead, setHideRead] = useState(true);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -44,7 +86,10 @@ export default function VolunteerDashboard() {
       // Private requests for current user
       const user = auth.currentUser;
       if (user) {
-        const q = query(collection(db, `deviceRequests`));
+        const q = query(
+          collection(db, "deviceRequests"),
+          where("assignedVolunteer", "==", user.uid)
+        );
         const privateReqSnap = await getDocs(q);
 
         setPrivateRequests(privateReqSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -52,6 +97,45 @@ export default function VolunteerDashboard() {
       setLoadingRequests(false);
     };
     fetchRequests();
+  }, []);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      const user = auth.currentUser;
+      if (!user) { setLoadingMessages(false); return; }
+      try {
+        const now = new Date();
+        const globalSnap = await getDocs(
+          query(collection(db, "messages"), where("active", "==", true))
+        );
+        const globals = globalSnap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as GlobalMessage))
+          .filter((m) => {
+            if (m.target !== "all" && m.target !== "volunteer") return false;
+            if (m.expiresAt) {
+              const exp = toDate(m.expiresAt);
+              if (exp && exp < now) return false;
+            }
+            return true;
+          });
+        setGlobalMessages(globals);
+        const statusSnap = await getDocs(collection(db, `users/${user.uid}/messageStatus`));
+        const statusMap: Record<string, boolean> = {};
+        statusSnap.docs.forEach((d) => {
+          statusMap[d.id] = (d.data() as { read: boolean }).read ?? false;
+        });
+        setMessageStatusMap(statusMap);
+        const personalSnap = await getDocs(collection(db, `users/${user.uid}/messages`));
+        setPersonalMessages(
+          personalSnap.docs.map((d) => ({ id: d.id, ...d.data() } as PersonalMessage))
+        );
+      } catch (err) {
+        console.error("[VolunteerDashboard] Failed to load messages", err);
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+    fetchMessages();
   }, []);
 
   // Riepilogo: individua le sezioni non compilate
@@ -141,7 +225,7 @@ export default function VolunteerDashboard() {
       id: "no-private-requests",
       sticky: true,
       severity: "success",
-      summary: "Nessuna richiesta",
+      summary: "Nessuna richiesta:",
       detail: "Non ci sono richieste di device da gestire.",
       closable: false,
     });
@@ -156,15 +240,41 @@ export default function VolunteerDashboard() {
     });
   }
 
-  useEffect(() => {
-    if (msgs.current && messages.length > 0) {
-      msgs.current.clear();
-      msgs.current.show(messages);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, loadingProfile, loadingRequests]);
+  const enrichedMessages: EnrichedMessage[] = [
+    ...globalMessages.map((m) => ({
+      ...m,
+      read: messageStatusMap[m.id] ?? false,
+      type: "global" as const,
+    })),
+    ...personalMessages.map((m) => ({
+      ...m,
+      type: "personal" as const,
+    })),
+  ].sort((a, b) => {
+    if (a.read !== b.read) return a.read ? 1 : -1;
+    const ta = toDate(a.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
 
-  if (loadingProfile || loadingRequests) {
+  const markAsRead = async (msg: EnrichedMessage) => {
+    const user = auth.currentUser;
+    if (!user || msg.read) return;
+    if (msg.type === "global") {
+      await setDoc(doc(db, `users/${user.uid}/messageStatus/${msg.id}`), {
+        read: true,
+        readAt: serverTimestamp(),
+      });
+      setMessageStatusMap((prev) => ({ ...prev, [msg.id]: true }));
+    } else {
+      await updateDoc(doc(db, `users/${user.uid}/messages/${msg.id}`), { read: true });
+      setPersonalMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, read: true } : m))
+      );
+    }
+  };
+
+  if (loadingProfile || loadingRequests || loadingMessages) {
     return (
       <div style={{ textAlign: "center", marginTop: 80 }}>
         <span className="pi pi-spin pi-spinner" style={{ fontSize: 32 }} /> <div>Caricamento...</div>
@@ -192,9 +302,121 @@ export default function VolunteerDashboard() {
         </div>
       </div>
 
-      <div className="card flex justify-content-center" style={{ marginBottom: 24 }}>
-        <Messages ref={msgs} />
-      </div>
+      {(enrichedMessages.length > 0 || messages.length > 0) && (
+        <Panel
+          headerTemplate={(options) => {
+            const unread = enrichedMessages.filter((m) => !m.read).length;
+            return (
+              <div className={options.className} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {options.togglerElement}
+                <span className="pi pi-bell" style={{ fontSize: 18 }} />
+                <span style={{ fontWeight: 700, fontSize: 16 }}>Avvisi e comunicazioni</span>
+                {unread > 0 && (
+                  <Badge value={unread} severity="warning" />
+                )}
+                <Button
+                  icon={hideRead ? "pi pi-eye" : "pi pi-eye-slash"}
+                  label={hideRead ? "Mostra letti" : "Nascondi letti"}
+                  size="small"
+                  className="p-button-text p-button-secondary"
+                  style={{ marginLeft: "auto" }}
+                  onClick={(e) => { e.stopPropagation(); setHideRead((v) => !v); }}
+                />
+              </div>
+            );
+          }}
+          toggleable
+          collapsed={false}
+          style={{ marginBottom: 32 }}
+        >
+          {messages.length > 0 && (
+            <div style={{ marginBottom: enrichedMessages.length > 0 ? 16 : 0 }}>
+              {messages.map((m) => {
+                const sev = m.severity ?? "info";
+                const s = SYSTEM_MSG_STYLES[sev] ?? SYSTEM_MSG_STYLES.info;
+                return (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      background: s.bg,
+                      border: `1px solid ${s.border}`,
+                      borderRadius: 6,
+                      padding: "10px 14px",
+                      marginBottom: 8,
+                      color: s.color,
+                    }}
+                  >
+                    <span className={`pi ${s.icon}`} style={{ fontSize: 18, marginTop: 2, flexShrink: 0 }} />
+                    <span>
+                      {m.summary && (
+                        <strong style={{ display: "block", fontSize: "0.97em", marginBottom: 2, fontStyle: "italic" }}>{m.summary}</strong>
+                      )}
+                      <span style={{ fontSize: "0.9em", opacity: 0.85 }}>{m.detail}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {enrichedMessages.length > 0 && (
+            <>
+              {messages.length > 0 && <Divider />}
+              {enrichedMessages.filter((msg) => !hideRead || !msg.read).length === 0 ? (
+                <div style={{ color: "#aaa", fontSize: "0.9em", padding: "8px 0" }}>
+                  Nessun messaggio non letto. Usa il pulsante in alto per mostrare anche i messaggi letti.
+                </div>
+              ) : (
+                enrichedMessages
+                  .filter((msg) => !hideRead || !msg.read)
+                  .map((msg, i) => (
+                    <div key={msg.id}>
+                      {i > 0 && <Divider style={{ margin: "6px 0" }} />}
+                      <div
+                        style={{
+                          background: msg.read ? "transparent" : "#fffbe6",
+                          border: msg.read ? "none" : "1px solid #ffe58f",
+                          borderRadius: 6,
+                          padding: "10px 14px",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          gap: 12,
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                            <strong style={{ fontWeight: 700, fontSize: "1.05em", fontStyle: msg.read ? "normal" : "italic", opacity: msg.read ? 0.6 : 1 }}>{msg.title}</strong>
+                            {!msg.read && <Tag value="Nuovo" severity="warning" />}
+                          </div>
+                          <div style={{ color: "#444", fontSize: "0.95em" }} dangerouslySetInnerHTML={{ __html: msg.body }} />
+                          {!!msg.createdAt && (
+                            <div style={{ color: "#aaa", fontSize: "0.8em", marginTop: 4 }}>
+                              {formatMsgDate(msg.createdAt)}
+                            </div>
+                          )}
+                        </div>
+                        {!msg.read && (
+                          <Button
+                            label="Segna come letto"
+                            icon="pi pi-check"
+                            size="small"
+                            className="p-button-text p-button-secondary"
+                            style={{ flexShrink: 0 }}
+                            onClick={() => markAsRead(msg)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))
+              )}
+            </>
+          )}
+        </Panel>
+      )}
 
       {myPrivateRequests.length !== 0 && (
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 32 }}>

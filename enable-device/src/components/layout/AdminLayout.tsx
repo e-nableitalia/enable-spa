@@ -30,6 +30,7 @@ import ContactsList from "../../pages/admin/volunteers/ContactsList";
 import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
 import AdminEmailLogsPage from "../../pages/admin/AdminEmailLogsPage";
 import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
+import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
 
 export default function AdminLayout() {
   const [user, setUser] = useState<any | null>(null);
@@ -222,6 +223,11 @@ export default function AdminLayout() {
       command: () => navigate("/admin/shipments"),
     },
     {
+      label: "Comunicazioni",
+      icon: "pi pi-comments",
+      command: () => navigate("/admin/messages"),
+    },
+    {
       label: "Log Email",
       icon: "pi pi-envelope",
       command: () => navigate("/admin/email-logs"),
@@ -375,6 +381,7 @@ export default function AdminLayout() {
             <Route path="volunteers/contacts" element={<ContactsList />} />
             <Route path="volunteers/maintenance" element={<VolunteerMaintenance />} />
             <Route path="shipments" element={<ShipmentRequestsPage />} />
+            <Route path="messages" element={<AdminMessagesPage />} />
             <Route path="email-logs" element={<AdminEmailLogsPage />} />
             <Route path="security-logs" element={<AdminSecurityLogsPage />} />
             <Route path="stats" element={<AdminStats />} />

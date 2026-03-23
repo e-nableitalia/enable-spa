@@ -42,11 +42,6 @@ export const updateVolunteerProfile = onCall(
     const { privateProfile, skills, publicProfile } = data;
     console.log(`[updateVolunteerProfile] Sections to update: privateProfile=${!!privateProfile}, skills=${!!skills}, publicProfile=${!!publicProfile}`);
 
-    if (privateProfile && privateProfile.consentPrivacy !== true) {
-      console.log(`[updateVolunteerProfile] KO: consentPrivacy not true`);
-      throw new HttpsError("failed-precondition", "consentPrivacy must be true");
-    }
-
     // Normalize and validate notificationPreferences
     if (privateProfile) {
       const prefs = privateProfile.notificationPreferences;
