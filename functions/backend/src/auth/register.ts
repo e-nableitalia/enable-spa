@@ -448,20 +448,20 @@ export const registerWithIntegratedAuth = onCall(
         }
       });
 
-      // --- Send confirmation email ---
-      try {
-        const userSnap = await userRef.get();
-        const userData = userSnap.data() as { email: string; firstName?: string; lastName?: string };
-        const emailDoc = {
-          to: userData.email,
-          template: { name: "attivazioneVolontario", data: {} },
-          createdAt: Timestamp.now()
-        };
-        await db.collection("mail").add(emailDoc);
-        console.log("[registerWithIntegratedAuth] Confirmation email queued");
-      } catch (emailErr) {
-        console.error("[registerWithIntegratedAuth] Failed to queue confirmation email", emailErr);
-      }
+      // // --- Send confirmation email ---
+      // try {
+      //   const userSnap = await userRef.get();
+      //   const userData = userSnap.data() as { email: string; firstName?: string; lastName?: string };
+      //   const emailDoc = {
+      //     to: userData.email,
+      //     template: { name: "attivazioneVolontario", data: {} },
+      //     createdAt: Timestamp.now()
+      //   };
+      //   await db.collection("mail").add(emailDoc);
+      //   console.log("[registerWithIntegratedAuth] Confirmation email queued");
+      // } catch (emailErr) {
+      //   console.error("[registerWithIntegratedAuth] Failed to queue confirmation email", emailErr);
+      // }
 
       return { success: true };
     } catch (err) {

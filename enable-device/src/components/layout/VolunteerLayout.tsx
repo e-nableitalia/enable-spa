@@ -302,7 +302,7 @@ export default function VolunteerLayout() {
                         id="sidebar-toggle-btn"
                     />
                     <div style={{ fontWeight: "bold", fontSize: 20 }}>
-                        e-Nable Italia Volunteer
+                        e-Nable Italia - Volontari
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                         {userEmail && (
