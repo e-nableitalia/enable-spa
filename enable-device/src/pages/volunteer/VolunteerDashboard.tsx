@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getDoc, doc, getDocs, setDoc, updateDoc, collection, query, where, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import type { VolunteerPrivateProfile, VolunteerSkills, VolunteerPublicProfile } from "./Volunteer";
+import type { VolunteerPrivateProfile, VolunteerSkills, VolunteerPublicProfile } from "../../shared/types/volunteerData";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Chart } from "primereact/chart";
@@ -13,6 +13,7 @@ import { Divider } from "primereact/divider";
 import { Panel } from "primereact/panel";
 import { Badge } from "primereact/badge";
 import type { GlobalMessage, PersonalMessage, EnrichedMessage } from "../../shared/types/messageData";
+import { REQUEST_STATUS_SEVERITY, CLOSED_STATUSES } from "../../helpers/requestStatus";
 
 // ---- Helpers ----
 
@@ -88,11 +89,18 @@ export default function VolunteerDashboard() {
       if (user) {
         const q = query(
           collection(db, "deviceRequests"),
-          where("assignedVolunteer", "==", user.uid)
+          where("assignedVolunteers", "array-contains", user.uid)
         );
         const privateReqSnap = await getDocs(q);
-
-        setPrivateRequests(privateReqSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const enriched = await Promise.all(
+          privateReqSnap.docs.map(async (d) => {
+            const base = { id: d.id, ...d.data() };
+            const privSnap = await getDoc(doc(db, "deviceRequests", d.id, "private", "data"));
+            const priv = privSnap.exists() ? privSnap.data() : {};
+            return { ...base, ...priv };
+          })
+        );
+        setPrivateRequests(enriched);
       }
       setLoadingRequests(false);
     };
@@ -179,7 +187,7 @@ export default function VolunteerDashboard() {
   const user = auth.currentUser;
 
   const myPrivateRequests = user
-    ? privateRequests.filter(req => req.assignedVolunteer === user.uid)
+    ? privateRequests.filter(req => req.assignedVolunteers?.includes(user.uid))
     : [];
 
 
@@ -198,7 +206,9 @@ export default function VolunteerDashboard() {
   };
 
   // Banner: richieste private da gestire
-  //const pendingPrivateRequests = myPrivateRequests.filter(r => r.status !== "closed" && r.status !== "completed");
+  const openPrivateRequests = myPrivateRequests.filter(
+    (r) => !CLOSED_STATUSES.includes(r.status)
+  );
 
   // Filtra le richieste pubbliche "da gestire" (ad esempio, status "open" o "in_progress")
   const manageableStatuses = ["da gestire"];
@@ -233,9 +243,9 @@ export default function VolunteerDashboard() {
     messages.push({
       id: "private-requests-count",
       sticky: true,
-      severity: "warn",
-      summary: "Richieste da gestire",
-      detail: `Hai ${myPrivateRequests.length} richieste assegnate da gestire.`,
+      severity: openPrivateRequests.length > 0 ? "warn" : "success",
+      summary: "Le mie richieste",
+      detail: `Hai ${openPrivateRequests.length} richieste da gestire su ${myPrivateRequests.length} totali.`,
       closable: false,
     });
   }
@@ -428,35 +438,33 @@ export default function VolunteerDashboard() {
             <Chart type="pie" data={privateChartData} style={{ maxWidth: 400 }} />
             </Card>
           <Card title="Le mie richieste" style={{ flex: "2 1 500px", minWidth: 350 }}>
-            <DataTable value={myPrivateRequests} paginator rows={10} filterDisplay="row">
-              <Column field="province" header="Provincia"/>
-              <Column field="deviceType" header="Device"/>
-              <Column field="status" header="Stato Interno" />
+            <DataTable
+              value={myPrivateRequests}
+              paginator
+              rows={10}
+              filterDisplay="row"
+              paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
+              currentPageReportTemplate="{first}-{last} di {totalRecords} richieste"
+            >
+              <Column field="firstName" header="Nome" sortable />
+              <Column field="lastName" header="Cognome" sortable />
+              <Column field="age" header="Età" sortable />
+              <Column field="deviceType" header="Device" sortable />
+              <Column field="province" header="Provincia" sortable />
               <Column
-                header="Stato Pubblico"
-                body={(row) => <Tag value={row.publicStatus} severity="info" />}
+                field="status"
+                header="Stato"
+                sortable
+                body={(row) => (
+                  <Tag value={row.status} severity={REQUEST_STATUS_SEVERITY[row.status] ?? "info"} />
+                )}
               />
               <Column
                 header="Creata"
+                sortable
+                sortField="createdAt"
                 body={(row: any) => {
                   const date = row["createdAt"];
-                  if (!date) return "-";
-                  const d =
-                    typeof date === "string"
-                      ? new Date(date)
-                      : date.toDate
-                        ? date.toDate()
-                        : date;
-                  return d instanceof Date && !isNaN(d.getTime())
-                    ? d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
-                    : "-";
-                }}
-                dataType="date"
-              />
-              <Column
-                header="Modificata"
-                body={(row) => {
-                  const date = row["updatedAt"];
                   if (!date) return "-";
                   const d =
                     typeof date === "string"
@@ -484,17 +492,13 @@ export default function VolunteerDashboard() {
         </Card>
 
         <Card title="Elenco richieste da gestire" style={{ flex: "2 1 500px", minWidth: 350 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontWeight: 500, fontSize: 16 }}>
-              Totale richieste: {manageablePublicRequests.length}
-            </div>
-            
-            </div>
             <DataTable
               value={manageablePublicRequests}
               paginator
               rows={10}
               rowsPerPageOptions={[5, 10, 20, 50]}
+              paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
+              currentPageReportTemplate="{first}-{last} di {totalRecords} richieste"
               style={{ marginTop: 8 }}
               sortField="createdAt"
               sortOrder={-1}

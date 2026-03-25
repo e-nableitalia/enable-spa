@@ -152,7 +152,7 @@ export const createDeviceRequest = onCall(
           gender: data.gender || null,
           status: "inviata",
           publicStatus: mapToPublicStatus("inviata"),
-          assignedVolunteer: null,
+          assignedVolunteers: [],
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
           createdBy: "public-form",

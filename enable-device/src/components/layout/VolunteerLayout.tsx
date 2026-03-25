@@ -59,7 +59,7 @@ export default function VolunteerLayout() {
                 // Fetch requests assigned to this volunteer
                 const q = query(
                     collection(db, "deviceRequests"),
-                    where("assignedVolunteer", "==", user.uid)
+                    where("assignedVolunteers", "array-contains", user.uid)
                 );
                 unsub = onSnapshot(q, (snapshot) => {
                     const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as { id: string; status?: string }));

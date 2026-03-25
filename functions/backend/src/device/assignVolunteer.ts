@@ -1,75 +1,41 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { requireVolunteerConsents } from "../utils/consents";
+import { setAssignedVolunteers } from "../utils/volunteerAssignment";
+import { getInvokeId } from "../utils/invoke";
 
 export const assignVolunteer = onCall(
   { region: "europe-west1" },
   async (request) => {
+    const invokeId = getInvokeId(request);
     const { deviceId, userId } = request.data;
     const authUid = request.auth?.uid;
+    console.log(`[assignVolunteer] Invoke ID: ${invokeId} - Function called`);
 
     if (!authUid) {
+      console.log(`[assignVolunteer] KO: Unauthenticated`);
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     await requireVolunteerConsents(authUid);
-    if (!deviceId || !userId) {
+    if (!deviceId || userId === undefined || userId === null) {
+      console.log(`[assignVolunteer] KO: Missing parameters`);
       throw new HttpsError("invalid-argument", "Missing parameters");
     }
 
     const db = getFirestore();
-
-    // Check if the requester is admin
     const userSnap = await db.collection("users").doc(authUid).get();
     if (!userSnap.exists || userSnap.data()?.role !== "admin") {
+      console.log(`[assignVolunteer] KO: Permission denied for uid ${authUid}`);
       throw new HttpsError("permission-denied", "Only admin can assign volunteers");
     }
 
-    const requestRef = db.collection("deviceRequests").doc(deviceId);
-    const requestSnap = await requestRef.get();
+    // Accept either a single UID or a full array (complete desired list)
+    const volunteerIds: string[] = Array.isArray(userId) ? userId : [userId];
+    console.log(`[assignVolunteer] Setting volunteers for request ${deviceId}: [${volunteerIds.join(", ")}]`);
 
-    if (!requestSnap.exists) {
-      throw new HttpsError("not-found", "Device request not found");
-    }
-
-    // Recupera stato attuale della richiesta
-    const requestData = requestSnap.data();
-    const fromStatus = requestData?.status || null;
-
-    // Recupera nome e cognome del volontario
-    let volunteerNote = userId;
-    try {
-      const profileSnap = await db
-        .collection("users")
-        .doc(userId)
-        .collection("private")
-        .doc("profile")
-        .get();
-      if (profileSnap.exists) {
-        const { firstName, lastName } = profileSnap.data() || {};
-        if (firstName || lastName) {
-          volunteerNote = `${firstName || ""} ${lastName || ""}`.trim() + ` (${userId})`;
-        }
-      }
-    } catch {
-      // fallback: keep userId only
-    }
-
-    await db.runTransaction(async (tx) => {
-      tx.update(requestRef, {
-        assignedVolunteer: userId,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      tx.set(requestRef.collection("events").doc(), {
-        type: "assign_volunteer",
-        fromStatus,
-        toStatus: fromStatus,
-        timestamp: FieldValue.serverTimestamp(),
-        createdBy: authUid,
-        note: volunteerNote
-      });
-    });
+    await setAssignedVolunteers(deviceId, volunteerIds, authUid, invokeId);
+    console.log(`[assignVolunteer] OK: volunteers set for request ${deviceId}`);
 
     return { success: true };
   }

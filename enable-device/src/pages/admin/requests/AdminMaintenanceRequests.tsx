@@ -5,7 +5,7 @@ import { ProgressBar } from "primereact/progressbar";
 import { Toast } from "primereact/toast";
 import Papa from "papaparse";
 import { db, functions } from "../../../firebase";
-import { collection, doc, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDocs, deleteDoc, updateDoc, writeBatch, deleteField } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { Timestamp } from "firebase/firestore";
 import { Dialog } from "primereact/dialog";
@@ -30,6 +30,7 @@ export default function AdminMaintenanceRequests() {
   const [legacyMode, setLegacyMode] = useState(false);
   const [logsTab, setLogsTab] = useState(true);
   const [updatingDates, setUpdatingDates] = useState(false);
+  const [migratingVolunteers, setMigratingVolunteers] = useState(false);
   const toast = useRef<any>(null);
 
   type PrivateData = {
@@ -112,7 +113,7 @@ export default function AdminMaintenanceRequests() {
       createdBy: "import",
       age: row["Anni"] || "",
       gender: row["Sesso del destinatario"] || "",
-      assignedVolunteer: null,
+      assignedVolunteers: [],
       status: "imported", // initial status, will be changed by function
     };
     // Status change
@@ -203,7 +204,7 @@ export default function AdminMaintenanceRequests() {
       createdBy: "legacy-import",
       age: Number(row["Anni"] || 0),
       gender: row["Sesso del destinatatio"] || "",
-      assignedVolunteer: (row["Volontario"] || "").trim() || null,
+      assignedVolunteers: (row["Volontario"] || "").trim() ? [(row["Volontario"] || "").trim()] : [],
       status: stato,
       publicStatus: mappedStatus,
     };
@@ -475,6 +476,143 @@ export default function AdminMaintenanceRequests() {
     }
   };
 
+  // Migrate assignedVolunteer (string|null) → assignedVolunteers (string[])
+  // Idempotent: skips documents that already have assignedVolunteers
+  const handleMigrateVolunteers = async () => {
+    setMigratingVolunteers(true);
+    setLogs([]);
+    setProgress(0);
+    setSuccessCount(0);
+    setErrorCount(0);
+
+    const newLogs: string[] = [];
+
+    try {
+      const requestsSnap = await getDocs(collection(db, "deviceRequests"));
+      const all = requestsSnap.docs;
+
+      // Idempotent: migrate docs missing assignedVolunteers OR shippingAddress
+      const needsVolunteers = (d: { data: () => Record<string, unknown> }) => !("assignedVolunteers" in d.data());
+      const needsShipping   = (d: { data: () => Record<string, unknown> }) => !("shippingAddress" in d.data());
+      const toMigrate   = all.filter((d) => needsVolunteers(d) || needsShipping(d));
+      const skippedDocs = all.filter((d) => !needsVolunteers(d) && !needsShipping(d));
+
+      newLogs.push(`── Inizio migrazione ──────────────────────────`);
+      newLogs.push(`Totale documenti  : ${all.length}`);
+      newLogs.push(`Da migrare        : ${toMigrate.length}`);
+      newLogs.push(`Già migrati (skip): ${skippedDocs.length}`);
+      newLogs.push(`───────────────────────────────────────────────`);
+      skippedDocs.forEach((d) =>
+        newLogs.push(`SKIP  ${d.id}  (già migrato)`)
+      );
+      setLogs([...newLogs]);
+
+      if (toMigrate.length === 0) {
+        newLogs.push(`\nNessun documento da migrare.`);
+        setLogs([...newLogs]);
+        toast.current?.show({
+          severity: "info",
+          summary: "Migrazione non necessaria",
+          detail: "Tutti i documenti risultano già migrati.",
+          life: 3000,
+        });
+        return;
+      }
+
+      const BATCH_SIZE = 499; // Firestore max 500 ops/batch
+      let ok = 0, err = 0;
+
+      for (let i = 0; i < toMigrate.length; i += BATCH_SIZE) {
+        const chunk = toMigrate.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const batch = writeBatch(db);
+
+        // Prepare per-doc data before committing (data() reflects pre-commit state)
+        const chunkMeta = chunk.map((docSnap) => {
+          const data = docSnap.data();
+          const update: Record<string, unknown> = {};
+          const changes: string[] = [];
+
+          // assignedVolunteers migration
+          if (!("assignedVolunteers" in data)) {
+            const raw: string = data.assignedVolunteer ?? "";
+            // Split on "/" to handle "Name1 / Name2" legacy format, trim each, remove empty, deduplicate
+            const assignedVolunteers: string[] = [
+              ...new Set(
+                raw
+                  .split("/")
+                  .map((v: string) => v.trim())
+                  .filter((v: string) => v.length > 0)
+              ),
+            ];
+            update.assignedVolunteers = assignedVolunteers;
+            update.assignedVolunteer = deleteField();
+            changes.push(
+              `assignedVolunteer: ${raw ? `"${raw}"` : "null"} → [${assignedVolunteers.map((v) => `"${v}"`).join(", ")}]`
+            );
+          }
+
+          // shippingAddress initialization (never overwrite existing)
+          if (!("shippingAddress" in data)) {
+            update.shippingAddress = null;
+            changes.push(`shippingAddress: (missing) → null`);
+          }
+
+          batch.update(docSnap.ref, update);
+          return { docSnap, changes };
+        });
+
+        try {
+          await batch.commit();
+          ok += chunk.length;
+          chunkMeta.forEach(({ docSnap, changes }) => {
+            newLogs.push(`OK    ${docSnap.id}`);
+            changes.forEach((c) => newLogs.push(`  └─ ${c}`));
+          });
+        } catch (e: unknown) {
+          err += chunk.length;
+          newLogs.push(
+            `ERROR batch ${batchNum}: ${(e as { message?: string })?.message || String(e)}`
+          );
+          chunkMeta.forEach(({ docSnap }) =>
+            newLogs.push(`  └─ ${docSnap.id} non aggiornato`)
+          );
+        }
+
+        setProgress(Math.round((Math.min(i + BATCH_SIZE, toMigrate.length) / toMigrate.length) * 100));
+        setSuccessCount(ok);
+        setErrorCount(err);
+        setLogs([...newLogs]);
+      }
+
+      // Final summary
+      newLogs.push(`───────────────────────────────────────────────`);
+      newLogs.push(`── Riepilogo ──────────────────────────────────`);
+      newLogs.push(`Totale processati : ${all.length}`);
+      newLogs.push(`Aggiornati        : ${ok}`);
+      newLogs.push(`Saltati           : ${skippedDocs.length}`);
+      newLogs.push(`Errori            : ${err}`);
+      newLogs.push(`───────────────────────────────────────────────`);
+      setLogs([...newLogs]);
+
+      toast.current?.show({
+        severity: err === 0 ? "success" : "warn",
+        summary: "Migrazione completata",
+        detail: `Aggiornati: ${ok} | Saltati: ${skippedDocs.length} | Errori: ${err}`,
+        life: 5000,
+      });
+    } catch (e: unknown) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore migrazione",
+        detail: (e as { message?: string })?.message || String(e),
+        life: 4000,
+      });
+    } finally {
+      setMigratingVolunteers(false);
+    }
+  };
+
   // Delete all deviceRequests and subcollections
   const handleDeleteAll = async () => {
     setDeleteAllLoading(true);
@@ -611,9 +749,19 @@ export default function AdminMaintenanceRequests() {
             label="Aggiorna date"
             icon="pi pi-calendar"
             onClick={handleUpdateDates}
-            disabled={!csvRows.length || importing || updatingDates}
+            disabled={!csvRows.length || importing || updatingDates || migratingVolunteers}
             loading={updatingDates}
             className="p-button-warning"
+          />
+          <Button
+            label="Migra volontari"
+            icon="pi pi-users"
+            onClick={handleMigrateVolunteers}
+            disabled={importing || updatingDates || migratingVolunteers}
+            loading={migratingVolunteers}
+            className="p-button-help"
+            tooltip="Migra assignedVolunteer → assignedVolunteers (idempotente)"
+            tooltipOptions={{ position: "top" }}
           />
         </div>
         <div style={{ marginBottom: 12 }}>

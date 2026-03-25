@@ -6,7 +6,6 @@ interface Props {
 
 export default function RequestTimeline({ events }: Props) {
 
-  console.log("Timeline events:", events);
   return (
     <Timeline
       value={events}

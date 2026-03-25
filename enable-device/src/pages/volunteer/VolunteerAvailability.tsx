@@ -5,7 +5,7 @@ import { httpsCallable } from "firebase/functions";
 import { Button } from "primereact/button";
 import { Toast } from "primereact/toast";
 import { Message } from "primereact/message";
-import type { VolunteerPrivateProfile } from "./Volunteer";
+import type { VolunteerPrivateProfile } from "../../shared/types/volunteerData";
 
 // ─── option definitions ──────────────────────────────────────────────────────
 
@@ -262,8 +262,8 @@ export default function VolunteerAvailability() {
       const data = snap.exists() ? snap.data() as VolunteerPrivateProfile : null;
       const availability = {
         availability: data?.availability ?? "",
-        continuityType: data?.continuityType ?? "",
-        desiredInvolvementLevel: data?.desiredInvolvementLevel ?? "",
+        continuityType: data?.continuityType,
+        desiredInvolvementLevel: data?.desiredInvolvementLevel,
       };
       setProfile(availability);
       setDraft(availability);
@@ -359,7 +359,7 @@ export default function VolunteerAvailability() {
         title="Quanto tempo puoi dedicare?"
         description="Indica la tua disponibilità attuale. Non è un impegno formale."
         options={availabilityOptions}
-        value={draft.availability}
+        value={draft.availability ?? ""}
         onChange={v => handleChange("availability", v)}
         editing={editing}
       />
@@ -368,7 +368,7 @@ export default function VolunteerAvailability() {
         title="Che tipo di impegno preferisci?"
         description="Preferisci attività regolari o interventi su singoli progetti?"
         options={continuityOptions}
-        value={draft.continuityType}
+        value={draft.continuityType ?? ""}
         onChange={v => handleChange("continuityType", v)}
         editing={editing}
       />
@@ -377,7 +377,7 @@ export default function VolunteerAvailability() {
         title="Che livello di coinvolgimento desideri?"
         description="Non è un impegno definitivo: puoi cambiarlo in qualsiasi momento."
         options={involvementOptions}
-        value={draft.desiredInvolvementLevel}
+        value={draft.desiredInvolvementLevel ?? ""}
         onChange={v => handleChange("desiredInvolvementLevel", v)}
         editing={editing}
       />

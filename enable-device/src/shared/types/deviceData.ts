@@ -1,4 +1,8 @@
 
+import type { ShippingAddress } from "./shippingAddress";
+
+export type { ShippingAddress };
+
 export type publicStatus =
     | "da gestire"
     | "fabbricazione in corso"
@@ -32,11 +36,34 @@ export interface publicDeviceRequestData {
 
 export interface deviceRequestData {
     age: number;
-    assignedVolunteer: string;
+    /**
+     * Lista degli uid dei volontari assegnati alla richiesta.
+     *
+     * Sostituisce il precedente campo scalare `assignedVolunteer: string`.
+     *
+     * Firestore: per filtrare le richieste di un volontario usare
+     *   `where("assignedVolunteers", "array-contains", uid)`
+     * invece del precedente
+     *   `where("assignedVolunteer", "==", uid)`
+     *
+     * Compatibilità backward: i documenti Firestore creati prima della
+     * migrazione hanno ancora `assignedVolunteer: string | null`. Leggere
+     * entrambi i campi finché la migrazione non è completata:
+     *   const volunteers = doc.assignedVolunteers
+     *     ?? (doc.assignedVolunteer ? [doc.assignedVolunteer] : []);
+     */
+    assignedVolunteers: string[];
     createdBy: string;
     gender: string;
     status: deviceStatus;
     updatedAt: any; // Firestore Timestamp
+    /**
+     * Indirizzo di spedizione della richiesta (destinatario finale del dispositivo).
+     * Corrisponde al campo toAddress in resolveShippingAddresses.
+     * Salvato in deviceRequests/{id} — non nei dati privati, in quanto
+     * usato dalla logistica senza accesso ai dati sensibili del richiedente.
+     */
+    shippingAddress?: ShippingAddress;
 }
 
 export interface privateDeviceRequestData {

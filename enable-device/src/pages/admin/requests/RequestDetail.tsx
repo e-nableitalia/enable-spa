@@ -1,11 +1,13 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { doc, getDoc, collection, query, orderBy, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, query, orderBy, getDocs, updateDoc } from "firebase/firestore";
 import { db, functions } from "../../../firebase";
 import { httpsCallable } from "firebase/functions";
 import { Button } from "primereact/button";
 import { Dropdown } from "primereact/dropdown";
+import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
+import { ListBox } from "primereact/listbox";
 import RequestTimeline from "../../../components/timeline/RequestTimeline";
 import { Toast } from "primereact/toast";
 import { Panel } from "primereact/panel";
@@ -13,6 +15,8 @@ import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
 import { REQUEST_STATUSES } from "../../../helpers/requestStatus";
+import type { ShippingAddress } from "../../../shared/types/shippingAddress";
+import provinceList from "../../../helpers/province.json";
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -26,8 +30,18 @@ export default function RequestDetail() {
   const [showAssignVolunteerDialog, setShowAssignVolunteerDialog] = useState(false);
   const [showAddNoteDialog, setShowAddNoteDialog] = useState(false);
   const [volunteers, setVolunteers] = useState<any[]>([]);
-  const [selectedVolunteer, setSelectedVolunteer] = useState<any>(null);
   const [noteText, setNoteText] = useState("");
+  const [assignedVolunteersList, setAssignedVolunteersList] = useState<{ id: string; label: string }[]>([]);
+  const [selectedToRemove, setSelectedToRemove] = useState<{ id: string; label: string }[]>([]);
+  const [volunteerToAdd, setVolunteerToAdd] = useState<any>(null);
+  const [showAddRow, setShowAddRow] = useState(false);
+  const [addingVolunteer, setAddingVolunteer] = useState(false);
+  const [removingVolunteer, setRemovingVolunteer] = useState(false);
+  const [showAddressDialog, setShowAddressDialog] = useState(false);
+  const [addressForm, setAddressForm] = useState<ShippingAddress>({
+    fullName: "", street: "", city: "", province: "", postalCode: "", country: "IT",
+  });
+  const [savingAddress, setSavingAddress] = useState(false);
   const toast = useRef<any>(null);
 
   /**
@@ -53,11 +67,13 @@ export default function RequestDetail() {
     const docSnap = await getDoc(doc(db, "deviceRequests", id));
     if (docSnap.exists()) {
       const data = docSnap.data();
-      if (data.assignedVolunteer) {
-        const volunteerName = await getUserFullName(data.assignedVolunteer);
+      if (data.assignedVolunteers?.length) {
+        const volunteerNames = await Promise.all(
+          data.assignedVolunteers.map((uid: string) => getUserFullName(uid))
+        );
         setRequest({
           ...data,
-          assignedVolunteerName: volunteerName,
+          assignedVolunteerName: volunteerNames.join(", "),
         });
       } else {
         setRequest(data);
@@ -123,6 +139,23 @@ export default function RequestDetail() {
     fetchVolunteers();
   }, [id, loadData, fetchVolunteers]);
 
+  useEffect(() => {
+    if (!showAssignVolunteerDialog) {
+      setSelectedToRemove([]);
+      setVolunteerToAdd(null);
+      setShowAddRow(false);
+      return;
+    }
+    const uids: string[] = (request?.assignedVolunteers as string[]) ?? [];
+    Promise.all(
+      uids.map(async (uid: string) => ({
+        id: uid,
+        label: await getUserFullName(uid),
+      }))
+    ).then(setAssignedVolunteersList);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAssignVolunteerDialog]);
+
   const handleChangeStatus = async () => {
     const fn = httpsCallable(functions, "changeStatus");
     const effectiveNote = note.trim() || `cambio stato da "${request?.status}" a "${newStatus}"`;
@@ -141,32 +174,65 @@ export default function RequestDetail() {
     await loadData();
   };
 
-  const handleAssignVolunteer = async () => {
-    if (!selectedVolunteer) return;
-    if (!id) return;
+  const handleAddVolunteerToList = async () => {
+    if (!volunteerToAdd || !id) return;
+    setAddingVolunteer(true);
     try {
       const fn = httpsCallable(functions, "assignVolunteer");
-      await fn({
-        deviceId: id,
-        userId: selectedVolunteer.id,
-      });
+      const newList = [...assignedVolunteersList.map((v) => v.id), volunteerToAdd.id];
+      await fn({ deviceId: id, userId: newList });
+      const label = await getUserFullName(volunteerToAdd.id);
+      setAssignedVolunteersList((prev) => [...prev, { id: volunteerToAdd.id, label }]);
+      setVolunteerToAdd(null);
+      setShowAddRow(false);
+      await loadData();
       toast.current?.show({
         severity: "success",
-        summary: "Volontario associato",
-        detail: "Il volontario è stato associato alla richiesta.",
+        summary: "Volontario aggiunto",
+        detail: `${label} è stato aggiunto alla richiesta.`,
         life: 3000,
       });
-      setShowAssignVolunteerDialog(false);
-      setSelectedVolunteer(null);
-    } catch (error: any) {
+    } catch (err: any) {
       toast.current?.show({
         severity: "error",
         summary: "Errore",
-        detail: error?.message || "Errore durante l'associazione del volontario.",
+        detail: err?.message || "Errore durante l'aggiunta del volontario.",
         life: 4000,
       });
     }
-    await loadData();
+    setAddingVolunteer(false);
+  };
+
+  const handleRemoveFromList = async () => {
+    if (!selectedToRemove.length || !id) return;
+    setRemovingVolunteer(true);
+    try {
+      const fn = httpsCallable(functions, "assignVolunteer");
+      const newList = assignedVolunteersList
+        .filter((v) => !selectedToRemove.find((r) => r.id === v.id))
+        .map((v) => v.id);
+      await fn({ deviceId: id, userId: newList });
+      const removedNames = selectedToRemove.map((v) => v.label).join(", ");
+      setAssignedVolunteersList((prev) =>
+        prev.filter((v) => !selectedToRemove.find((r) => r.id === v.id))
+      );
+      setSelectedToRemove([]);
+      await loadData();
+      toast.current?.show({
+        severity: "success",
+        summary: "Rimosso",
+        detail: `${removedNames} rimosso/i dalla richiesta.`,
+        life: 3000,
+      });
+    } catch (err: any) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err?.message || "Errore durante la rimozione.",
+        life: 4000,
+      });
+    }
+    setRemovingVolunteer(false);
   };
 
   const handleAddNote = async () => {
@@ -200,6 +266,23 @@ export default function RequestDetail() {
         life: 4000,
       });
     }
+  };
+
+  const handleSaveAddress = async () => {
+    if (!id) return;
+    setSavingAddress(true);
+    try {
+      const addr: ShippingAddress = { ...addressForm };
+      if (!addr.phone) delete addr.phone;
+      if (!addr.notes) delete addr.notes;
+      await updateDoc(doc(db, "deviceRequests", id), { shippingAddress: addr });
+      setRequest((prev: any) => ({ ...prev, shippingAddress: addr }));
+      toast.current?.show({ severity: "success", summary: "Salvato", detail: "Indirizzo aggiornato.", life: 3000 });
+      setShowAddressDialog(false);
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSavingAddress(false);
   };
 
   const goBack = () => {
@@ -262,8 +345,8 @@ export default function RequestDetail() {
                 <strong>Volontario associato:</strong>{" "}
                 {request.assignedVolunteerName
                   ? request.assignedVolunteerName
-                  : request.assignedVolunteer
-                    ? request.assignedVolunteer
+                  : request.assignedVolunteers?.length
+                    ? request.assignedVolunteers.join(", ")
                     : "-"}
                 <Button
                   label="Associa volontario"
@@ -341,6 +424,43 @@ export default function RequestDetail() {
         </div>
       </div>
 
+      {/* Indirizzo di spedizione */}
+      <div className="p-panel p-component" style={{ marginBottom: 30 }}>
+        <div className="p-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Indirizzo di spedizione</span>
+          <Button
+            label="Modifica"
+            icon="pi pi-pencil"
+            className="p-button-text"
+            onClick={() => {
+              const addr = request.shippingAddress;
+              setAddressForm(addr ? { ...{ phone: "", notes: "", ...addr } } : { fullName: "", street: "", city: "", province: "", postalCode: "", country: "IT", phone: "", notes: "" });
+              setShowAddressDialog(true);
+            }}
+          />
+        </div>
+        <div className="p-panel-content">
+          {request.shippingAddress?.street ? (
+            <div style={{ display: "flex", gap: 40 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ marginBottom: 8 }}><strong>Nominativo:</strong> {request.shippingAddress.fullName || "-"}</div>
+                <div style={{ marginBottom: 8 }}><strong>Via:</strong> {request.shippingAddress.street}</div>
+                <div style={{ marginBottom: 8 }}><strong>CAP:</strong> {request.shippingAddress.postalCode}</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ marginBottom: 8 }}><strong>Città:</strong> {request.shippingAddress.city}</div>
+                <div style={{ marginBottom: 8 }}><strong>Provincia:</strong> {request.shippingAddress.province}</div>
+                <div style={{ marginBottom: 8 }}><strong>Paese:</strong> {request.shippingAddress.country}</div>
+                {request.shippingAddress.phone && <div style={{ marginBottom: 8 }}><strong>Telefono:</strong> {request.shippingAddress.phone}</div>}
+                {request.shippingAddress.notes && <div style={{ marginBottom: 8 }}><strong>Note:</strong> {request.shippingAddress.notes}</div>}
+              </div>
+            </div>
+          ) : (
+            <div style={{ color: "#888" }}>Nessun indirizzo di spedizione inserito.</div>
+          )}
+        </div>
+      </div>
+
       {/* Ultimo stato come panel con bottone e dialog */}
       <Panel
         header={
@@ -377,7 +497,52 @@ export default function RequestDetail() {
         )}
       </Panel>
 
-      {/* Dialog modale per cambio stato */}
+      {/* Dialog indirizzo di spedizione */}
+      <Dialog
+        header="Indirizzo di spedizione"
+        visible={showAddressDialog}
+        style={{ width: "560px" }}
+        modal
+        onHide={() => setShowAddressDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button label="Annulla" className="p-button-text" onClick={() => setShowAddressDialog(false)} disabled={savingAddress} />
+            <Button label="Salva" icon="pi pi-check" onClick={handleSaveAddress} loading={savingAddress} />
+          </div>
+        }
+      >
+        {([
+          { label: "Nominativo", field: "fullName" as keyof ShippingAddress },
+          { label: "Via / Indirizzo", field: "street" as keyof ShippingAddress },
+          { label: "Città", field: "city" as keyof ShippingAddress },
+          { label: "CAP", field: "postalCode" as keyof ShippingAddress },
+          { label: "Paese", field: "country" as keyof ShippingAddress },
+          { label: "Telefono", field: "phone" as keyof ShippingAddress },
+          { label: "Note", field: "notes" as keyof ShippingAddress },
+        ] as { label: string; field: keyof ShippingAddress }[]).map(({ label, field }) => (
+          <div key={field} style={{ marginBottom: 12 }}>
+            <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>{label}</label>
+            <InputText
+              value={(addressForm[field] as string) ?? ""}
+              onChange={(e) => setAddressForm((f) => ({ ...f, [field]: e.target.value }))}
+              style={{ width: "100%" }}
+            />
+          </div>
+        ))}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Provincia</label>
+          <Dropdown
+            value={addressForm.province}
+            options={provinceList}
+            onChange={(e) => setAddressForm((f) => ({ ...f, province: e.value }))}
+            placeholder="Seleziona provincia"
+            style={{ width: "100%" }}
+            filter
+          />
+        </div>
+      </Dialog>
+
+      {/* Dialog per cambio stato */}
       <Dialog
         header="Cambia stato richiesta"
         visible={showChangeStatusDialog}
@@ -416,34 +581,77 @@ export default function RequestDetail() {
 
       {/* Dialog per associare volontario */}
       <Dialog
-        header="Associa volontario"
+        header="Gestisci volontari associati"
         visible={showAssignVolunteerDialog}
-        style={{ width: "400px" }}
+        style={{ width: "480px" }}
         modal
         onHide={() => setShowAssignVolunteerDialog(false)}
       >
-        <div style={{ marginBottom: 15 }}>
-          <Dropdown
-            value={selectedVolunteer}
-            options={volunteers}
-            optionLabel="fullName"
-            itemTemplate={(option) =>
-              option ? (
-                <span>
-                  {option.firstName} {option.lastName}
-                </span>
-              ) : null
-            }
-            onChange={(e) => setSelectedVolunteer(e.value)}
-            placeholder="Seleziona volontario"
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>
+            Volontari associati
+          </label>
+          <ListBox
+            multiple
+            value={selectedToRemove}
+            options={assignedVolunteersList}
+            optionLabel="label"
+            onChange={(e) => setSelectedToRemove(e.value ?? [])}
             style={{ width: "100%" }}
-            filter
-            showClear
+            listStyle={{ maxHeight: "180px" }}
+            emptyMessage="Nessun volontario associato"
           />
         </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <Button label="Annulla" className="p-button-text" onClick={() => setShowAssignVolunteerDialog(false)} />
-          <Button label="Conferma" onClick={handleAssignVolunteer} disabled={!selectedVolunteer} />
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <Button
+            label={showAddRow ? "Annulla aggiunta" : "Aggiungi"}
+            icon={showAddRow ? "pi pi-times" : "pi pi-plus"}
+            className="p-button-sm p-button-outlined"
+            onClick={() => { setShowAddRow(!showAddRow); setVolunteerToAdd(null); }}
+          />
+          <Button
+            label="Rimuovi selezionati"
+            icon="pi pi-trash"
+            className="p-button-sm p-button-outlined p-button-danger"
+            disabled={!selectedToRemove.length || removingVolunteer}
+            loading={removingVolunteer}
+            onClick={handleRemoveFromList}
+          />
+        </div>
+        {showAddRow && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <Dropdown
+              value={volunteerToAdd}
+              options={volunteers.filter((v) => !assignedVolunteersList.some((a) => a.id === v.id))}
+              optionLabel="firstName"
+              itemTemplate={(opt) =>
+                opt ? <span>{opt.firstName} {opt.lastName}</span> : null
+              }
+              valueTemplate={(opt) =>
+                opt ? <span>{opt.firstName} {opt.lastName}</span> : <span>Seleziona volontario</span>
+              }
+              onChange={(e) => setVolunteerToAdd(e.value)}
+              placeholder="Seleziona volontario"
+              style={{ flex: 1 }}
+              filter
+              showClear
+            />
+            <Button
+              label="Aggiungi"
+              icon="pi pi-check"
+              className="p-button-sm"
+              disabled={!volunteerToAdd || addingVolunteer}
+              loading={addingVolunteer}
+              onClick={handleAddVolunteerToList}
+            />
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <Button
+            label="Chiudi"
+            className="p-button-text"
+            onClick={() => setShowAssignVolunteerDialog(false)}
+          />
         </div>
       </Dialog>
 

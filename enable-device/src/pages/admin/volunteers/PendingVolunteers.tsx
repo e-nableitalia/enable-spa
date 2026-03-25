@@ -5,7 +5,8 @@ import { Button } from "primereact/button";
 import { Toolbar } from "primereact/toolbar";
 import { useState, useRef } from "react";
 import { Toast } from "primereact/toast";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../../../firebase";
 
 export default function PendingVolunteers({ volunteers }: { volunteers: any[] }) {
   const [selectedVolunteers, setSelectedVolunteers] = useState<any[]>([]);
@@ -36,7 +37,6 @@ export default function PendingVolunteers({ volunteers }: { volunteers: any[] })
   );
 
   const handleActivate = async () => {
-    const functions = getFunctions(undefined, "europe-west1");
     const activateVolunteersFn = httpsCallable(functions, "activateVolunteers");
     const ids = selectedVolunteers.map(v => v.id);
     try {

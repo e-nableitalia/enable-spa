@@ -6,13 +6,15 @@ import { httpsCallable } from "firebase/functions";
 import { TabView, TabPanel } from "primereact/tabview";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
-
+import { Dropdown } from "primereact/dropdown";
 import { MultiSelect } from "primereact/multiselect";
 import { Checkbox } from "primereact/checkbox";
 import { Button } from "primereact/button";
 import { Toast } from "primereact/toast";
 import { Message } from "primereact/message";
-import type { VolunteerPrivateProfile, VolunteerSkills, VolunteerPublicProfile } from "./Volunteer";
+import type { VolunteerPrivateProfile, VolunteerSkills, VolunteerPublicProfile } from "../../shared/types/volunteerData";
+import type { ShippingAddress } from "../../shared/types/shippingAddress";
+import provinceList from "../../helpers/province.json";
 
 type InterestAreaOption = {
   label: string;
@@ -49,6 +51,17 @@ const enableInterestAreasOptions: InterestAreaOption[] = [
 
 
 
+const emptyAddress: ShippingAddress = {
+  fullName: "",
+  street: "",
+  city: "",
+  province: "",
+  postalCode: "",
+  country: "IT",
+  phone: "",
+  notes: "",
+};
+
 export default function VolunteerProfile() {
   const [privateProfile, setPrivateProfile] = useState<VolunteerPrivateProfile | null>(null);
   const [skills, setSkills] = useState<VolunteerSkills | null>(null);
@@ -71,8 +84,6 @@ export default function VolunteerProfile() {
         city: "",
         telegramUsername: "",
         availability: "",
-        continuityType: "",
-        desiredInvolvementLevel: "",
         consentPrivacy: false,
       });
       setSkills(skillsSnap.exists() ? skillsSnap.data() as VolunteerSkills : {
@@ -97,6 +108,12 @@ export default function VolunteerProfile() {
 
   const handlePrivateChange = (field: keyof VolunteerPrivateProfile, value: any) => {
     setPrivateProfile(prev => prev ? { ...prev, [field]: value } : prev);
+  };
+  const handleAddressChange = (field: keyof ShippingAddress, value: string) => {
+    setPrivateProfile(prev => {
+      if (!prev) return prev;
+      return { ...prev, shippingAddress: { ...(prev.shippingAddress ?? emptyAddress), [field]: value } };
+    });
   };
   const handleSkillsChange = (field: keyof VolunteerSkills, value: any) => {
     setSkills(prev => prev ? { ...prev, [field]: value } : prev);
@@ -378,6 +395,67 @@ export default function VolunteerProfile() {
                   <span className="pi pi-external-link" />
                 </a>
               )}
+            </div>
+          </div>
+        </TabPanel>
+        <TabPanel header="Indirizzo di spedizione">
+          <div className="p-fluid">
+            <Message
+              severity="info"
+              text="Questo indirizzo viene usato come indirizzo di ritiro o consegna dei device o dei materiali nei progetti a cui partecipi. Tutti i campi sono facoltativi."
+              style={{ marginBottom: 24 }}
+            />
+            {([
+              { id: "addr-fullName", label: "Nome completo", field: "fullName" as keyof ShippingAddress, placeholder: "Mario Rossi" },
+              { id: "addr-street",   label: "Indirizzo",      field: "street"   as keyof ShippingAddress, placeholder: "Via Roma 1" },
+              { id: "addr-city",     label: "Città",          field: "city"     as keyof ShippingAddress, placeholder: "Roma" },
+              { id: "addr-postalCode", label: "CAP",          field: "postalCode" as keyof ShippingAddress, placeholder: "00100" },
+              { id: "addr-phone",    label: "Telefono corriere", field: "phone" as keyof ShippingAddress, placeholder: "+39 333 1234567" },
+            ] as { id: string; label: string; field: keyof ShippingAddress; placeholder: string }[]).map(({ id, label, field, placeholder }) => (
+              <div key={field} style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
+                <label htmlFor={id} style={{ width: 200, textAlign: "left", marginRight: 16 }}>{label}</label>
+                <InputText
+                  id={id}
+                  value={(privateProfile.shippingAddress?.[field] as string) ?? ""}
+                  onChange={e => handleAddressChange(field, e.target.value)}
+                  placeholder={placeholder}
+                  style={{ flex: 1 }}
+                />
+              </div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
+              <label htmlFor="addr-province" style={{ width: 200, textAlign: "left", marginRight: 16 }}>Provincia</label>
+              <Dropdown
+                id="addr-province"
+                value={privateProfile.shippingAddress?.province ?? ""}
+                options={provinceList.map((p: string) => ({ label: p, value: p }))}
+                onChange={e => handleAddressChange("province", e.value)}
+                placeholder="Seleziona provincia"
+                filter
+                showClear
+                style={{ flex: 1 }}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
+              <label htmlFor="addr-country" style={{ width: 200, textAlign: "left", marginRight: 16 }}>Paese</label>
+              <InputText
+                id="addr-country"
+                value={privateProfile.shippingAddress?.country ?? "IT"}
+                onChange={e => handleAddressChange("country", e.target.value)}
+                placeholder="IT"
+                style={{ flex: 1 }}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-start", marginBottom: 18 }}>
+              <label htmlFor="addr-notes" style={{ width: 200, textAlign: "left", marginRight: 16, paddingTop: 6 }}>Note per il corriere</label>
+              <InputTextarea
+                id="addr-notes"
+                value={privateProfile.shippingAddress?.notes ?? ""}
+                onChange={e => handleAddressChange("notes", e.target.value)}
+                rows={2}
+                style={{ flex: 1 }}
+                placeholder="Es: citofonare Rossi, al piano terra"
+              />
             </div>
           </div>
         </TabPanel>

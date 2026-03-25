@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   where,
@@ -12,7 +13,9 @@ import { auth, db, functions } from "../../firebase";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
+import { Checkbox } from "primereact/checkbox";
 import { Dialog } from "primereact/dialog";
+import { Dropdown } from "primereact/dropdown";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
 import { InputNumber } from "primereact/inputnumber";
@@ -20,6 +23,7 @@ import { Tag, type TagProps } from "primereact/tag";
 import { Toast } from "primereact/toast";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { ProgressSpinner } from "primereact/progressspinner";
+import type { ShippingAddress } from "../../shared/types/shippingAddress";
 
 type Status = "pending" | "approved" | "deleted";
 
@@ -73,6 +77,13 @@ const EMPTY_FORM: FormState = {
   weight: null,
 };
 
+interface KnownAddress {
+  label: string;
+  name: string;
+  addressText: string;
+  phone?: string;
+}
+
 const STATUS_SEVERITY: Record<Status, TagProps["severity"]> = {
   pending: "warning",
   approved: "success",
@@ -116,6 +127,65 @@ export default function ShipmentRequestsPage() {
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [senderFromList, setSenderFromList] = useState(false);
+  const [recipientFromList, setRecipientFromList] = useState(false);
+  const [selectedSenderAddress, setSelectedSenderAddress] = useState<KnownAddress | null>(null);
+  const [selectedRecipientAddress, setSelectedRecipientAddress] = useState<KnownAddress | null>(null);
+  const [knownAddresses, setKnownAddresses] = useState<KnownAddress[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const [viewRequest, setViewRequest] = useState<ShipmentRequest | null>(null);
+
+  const loadKnownAddresses = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setLoadingAddresses(true);
+    const result: KnownAddress[] = [];
+
+    // User's own shipping address from profile
+    const profileSnap = await getDoc(doc(db, "users", user.uid, "private", "profile"));
+    if (profileSnap.exists()) {
+      const profile = profileSnap.data();
+      const addr = profile.shippingAddress as ShippingAddress | undefined;
+      if (addr?.street) {
+        const fullName = addr.fullName || `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim();
+        result.push({
+          label: `Il mio indirizzo — ${fullName}, ${addr.street}, ${addr.postalCode} ${addr.city}`,
+          name: fullName,
+          addressText: `${addr.street}\n${addr.postalCode} ${addr.city} (${addr.province})\n${addr.country || "IT"}`,
+          phone: addr.phone,
+        });
+      }
+    }
+
+    // Shipping addresses from device requests assigned to this user
+    const q = query(
+      collection(db, "deviceRequests"),
+      where("assignedVolunteers", "array-contains", user.uid)
+    );
+    const reqSnap = await getDocs(q);
+    for (const d of reqSnap.docs) {
+      const data = d.data();
+      const addr = data.shippingAddress as ShippingAddress | undefined;
+      if (addr?.street) {
+        let beneficiaryName = addr.fullName || "";
+        const privSnap = await getDoc(doc(db, "deviceRequests", d.id, "private", "data"));
+        if (privSnap.exists()) {
+          const priv = privSnap.data();
+          const n = `${priv.firstName ?? ""} ${priv.lastName ?? ""}`.trim();
+          if (n) beneficiaryName = n;
+        }
+        result.push({
+          label: `Richiesta ${data.seqId || d.id.slice(0, 8)} — ${beneficiaryName}, ${addr.street}, ${addr.city}`,
+          name: beneficiaryName,
+          addressText: `${addr.street}\n${addr.postalCode} ${addr.city} (${addr.province})\n${addr.country || "IT"}`,
+          phone: addr.phone,
+        });
+      }
+    }
+
+    setKnownAddresses(result);
+    setLoadingAddresses(false);
+  };
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -263,6 +333,10 @@ export default function ShipmentRequestsPage() {
     setShowDialog(false);
     setForm(EMPTY_FORM);
     setErrors({});
+    setSenderFromList(false);
+    setRecipientFromList(false);
+    setSelectedSenderAddress(null);
+    setSelectedRecipientAddress(null);
   };
 
   // ---- Renderers ----
@@ -276,6 +350,14 @@ export default function ShipmentRequestsPage() {
 
   const actionsBody = (row: ShipmentRequest) => (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <Button
+        icon="pi pi-search"
+        size="small"
+        severity="secondary"
+        tooltip="Dettaglio"
+        tooltipOptions={{ position: "top" }}
+        onClick={() => setViewRequest(row)}
+      />
       {role === "admin" && row.status === "pending" && (
         <Button
           icon="pi pi-check"
@@ -375,14 +457,19 @@ export default function ShipmentRequestsPage() {
         }}
       >
         <h2 style={{ margin: 0 }}>Richieste di spedizione</h2>
-        {role === "volunteer" && (
+        {(role === "volunteer" || role === "admin") && (
           <Button
             label="Nuova richiesta"
             icon="pi pi-plus"
             onClick={() => {
               setForm(EMPTY_FORM);
               setErrors({});
+              setSenderFromList(false);
+              setRecipientFromList(false);
+              setSelectedSenderAddress(null);
+              setSelectedRecipientAddress(null);
               setShowDialog(true);
+              loadKnownAddresses();
             }}
           />
         )}
@@ -435,6 +522,63 @@ export default function ShipmentRequestsPage() {
         />
       </DataTable>
 
+      {/* ---- View Dialog ---- */}
+      <Dialog
+        header={`Richiesta di spedizione — ${viewRequest ? formatDate(viewRequest.createdAt) : ""}`}
+        visible={!!viewRequest}
+        style={{ width: "640px" }}
+        contentStyle={{ maxHeight: "75vh", overflowY: "auto" }}
+        onHide={() => setViewRequest(null)}
+        footer={
+          <Button
+            label="Chiudi"
+            icon="pi pi-times"
+            className="p-button-text"
+            onClick={() => setViewRequest(null)}
+          />
+        }
+      >
+        {viewRequest && (() => {
+          const r = viewRequest;
+          const row = (label: string, value: string | number | undefined | null) =>
+            value != null && value !== "" ? (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: "0.82em", color: "#888", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>{label}</div>
+                <div style={{ whiteSpace: "pre-wrap" }}>{String(value)}</div>
+              </div>
+            ) : null;
+          return (
+            <>
+              <div style={{ marginBottom: 12 }}>
+                <span style={{ fontWeight: 600, fontSize: "0.82em", color: "#888", textTransform: "uppercase", letterSpacing: "0.04em" }}>Stato&nbsp;</span>
+                <Tag value={STATUS_LABEL[r.status] ?? r.status} severity={STATUS_SEVERITY[r.status] ?? "secondary"} />
+              </div>
+              {row("Motivo", r.reason)}
+              <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Mittente</h4>
+              {row("Nome", r.senderName)}
+              {row("Indirizzo", r.senderAddress)}
+              {row("Note", r.senderNotes)}
+              <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Destinatario</h4>
+              {row("Nome", r.recipientName)}
+              {row("Indirizzo", r.recipientAddress)}
+              {row("Telefono", r.recipientPhone)}
+              {row("Note consegna", r.deliveryNotes)}
+              {(r.length != null || r.width != null || r.height != null || r.weight != null) && (
+                <>
+                  <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Dimensioni e peso</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0 16px" }}>
+                    {row("Lunghezza (cm)", r.length)}
+                    {row("Larghezza (cm)", r.width)}
+                    {row("Altezza (cm)", r.height)}
+                    {row("Peso (kg)", r.weight)}
+                  </div>
+                </>
+              )}
+            </>
+          );
+        })()}
+      </Dialog>
+
       {/* ---- Create Dialog ---- */}
       <Dialog
         header="Nuova richiesta di spedizione"
@@ -465,17 +609,85 @@ export default function ShipmentRequestsPage() {
 
         {/* Mittente */}
         <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Mittente</h4>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-          <div>{textField("Nome mittente", "senderName", true)}</div>
-          <div>{textField("Indirizzo mittente", "senderAddress", true)}</div>
+        {textField("Nome mittente", "senderName", true)}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <label style={{ fontWeight: 500 }}>Indirizzo mittente <span style={{ color: "red" }}>*</span></label>
+            <Checkbox
+              inputId="sender-fromlist"
+              checked={senderFromList}
+              onChange={(e) => { setSenderFromList(e.checked ?? false); if (!e.checked) setSelectedSenderAddress(null); }}
+            />
+            <label htmlFor="sender-fromlist" style={{ cursor: "pointer" }}>da lista</label>
+          </div>
+          {senderFromList ? (
+            <Dropdown
+              value={selectedSenderAddress}
+              options={knownAddresses}
+              optionLabel="label"
+              onChange={(e) => {
+                const addr: KnownAddress = e.value;
+                setSelectedSenderAddress(addr);
+                setForm((f) => ({ ...f, senderName: addr.name, senderAddress: addr.addressText }));
+              }}
+              placeholder={loadingAddresses ? "Caricamento..." : knownAddresses.length === 0 ? "Nessun indirizzo salvato" : "Seleziona indirizzo..."}
+              style={{ width: "100%" }}
+              filter
+              disabled={loadingAddresses}
+            />
+          ) : (
+            <InputTextarea
+              value={form.senderAddress}
+              onChange={(e) => setForm((f) => ({ ...f, senderAddress: e.target.value }))}
+              rows={3}
+              style={{ width: "100%" }}
+              className={errors.senderAddress ? "p-invalid" : ""}
+              placeholder={"Via Roma 1\n00100 Roma (RM)\nIT"}
+            />
+          )}
+          {errors.senderAddress && <small style={{ color: "red" }}>{errors.senderAddress}</small>}
         </div>
         {textField("Note mittente", "senderNotes", false, true)}
 
         {/* Destinatario */}
         <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Destinatario</h4>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-          <div>{textField("Nome destinatario", "recipientName", true)}</div>
-          <div>{textField("Indirizzo destinatario", "recipientAddress", true)}</div>
+        {textField("Nome destinatario", "recipientName", true)}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <label style={{ fontWeight: 500 }}>Indirizzo destinatario <span style={{ color: "red" }}>*</span></label>
+            <Checkbox
+              inputId="recipient-fromlist"
+              checked={recipientFromList}
+              onChange={(e) => { setRecipientFromList(e.checked ?? false); if (!e.checked) setSelectedRecipientAddress(null); }}
+            />
+            <label htmlFor="recipient-fromlist" style={{ cursor: "pointer" }}>da lista</label>
+          </div>
+          {recipientFromList ? (
+            <Dropdown
+              value={selectedRecipientAddress}
+              options={knownAddresses}
+              optionLabel="label"
+              onChange={(e) => {
+                const addr: KnownAddress = e.value;
+                setSelectedRecipientAddress(addr);
+                setForm((f) => ({ ...f, recipientName: addr.name, recipientAddress: addr.addressText, recipientPhone: addr.phone ?? f.recipientPhone }));
+              }}
+              placeholder={loadingAddresses ? "Caricamento..." : knownAddresses.length === 0 ? "Nessun indirizzo salvato" : "Seleziona indirizzo..."}
+              style={{ width: "100%" }}
+              filter
+              disabled={loadingAddresses}
+            />
+          ) : (
+            <InputTextarea
+              value={form.recipientAddress}
+              onChange={(e) => setForm((f) => ({ ...f, recipientAddress: e.target.value }))}
+              rows={3}
+              style={{ width: "100%" }}
+              className={errors.recipientAddress ? "p-invalid" : ""}
+              placeholder={"Via Roma 1\n00100 Roma (RM)\nIT"}
+            />
+          )}
+          {errors.recipientAddress && <small style={{ color: "red" }}>{errors.recipientAddress}</small>}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
           <div>{textField("Telefono destinatario", "recipientPhone")}</div>

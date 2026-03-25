@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { PanelMenu } from "primereact/panelmenu";
 import { Button } from "primereact/button";
@@ -42,6 +42,28 @@ export default function AdminLayout() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const navigate = useNavigate();
 
+  const loadVolunteers = useCallback(async () => {
+    setVolunteersLoading(true);
+    const snap = await getDocs(collection(db, "users"));
+    const usersData = await Promise.all(
+      snap.docs.map(async (docSnap) => {
+        const user = { id: docSnap.id, ...docSnap.data() };
+        const profileRef = doc(db, `users/${docSnap.id}/private/profile`);
+        const profileSnap = await getDoc(profileRef);
+        const profile = profileSnap.exists() ? profileSnap.data() : {};
+        return {
+          ...user,
+          ...profile,
+          profileUpdatedAt: profile.updatedAt?.toDate
+            ? profile.updatedAt.toDate()
+            : null
+        };
+      })
+    );
+    setVolunteers(usersData);
+    setVolunteersLoading(false);
+  }, []);
+
   useEffect(() => {
     let unsubRequests: (() => void) | null = null;
 
@@ -71,24 +93,7 @@ export default function AdminLayout() {
         });
 
         // Volunteers fetch
-        const snap = await getDocs(collection(db, "users"));
-        const usersData = await Promise.all(
-          snap.docs.map(async (docSnap) => {
-            const user = { id: docSnap.id, ...docSnap.data() };
-            const profileRef = doc(db, `users/${docSnap.id}/private/profile`);
-            const profileSnap = await getDoc(profileRef);
-            const profile = profileSnap.exists() ? profileSnap.data() : {};
-            return {
-              ...user,
-              ...profile,
-              profileUpdatedAt: profile.updatedAt?.toDate
-                ? profile.updatedAt.toDate()
-                : null
-            };
-          })
-        );
-        setVolunteers(usersData);
-        setVolunteersLoading(false);
+        await loadVolunteers();
       }
     });
 
@@ -376,7 +381,7 @@ export default function AdminLayout() {
             <Route path="requests/completed" element={<AdminCompleted requests={completedRequests} />} />
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
             <Route path="requests/maintenance" element={<AdminMaintenanceRequests />} />
-            <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} />} />
+            <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
             <Route path="volunteers/contacts" element={<ContactsList />} />
             <Route path="volunteers/maintenance" element={<VolunteerMaintenance />} />

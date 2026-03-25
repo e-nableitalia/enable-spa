@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { auth, functions } from "../../firebase";
-import { getFirestore, collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { auth, db, functions } from "../../firebase";
+import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import type { VolunteerPrinter } from "../../shared/types/volunteerData";
 import { Card } from "primereact/card";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
@@ -12,7 +13,7 @@ import { httpsCallable } from "firebase/functions";
 
 export default function MyPrinters() {
 
-  const [printers, setPrinters] = useState<any[]>([]);
+  const [printers, setPrinters] = useState<VolunteerPrinter[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [newPrinter, setNewPrinter] = useState({
@@ -32,10 +33,9 @@ export default function MyPrinters() {
   const fetchPrinters = async () => {
     const user = auth.currentUser;
     if (!user) return;
-    const db = getFirestore();
     const printersRef = collection(db, `users/${user.uid}/printers`);
     const snap = await getDocs(printersRef);
-    setPrinters(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    setPrinters(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VolunteerPrinter)));
     setLoading(false);
   };
 
@@ -46,7 +46,6 @@ export default function MyPrinters() {
   const handleDelete = async (printerId: string) => {
     const user = auth.currentUser;
     if (!user) return;
-    const db = getFirestore();
     await deleteDoc(doc(db, `users/${user.uid}/printers/${printerId}`));
     fetchPrinters();
   };

@@ -2,6 +2,10 @@
 // CORE USER
 // ========================================
 
+import type { ShippingAddress } from "./shippingAddress";
+
+export type { ShippingAddress };
+
 export type UserRole = "admin" | "volunteer";
 
 export interface UserCore {
@@ -16,9 +20,11 @@ export interface UserCore {
 // users/{uid}/private/profile
 // ========================================
 
-export type ContinuityType = "continuativo" | "spot";
+// Valori reali usati nell'UI (VolunteerAvailability) e su Firestore
+export type ContinuityType = "continuativa" | "spot" | "saltuaria";
 
-export type InvolvementLevel = "basso" | "medio" | "alto";
+// Valori reali usati nell'UI (VolunteerAvailability) e su Firestore
+export type InvolvementLevel = "bassa" | "progetti" | "coordinamento" | "non so";
 
 export interface VolunteerPrivateProfile {
   firstName: string;
@@ -28,16 +34,34 @@ export interface VolunteerPrivateProfile {
   city?: string;
   telegramUsername?: string;
 
-  mainInterest?: string;
-
   availability?: string;
   continuityType?: ContinuityType;
   desiredInvolvementLevel?: InvolvementLevel;
 
+  // campi futuri non ancora in UI
+  mainInterest?: string;
   howDidYouKnowEnable?: string;
   additionalNotes?: string;
 
   consentPrivacy: boolean;
+
+  // notifiche — campo UI non ancora salvato su Firestore
+  notificationPreferences?: {
+    email?: boolean;
+    telegram?: boolean;
+    whatsapp?: boolean;
+  };
+
+  /**
+   * Indirizzo di spedizione del volontario.
+   * Usato per spedire i dispositivi prodotti direttamente al volontario
+   * o per la logistica di ritiro/consegna.
+   *
+   * Deve rimanere sotto users/{uid}/private/profile (dati privati).
+   * Consistente con deviceRequestData: il campo analogo nella richiesta
+   * dispositivo descrive l'indirizzo del destinatario finale.
+   */
+  shippingAddress?: ShippingAddress;
 
   updatedAt?: any; // Firestore Timestamp
 }
@@ -48,10 +72,12 @@ export interface VolunteerPrivateProfile {
 // ========================================
 
 export interface VolunteerSkills {
-  currentSkills?: string[];
-  desiredSkills?: string[];
+  // usati nell'UI (VolunteerProfile) e salvati su Firestore
+  aboutMe?: string;
+  mainInterest?: string[];
   enableInterestAreas?: string[];
   contributionPreferences?: string;
+  desiredSkills?: string; // stringa singola (textarea), NON array
 
   updatedAt?: any;
 }
@@ -92,16 +118,11 @@ export interface VolunteerPublicProfile {
   showInVolunteerList: boolean;
 
   publicEmail?: string;
-
   bio?: string;
-  photoUrl?: string;
 
   facebook?: string;
   instagram?: string;
   linkedin?: string;
-
-  city?: string;
-  mainInterest?: string;
 
   updatedAt?: any;
 }

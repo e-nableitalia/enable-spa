@@ -5,11 +5,13 @@ import { Tag } from "primereact/tag";
 import { Calendar } from "primereact/calendar";
 import { Dropdown } from "primereact/dropdown";
 import { Toolbar } from "primereact/toolbar";
+import { InputText } from "primereact/inputtext";
+import { Tooltip } from "primereact/tooltip";
 import { useNavigate } from "react-router-dom";
 import { db, functions } from "../../firebase";
-import { doc, deleteDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Toast } from "primereact/toast";
 import { Dialog } from "primereact/dialog";
 import { MultiSelect } from "primereact/multiselect";
@@ -31,6 +33,34 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
   const [showBulkDialog, setShowBulkDialog] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [volunteerNames, setVolunteerNames] = useState<Record<string, string>>({});
+
+  // Resolve all unique volunteer UIDs appearing in the table to full names
+  useEffect(() => {
+    const allUids = [
+      ...new Set(
+        requests.flatMap((r) => (r.assignedVolunteers ?? []) as string[])
+      ),
+    ];
+    if (allUids.length === 0) return;
+    const missing = allUids.filter((uid) => !volunteerNames[uid]);
+    if (missing.length === 0) return;
+    Promise.all(
+      missing.map(async (uid) => {
+        const snap = await getDoc(doc(db, "users", uid, "private", "profile"));
+        if (snap.exists()) {
+          const d = snap.data();
+          const name = `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim();
+          return [uid, name || uid] as [string, string];
+        }
+        return [uid, uid] as [string, string];
+      })
+    ).then((entries) => {
+      setVolunteerNames((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    });
+    // volunteerNames intentionally omitted to avoid infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests]);
 
   const handleOpen = (id: string) => {
     navigate(`/admin/request/${id}`);
@@ -140,6 +170,10 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
     ...r,
     createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : null,
     updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : null,
+    // Campo derivato per il filtro: array di UID → nomi ricercabili
+    assignedVolunteersText: (r.assignedVolunteers ?? [] as string[])
+      .map((uid: string) => volunteerNames[uid] ?? uid)
+      .join(", "),
   }));
 
   const dateTemplate = (row: any, field: "createdAt" | "updatedAt") => {
@@ -168,6 +202,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
     amputationType: { value: null, matchMode: FilterMatchMode.CONTAINS },
     publicStatus: { value: null, matchMode: FilterMatchMode.EQUALS },
     province: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    assignedVolunteersText: { value: null, matchMode: FilterMatchMode.CONTAINS },
     createdAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
     updatedAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
   });
@@ -188,6 +223,59 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
       placeholder="Filtra stati"
       display="chip"
       style={{ minWidth: 180 }}
+    />
+  );
+
+  const MAX_VOLUNTEER_CHIPS = 2;
+
+  const assignedVolunteersTemplate = (row: any) => {
+    const volunteers: string[] = row.assignedVolunteers ?? [];
+    if (volunteers.length === 0) return <span style={{ color: "#aaa" }}>—</span>;
+
+    const visible = volunteers.slice(0, MAX_VOLUNTEER_CHIPS);
+    const hidden = volunteers.slice(MAX_VOLUNTEER_CHIPS);
+    const tooltipId = `vols-${row.id}`;
+    const hiddenNames = hidden.map((uid: string) => volunteerNames[uid] ?? uid);
+
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+        {visible.map((uid: string) => (
+          <Tag
+            key={uid}
+            value={volunteerNames[uid] ?? uid.slice(0, 8) + "…"}
+            severity="info"
+            title={uid}
+            style={{ fontSize: 11, cursor: "default" }}
+          />
+        ))}
+        {hidden.length > 0 && (
+          <>
+            <Tooltip target={`#${tooltipId}`} content={hiddenNames.join("\n")} position="top" />
+            <Tag
+              id={tooltipId}
+              value={`+${hidden.length}`}
+              severity="secondary"
+              style={{ fontSize: 11, cursor: "default" }}
+            />
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const assignedVolunteersFilterTemplate = (options: any) => (
+    <InputText
+      value={options.value ?? ""}
+      onChange={(e) => {
+        const val = e.target.value;
+        setFilters((prev) => ({
+          ...prev,
+          assignedVolunteersText: { value: val || null, matchMode: FilterMatchMode.CONTAINS },
+        }));
+        options.filterCallback(val, options.index);
+      }}
+      placeholder="Cerca nome…"
+      style={{ minWidth: 100, fontSize: 12 }}
     />
   );
 
@@ -362,6 +450,17 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           filterMatchMode={FilterMatchMode.IN}
         />
         <Column field="province" header="Provincia" filter sortable />
+        <Column
+          field="assignedVolunteersText"
+          header="Volontari assegnati"
+          body={assignedVolunteersTemplate}
+          filter
+          sortable
+          filterElement={assignedVolunteersFilterTemplate}
+          showFilterMenu={false}
+          filterMatchMode={FilterMatchMode.CONTAINS}
+          style={{ minWidth: 160 }}
+        />
         <Column
           field="createdAt"
           header="Creato il"

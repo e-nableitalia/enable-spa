@@ -22,7 +22,7 @@ type Request = {
   province?: string;
   publicStatus?: string;
   status?: string;
-  assignedVolunteer?: string;
+  assignedVolunteers?: string[];
   description?: string;
 };
 
@@ -35,7 +35,7 @@ type KanbanCard = {
   gender?: string;
   publicStatus?: string;
   status?: string;
-  assignedVolunteer?: string;
+  assignedVolunteers?: string;
 };
 
 type Board = {
@@ -110,8 +110,8 @@ async function buildBoard(requests: Request[]): Promise<Board> {
                 (r.province ? `Provincia: ${r.province}` : ""),
               publicStatus: r.publicStatus,
               status: r.status,
-              assignedVolunteer: r.assignedVolunteer
-                ? await getUserFullName(r.assignedVolunteer)
+              assignedVolunteers: r.assignedVolunteers?.length
+                ? (await Promise.all(r.assignedVolunteers.map(getUserFullName))).join(", ")
                 : "",
             }))
           )
@@ -289,7 +289,7 @@ export default function AdminDashboard({
                   {card.description}
                 </div>
 
-                {card.assignedVolunteer && (
+                {card.assignedVolunteers && (
                   <>
                     <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid #e5e7eb" }} />
                     <div
@@ -302,12 +302,12 @@ export default function AdminDashboard({
                       }}
                     >
                       <Avatar
-                        label={card.assignedVolunteer[0]}
+                        label={card.assignedVolunteers[0]}
                         shape="circle"
                         size="normal"
                         style={{ flexShrink: 0 }}
                       />
-                      <span style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>{card.assignedVolunteer}</span>
+                      <span style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>{card.assignedVolunteers}</span>
                     </div>
                   </>
                 )}

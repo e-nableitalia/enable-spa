@@ -41,7 +41,7 @@ export const changeStatus = onCall(
     if (role === "admin") {
       // Admin può fare qualsiasi transizione
     } else if (role === "volunteer") {
-      if (requestData?.assignedVolunteer !== uid) {
+      if (!requestData?.assignedVolunteers?.includes(uid)) {
         throw new HttpsError("permission-denied", "Not assigned volunteer");
       }
 
