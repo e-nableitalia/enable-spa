@@ -6,8 +6,27 @@ on:
       - main
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'enable-device/**'
+            backend:
+              - 'functions/backend/**'
+
   deploy:
     runs-on: ubuntu-latest
+    needs: detect-changes
 
     steps:
       - uses: actions/checkout@v3
@@ -16,20 +35,25 @@ jobs:
         with:
           node-version: 22
 
-      # frontend
-      - run: npm install
-        working-directory: enable-device
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
 
-      - run: npm run build
-        working-directory: enable-device
+      # 🔥 FRONTEND
+      - name: Deploy hosting
+        if: needs.detect-changes.outputs.frontend == 'true'
+        run: |
+          cd enable-device
+          npm install
+          npm run build
+          cd ..
+          firebase deploy --only hosting --token ${{ secrets.FIREBASE_TOKEN }}
 
-      # backend
-      - run: npm install
-        working-directory: functions/backend
-
-      - run: npm run build --if-present
-        working-directory: functions/backend
-
-      - run: npm install -g firebase-tools
-
-      - run: firebase deploy --only hosting,functions --token ${{ secrets.FIREBASE_TOKEN }}
+      # 🔥 BACKEND
+      - name: Deploy functions
+        if: needs.detect-changes.outputs.backend == 'true'
+        run: |
+          cd functions/backend
+          npm install
+          npm run build --if-present
+          cd ../..
+          firebase deploy --only functions --token ${{ secrets.FIREBASE_TOKEN }}
