@@ -4,6 +4,20 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      force_frontend:
+        description: "Force deploy frontend (hosting)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      force_backend:
+        description: "Force deploy backend (functions)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 
 jobs:
   detect-changes:
@@ -40,7 +54,7 @@ jobs:
 
       # 🔥 FRONTEND
       - name: Deploy hosting
-        if: needs.detect-changes.outputs.frontend == 'true'
+        if: needs.detect-changes.outputs.frontend == 'true' || github.event.inputs.force_frontend == 'true'
         run: |
           cd enable-device
           npm install
@@ -50,7 +64,7 @@ jobs:
 
       # 🔥 BACKEND
       - name: Deploy functions
-        if: needs.detect-changes.outputs.backend == 'true'
+        if: needs.detect-changes.outputs.backend == 'true' || github.event.inputs.force_backend == 'true'
         run: |
           cd functions/backend
           npm install
