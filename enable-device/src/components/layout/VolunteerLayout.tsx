@@ -20,7 +20,9 @@ import VolunteerProfile from "../../pages/volunteer/VolunteerProfile";
 import VolunteerAvailability from "../../pages/volunteer/VolunteerAvailability";
 import MyPrinters from "../../pages/volunteer/MyPrinters";
 import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
+import VolunteerRequestDetail from "../../pages/volunteer/VolunteerRequestDetail";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { version } from "../../../package.json";
 
 export default function VolunteerLayout() {
     const navigate = useNavigate();
@@ -235,7 +237,7 @@ export default function VolunteerLayout() {
                         <Dialog header="Informazioni sull'applicazione" visible={showInfo} style={{ width: "500px" }} onHide={() => setShowInfo(false)}>
                             <div>
                                 <h3>e-Nable Italia Volunteer</h3>
-                                <p>Versione: 1.0.0</p>
+                                <p>Versione: {version}</p>
                                 <p>Gestione richieste, profilo volontario e stampanti.</p>
                                 <p>Per supporto o segnalazioni: <a href="mailto:info@e-nableitalia.it">info@e-nableitalia.it</a></p>
                                 <p>© {new Date().getFullYear()} e-Nable Italia</p>
@@ -327,6 +329,7 @@ export default function VolunteerLayout() {
                     <Routes>
                         <Route index element={<VolunteerDashboard />} />
                         <Route path="my-requests" element={<MyRequests requests={requests} />} />
+                        <Route path="my-requests/:id" element={<VolunteerRequestDetail />} />
                         <Route path="production" element={<Production requests={productionRequests} />} />
                         <Route path="shipping" element={<Shipping requests={shippingRequests} />} />
                         <Route path="archive" element={<Archive />} />
@@ -339,7 +342,7 @@ export default function VolunteerLayout() {
                     <Dialog header="Informazioni sull'applicazione" visible={showInfo} style={{ width: "500px" }} onHide={() => setShowInfo(false)}>
                         <div>
                             <h3>e-Nable Italia Volunteer</h3>
-                            <p>Versione: 1.0.0</p>
+                            <p>Versione: {version}</p>
                             <p>Gestione richieste, profilo volontario e stampanti.</p>
                             <p>Per supporto o segnalazioni: <a href="mailto:info@e-nableitalia.it">info@e-nableitalia.it</a></p>
                             <p>© {new Date().getFullYear()} e-Nable Italia</p>
