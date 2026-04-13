@@ -31,6 +31,7 @@ import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
 import AdminEmailLogsPage from "../../pages/admin/AdminEmailLogsPage";
 import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
 import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
+import { version } from "../../../package.json";
 
 export default function AdminLayout() {
   const [user, setUser] = useState<any | null>(null);
@@ -432,12 +433,12 @@ useEffect(() => {
         onHide={() => setShowInfo(false)}
       >
         <h3>e-Nable Italia Admin</h3>
-        <p>Versione: 1.0.0</p>
+        <p>Versione: {version}</p>
         <p>Gestione richieste dispositivi, volontari e statistiche.</p>
         <p>
           Supporto:{" "}
           <a href="mailto:info@e-nableitalia.it">
-            info@e-nableitalia.it
+        info@e-nableitalia.it
           </a>
         </p>
         <p>© {new Date().getFullYear()} e-Nable Italia</p>
