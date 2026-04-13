@@ -64,56 +64,71 @@ export default function AdminLayout() {
     setVolunteersLoading(false);
   }, []);
 
-  useEffect(() => {
-    let unsubRequests: (() => void) | null = null;
+useEffect(() => {
+  let unsubRequests: (() => void) | null = null;
 
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        navigate("/login", { replace: true });
-      } else {
-        setUser(u);
+  const unsubAuth = onAuthStateChanged(auth, async (u) => {
+    if (!u) {
+      navigate("/login", { replace: true });
+      return;
+    }
 
-        // Requests listener – enriched with private sub-data and publicDeviceRequests fields
-        const q = query(
-          collection(db, "deviceRequests"),
-          orderBy("createdAt", "desc")
-        );
-        unsubRequests = onSnapshot(q, async (snapshot) => {
-          const data = await Promise.all(
-            snapshot.docs.map(async (docSnap) => {
-              const baseData = { id: docSnap.id, ...docSnap.data() };
-              const privateRef = doc(db, `deviceRequests/${docSnap.id}/private/data`);
-              const privateSnap = await getDoc(privateRef);
-              const privateData = privateSnap.exists() ? privateSnap.data() : {};
-              // Merge public fields: deviceType (fallback) and publicStatus
-              const publicRef = doc(db, `publicDeviceRequests/${docSnap.id}`);
-              const publicSnap = await getDoc(publicRef);
-              const publicData = publicSnap.exists() ? publicSnap.data() : {};
-              return {
-                ...baseData,
-                ...privateData,
-                // Keep deviceType from private if present, otherwise use public's devicetype
-                deviceType: publicData.devicetype ?? undefined,
-                // Always surface publicStatus from the public collection as a separate field
-                publicStatus2: publicData.publicStatus ?? undefined,
-                sequenceNumber: publicData.requestNumber ?? undefined,
-              };
-            })
-          );
-          setRequests(data);
-          setLoading(false);
-        });
+    // 1. Read user role from Firestore
+    const userDoc = await getDoc(doc(db, "users", u.uid));
+    const userData = userDoc.data();
+    const userRole = userData?.role as string | undefined;
 
-        // Volunteers fetch
-        await loadVolunteers();
-      }
+    if (userRole !== "admin") {
+      // 2. Non‑admin: redirect to home and stop loading
+      setUser(u);
+      setLoading(false);
+      navigate("/home", { replace: true });
+      return;
+    }
+
+    // 3. Admin only from here on
+    setUser(u);
+
+    // Requests listener – enriched with private sub-data and publicDeviceRequests fields
+    const q = query(
+      collection(db, "deviceRequests"),
+      orderBy("createdAt", "desc")
+    );
+    unsubRequests = onSnapshot(q, async (snapshot) => {
+      const data = await Promise.all(
+        snapshot.docs.map(async (docSnap) => {
+          const baseData = { id: docSnap.id, ...docSnap.data() };
+          const privateRef = doc(db, `deviceRequests/${docSnap.id}/private/data`);
+          const privateSnap = await getDoc(privateRef);
+          const privateData = privateSnap.exists() ? privateSnap.data() : {};
+          // Merge public fields: deviceType (fallback) and publicStatus
+          const publicRef = doc(db, `publicDeviceRequests/${docSnap.id}`);
+          const publicSnap = await getDoc(publicRef);
+          const publicData = publicSnap.exists() ? publicSnap.data() : {};
+          return {
+            ...baseData,
+            ...privateData,
+            // Keep deviceType from private if present, otherwise use public's devicetype
+            deviceType: publicData.devicetype ?? undefined,
+            // Always surface publicStatus from the public collection as a separate field
+            publicStatus2: publicData.publicStatus ?? undefined,
+            sequenceNumber: publicData.requestNumber ?? undefined,
+          };
+        })
+      );
+      setRequests(data);
+      setLoading(false);
     });
 
-    return () => {
-      unsubAuth();
-      if (unsubRequests) unsubRequests();
-    };
-  }, [navigate]);
+    // Volunteers fetch
+    await loadVolunteers();
+  });
+
+  return () => {
+    unsubAuth();
+    if (unsubRequests) unsubRequests();
+  };
+}, [navigate]);
 
   const handleLogout = async () => {
     await signOut(auth);
