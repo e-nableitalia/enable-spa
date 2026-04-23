@@ -87,24 +87,28 @@ export function mapInternalStatusToPublic(status: string): string {
 }
 
 export const REQUEST_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
-  "inviata": "info",
-  "famiglia contattata": "info",
-  "definizione richiesta": "info",
+  // da gestire → warning
+  "inviata": "warning",
+  "famiglia contattata": "warning",
+  "definizione richiesta": "warning",
   "valutazione fattibilità": "warning",
-  "followup famiglia ko": "danger",
-  "followup famiglia troppo piccolo": "warning",
   "attesa volontario": "warning",
-  "scelta device e dimensionamento": "info",
-  "personalizzazione": "info",
-  "attesa materiali": "warning",
-  "fabbricazione": "info",
-  "fitting": "info",
-  "pronta per spedizione": "success",
-  "spedita": "success",
+  // fabbricazione in corso → secondary
+  "scelta device e dimensionamento": "secondary",
+  "personalizzazione": "secondary",
+  "attesa materiali": "secondary",
+  "fabbricazione": "secondary",
+  "fitting": "secondary",
+  "pronta per spedizione": "secondary",
+  "spedita": "secondary",
   "followup famiglia": "secondary",
+  // completati → success
   "completata": "success",
+  // annullate / non completabili → danger
+  "followup famiglia ko": "danger",
+  "followup famiglia troppo piccolo": "danger",
   "annullata": "danger",
-  "standby": "danger"
+  "standby": "danger",
 };
 
 export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {

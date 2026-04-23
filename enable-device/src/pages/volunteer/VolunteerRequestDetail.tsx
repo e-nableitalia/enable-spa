@@ -53,6 +53,17 @@ export default function VolunteerRequestDetail() {
     const privateSnap = await getDoc(doc(db, "deviceRequests", id, "private", "data"));
     setPrivateData(privateSnap.exists() ? privateSnap.data() : null);
 
+    // Load public data (contains devicetype and publicStatus)
+    const publicSnap = await getDoc(doc(db, "publicDeviceRequests", id));
+    if (publicSnap.exists()) {
+      const publicData = publicSnap.data();
+      setRequest((prev: any) => ({
+        ...prev,
+        deviceType: publicData.devicetype ?? prev?.deviceType,
+        publicStatus: publicData.publicStatus ?? prev?.publicStatus,
+      }));
+    }
+
     const q = query(
       collection(db, "deviceRequests", id, "events"),
       orderBy("timestamp", "desc")

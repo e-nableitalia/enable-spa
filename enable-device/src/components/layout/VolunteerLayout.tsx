@@ -21,6 +21,8 @@ import VolunteerAvailability from "../../pages/volunteer/VolunteerAvailability";
 import MyPrinters from "../../pages/volunteer/MyPrinters";
 import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
 import VolunteerRequestDetail from "../../pages/volunteer/VolunteerRequestDetail";
+import ManageableRequestsPage from "../../pages/volunteer/ManageableRequestsPage";
+import ManageableRequestDetail from "../../pages/volunteer/ManageableRequestDetail";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { version } from "../../../package.json";
 
@@ -63,8 +65,28 @@ export default function VolunteerLayout() {
                     collection(db, "deviceRequests"),
                     where("assignedVolunteers", "array-contains", user.uid)
                 );
-                unsub = onSnapshot(q, (snapshot) => {
-                    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as { id: string; status?: string }));
+                unsub = onSnapshot(q, async (snapshot) => {
+                    const data = await Promise.all(
+                        snapshot.docs.map(async (docSnap) => {
+                            const base = { id: docSnap.id, ...docSnap.data() } as { id: string; status?: string; [key: string]: any };
+                            const [publicSnap, privateSnap] = await Promise.all([
+                                getDoc(doc(db, "publicDeviceRequests", docSnap.id)),
+                                getDoc(doc(db, "deviceRequests", docSnap.id, "private", "data")),
+                            ]);
+                            if (publicSnap.exists()) {
+                                const pub = publicSnap.data();
+                                base.province = pub.province ?? base.province;
+                                base.deviceType = pub.devicetype ?? base.deviceType;
+                                base.publicStatus = pub.publicStatus ?? base.publicStatus;
+                            }
+                            if (privateSnap.exists()) {
+                                const priv = privateSnap.data();
+                                base.firstName = priv.firstName ?? base.firstName;
+                                base.lastName = priv.lastName ?? base.lastName;
+                            }
+                            return base;
+                        })
+                    );
                     setRequests(data);
                     setShippingRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["fabbricazione in corso"].includes(r.status) && ["pronta per spedizione", "spedita"].includes(r.status)));
                     setProductionRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["fabbricazione in corso"].includes(r.status) && !["pronta per spedizione", "spedita"].includes(r.status)));
@@ -106,6 +128,11 @@ export default function VolunteerLayout() {
             label: "Dashboard",
             icon: "pi pi-home",
             command: () => navigate("/volunteer")
+        },
+        {
+            label: "Richieste da gestire",
+            icon: "pi pi-list",
+            command: () => navigate("/volunteer/manageable-requests")
         },
         {
             label: "Le mie richieste",
@@ -329,6 +356,8 @@ export default function VolunteerLayout() {
                     <Routes>
                         <Route index element={<VolunteerDashboard />} />
                         <Route path="my-requests" element={<MyRequests requests={requests} />} />
+                        <Route path="manageable-requests" element={<ManageableRequestsPage />} />
+                        <Route path="manageable-requests/:id" element={<ManageableRequestDetail />} />
                         <Route path="my-requests/:id" element={<VolunteerRequestDetail />} />
                         <Route path="production" element={<Production requests={productionRequests} />} />
                         <Route path="shipping" element={<Shipping requests={shippingRequests} />} />

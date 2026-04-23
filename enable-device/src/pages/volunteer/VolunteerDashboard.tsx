@@ -452,113 +452,119 @@ export default function VolunteerDashboard() {
         </Panel>
       )}
 
-      {myPrivateRequests.length !== 0 && (
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 32 }}>
-
-            <Card title="Riepilogo delle mie richieste private per stato" style={{ flex: "1 1 350px", minWidth: 300 }}>
-            <div style={{ marginBottom: 16, fontWeight: 500, fontSize: 18 }}>
-              Totale richieste: {myPrivateRequests.length}
-            </div>
-            <Chart type="pie" data={privateChartData} style={{ maxWidth: 400 }} />
-            </Card>
-          <Card title="Le mie richieste" style={{ flex: "2 1 500px", minWidth: 350 }}>
-            <DataTable
-              value={myPrivateRequests}
-              paginator
-              rows={10}
-              filterDisplay="row"
-              paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
-              currentPageReportTemplate="{first}-{last} di {totalRecords} richieste"
-            >
-              <Column field="requestNumber" header="Seq" sortable />
-              <Column field="firstName" header="Nome" sortable />
-              <Column field="lastName" header="Cognome" sortable />
-              <Column field="age" header="Età" sortable />
-              <Column field="deviceType" header="Device" sortable />
-              <Column field="province" header="Provincia" sortable />
-              <Column
-                field="status"
-                header="Stato"
-                sortable
-                body={(row) => (
-                  <Tag value={row.status} severity={REQUEST_STATUS_SEVERITY[row.status] ?? "info"} />
-                )}
-              />
-              <Column
-                header="Creata"
-                sortable
-                sortField="createdAt"
-                body={(row: any) => {
-                  const date = row["createdAt"];
-                  if (!date) return "-";
-                  const d =
-                    typeof date === "string"
-                      ? new Date(date)
-                      : date.toDate
-                        ? date.toDate()
-                        : date;
-                  return d instanceof Date && !isNaN(d.getTime())
-                    ? d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
-                    : "-";
-                }}
-                dataType="date"
-              />
-            </DataTable>
-          </Card>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 32 }}>
-        <Card title="Riepilogo richieste per stato" style={{ flex: "1 1 350px", minWidth: 300 }}>
-          <div style={{ marginBottom: 16, fontWeight: 500, fontSize: 18 }}>
-            Totale richieste ricevute: {publicRequests.length}
-          </div>
-          <Chart type="pie" data={chartData} style={{ maxWidth: 400 }} />
-        </Card>
-
-        <Card title="Riepilogo richieste per tipo device" style={{ flex: "1 1 350px", minWidth: 300 }}>
-          <div style={{ marginBottom: 16, fontWeight: 500, fontSize: 18 }}>
-            Totale richieste gestite/in gestione: {activePublicRequests.length}
-          </div>
-          <Chart type="pie" data={deviceTypeChartData} style={{ maxWidth: 400 }} />
-        </Card>
-
-        <Card title={`Elenco richieste da gestire (${manageablePublicRequests.length})`} style={{ flex: "2 1 500px", minWidth: 350 }}>
-            <DataTable
-              value={manageablePublicRequests}
-              paginator
-              rows={10}
-              rowsPerPageOptions={[5, 10, 20, 50]}
-              paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
-              currentPageReportTemplate="{first}-{last} di {totalRecords} richieste"
-              style={{ marginTop: 8 }}
-              sortField="createdAt"
-              sortOrder={-1}
-            >
-              <Column field="requestNumber" header="Seq" sortable />
-              <Column field="ageRange" header="Fascia d'età" sortable />
-              <Column field="devicetype" header="Device" sortable />
-              <Column field="province" header="Provincia" sortable />
-              <Column field="publicStatus" header="Stato" sortable />
-              <Column
-              field="createdAt"
-              header="Data creazione"
-              sortable
-              body={(row) => {
-                if (!row.createdAt) return "-";
-                const date =
+      {/* 1. Tabella richieste da gestire - piena larghezza */}
+      <Card title={`Richieste da gestire (${manageablePublicRequests.length})`} style={{ width: "100%", marginBottom: 32 }}>
+        <DataTable
+          value={manageablePublicRequests}
+          paginator
+          rows={10}
+          rowsPerPageOptions={[10, 20, 50, manageablePublicRequests.length]}
+          paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
+          currentPageReportTemplate="Mostrati {first}-{last} di {totalRecords}"
+          style={{ marginTop: 8 }}
+          sortField="createdAt"
+          sortOrder={1}
+        >
+          <Column field="requestNumber" header="Seq" sortable style={{ width: "6rem" }} />
+          <Column field="ageRange" header="Fascia d'età" sortable />
+          <Column field="devicetype" header="Device" sortable />
+          <Column field="province" header="Provincia" sortable style={{ width: "8rem" }} />
+          <Column field="publicStatus" header="Stato" sortable />
+          <Column
+            field="createdAt"
+            header="Data creazione"
+            sortable
+            body={(row) => {
+              if (!row.createdAt) return "-";
+              const date =
                 typeof row.createdAt === "string"
                   ? new Date(row.createdAt)
                   : row.createdAt.toDate
                   ? row.createdAt.toDate()
                   : row.createdAt;
-                return date instanceof Date && !isNaN(date.getTime())
+              return date instanceof Date && !isNaN(date.getTime())
                 ? date.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
                 : "-";
+            }}
+          />
+        </DataTable>
+      </Card>
+
+      {/* 2. Tabella le mie richieste - piena larghezza */}
+      {myPrivateRequests.length !== 0 && (
+        <Card title={`Le mie richieste (${myPrivateRequests.length})`} style={{ width: "100%", marginBottom: 32 }}>
+          <DataTable
+            value={myPrivateRequests}
+            paginator
+            rows={10}
+            rowsPerPageOptions={[10, 20, 50, myPrivateRequests.length]}
+            paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
+            currentPageReportTemplate="Mostrati {first}-{last} di {totalRecords}"
+            style={{ marginTop: 8 }}
+            sortField="createdAt"
+            sortOrder={-1}
+          >
+            <Column field="requestNumber" header="Seq" sortable style={{ width: "6rem" }} />
+            <Column field="firstName" header="Nome" sortable />
+            <Column field="lastName" header="Cognome" sortable />
+            <Column field="age" header="Età" sortable style={{ width: "6rem" }} />
+            <Column field="deviceType" header="Device" sortable />
+            <Column field="province" header="Provincia" sortable style={{ width: "8rem" }} />
+            <Column
+              field="status"
+              header="Stato"
+              sortable
+              body={(row) => (
+                <Tag value={row.status} severity={REQUEST_STATUS_SEVERITY[row.status] ?? "info"} />
+              )}
+            />
+            <Column
+              header="Creata"
+              sortable
+              sortField="createdAt"
+              body={(row: any) => {
+                const date = row["createdAt"];
+                if (!date) return "-";
+                const d =
+                  typeof date === "string"
+                    ? new Date(date)
+                    : date.toDate
+                      ? date.toDate()
+                      : date;
+                return d instanceof Date && !isNaN(d.getTime())
+                  ? d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
+                  : "-";
               }}
-              />
-            </DataTable>
+              dataType="date"
+            />
+          </DataTable>
         </Card>
+      )}
+
+      {/* 3. Riga con i tre grafici */}
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 32 }}>
+        <Card title="Richieste per stato" style={{ flex: "1 1 280px", minWidth: 250 }}>
+          <div style={{ marginBottom: 8, fontWeight: 500 }}>
+            Totale: {publicRequests.length}
+          </div>
+          <Chart type="pie" data={chartData} style={{ maxWidth: 320 }} />
+        </Card>
+
+        <Card title="Richieste per tipo device" style={{ flex: "1 1 280px", minWidth: 250 }}>
+          <div style={{ marginBottom: 8, fontWeight: 500 }}>
+            Gestite/in gestione: {activePublicRequests.length}
+          </div>
+          <Chart type="pie" data={deviceTypeChartData} style={{ maxWidth: 320 }} />
+        </Card>
+
+        {myPrivateRequests.length !== 0 && (
+          <Card title="Mie richieste per stato" style={{ flex: "1 1 280px", minWidth: 250 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>
+              Totale: {myPrivateRequests.length}
+            </div>
+            <Chart type="pie" data={privateChartData} style={{ maxWidth: 320 }} />
+          </Card>
+        )}
       </div>
     </div>
   );
