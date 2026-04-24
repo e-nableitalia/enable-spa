@@ -100,21 +100,30 @@ export const changeStatus = onCall(
     // --- Notifiche opzionali ---
     if (notifica) {
       const statoChanged = currentStatus !== newStatus;
+
+      // Recupera requestNumber da publicDeviceRequests
+      let requestLabel = requestId;
+      try {
+        const pubSnap = await db.collection("publicDeviceRequests").doc(requestId).get();
+        const rn = pubSnap.data()?.requestNumber;
+        if (rn) requestLabel = `#${rn}`;
+      } catch { /* fallback a requestId */ }
+
       const subject = statoChanged
-        ? `[e-Nable] Richiesta ${requestId}: stato → ${newStatus}`
-        : `[e-Nable] Richiesta ${requestId}: aggiornamento (stato: ${currentStatus})`;
+        ? `[e-Nable] Richiesta ${requestLabel}: stato → ${newStatus}`
+        : `[e-Nable] Richiesta ${requestLabel}: aggiornamento (stato: ${currentStatus})`;
       const html = `
         ${statoChanged
-          ? `<p>La richiesta <strong>${requestId}</strong> è passata da <em>${currentStatus}</em> a <strong>${newStatus}</strong>.</p>`
-          : `<p>La richiesta <strong>${requestId}</strong> è in stato <strong>${currentStatus}</strong>.</p>`
+          ? `<p>La richiesta <strong>${requestLabel}</strong> è passata da <em>${currentStatus}</em> a <strong>${newStatus}</strong>.</p>`
+          : `<p>La richiesta <strong>${requestLabel}</strong> è in stato <strong>${currentStatus}</strong>.</p>`
         }
         ${note ? `<p>Nota: ${note}</p>` : ""}
       `;
       const tgMessage = note
-        ? `Aggiornamento richiesta: ${note}${statoChanged ? ` (${currentStatus} → ${newStatus})` : ` (stato: ${currentStatus})`}`
+        ? `Aggiornamento richiesta ${requestLabel}: ${note}${statoChanged ? ` (${currentStatus} → ${newStatus})` : ` (stato: ${currentStatus})`}`
         : statoChanged
-          ? `Aggiornamento richiesta: ${currentStatus} → ${newStatus}`
-          : `Aggiornamento richiesta: stato corrente ${currentStatus}`;
+          ? `Aggiornamento richiesta ${requestLabel}: ${currentStatus} → ${newStatus}`
+          : `Aggiornamento richiesta ${requestLabel}: stato corrente ${currentStatus}`;
 
       const jobs: Promise<unknown>[] = [];
 
