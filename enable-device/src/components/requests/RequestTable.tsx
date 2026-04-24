@@ -95,7 +95,7 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
   const [sortField, setSortField] = useState<string>(loadSort().field);
   const [sortOrder, setSortOrder] = useState<1 | -1>(loadSort().order);
 
-  const handleSort = (e: { sortField: string; sortOrder: 1 | -1 | null | undefined }) => {
+  const handleSort = (e: { sortField: string; sortOrder: 0 | 1 | -1 | null | undefined }) => {
     const field = e.sortField ?? "updatedAt";
     const order = (e.sortOrder ?? -1) as 1 | -1;
     setSortField(field);

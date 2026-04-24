@@ -181,20 +181,6 @@ export default function ManageableRequestsPage() {
     sessionStorage.setItem(SORT_KEY, JSON.stringify({ field: e.sortField, order: e.sortOrder }));
   }
 
-  const makeMultiSelectFilter = (field: string, opts: { label: string; value: string }[], placeholder: string) => (
-    options: any
-  ) => (
-    <MultiSelect
-      value={options.value}
-      options={opts}
-      onChange={(e) => options.filterCallback(e.value)}
-      placeholder={placeholder}
-      maxSelectedLabels={1}
-      style={{ minWidth: "10rem", maxWidth: "14rem" }}
-      showClear
-    />
-  );
-
   if (loading) {
     return (
       <div style={{ textAlign: "center", marginTop: 80 }}>

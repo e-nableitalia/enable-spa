@@ -2,7 +2,7 @@ import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {getFirestore, FieldValue} from "firebase-admin/firestore";
 import {mapToPublicStatus} from "../utils/mapToPublicStatus";
 import {requireVolunteerConsents} from "../utils/consents";
-import {sendEmailToDeviceAdmins, sendEmailToVolunteersAdmins} from "../utils/email";
+import {sendEmailToDeviceAdmins} from "../utils/email";
 import {sendTelegramMessage} from "../utils/telegram";
 
 interface NotificaOptions {

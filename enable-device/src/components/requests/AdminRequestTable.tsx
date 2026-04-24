@@ -284,7 +284,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
   const [sortField, setSortField] = useState<string>(loadSort().field);
   const [sortOrder, setSortOrder] = useState<1 | -1>(loadSort().order);
 
-  const handleSort = (e: { sortField: string; sortOrder: 1 | -1 | null | undefined }) => {
+  const handleSort = (e: { sortField: string; sortOrder: 0 | 1 | -1 | null | undefined }) => {
     const field = e.sortField ?? "updatedAt";
     const order = (e.sortOrder ?? -1) as 1 | -1;
     setSortField(field);
@@ -349,22 +349,6 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
       </div>
     );
   };
-
-  const assignedVolunteersFilterTemplate = (options: any) => (
-    <InputText
-      value={options.value ?? ""}
-      onChange={(e) => {
-        const val = e.target.value;
-        setFilters((prev) => ({
-          ...prev,
-          assignedVolunteersText: { value: val || null, matchMode: FilterMatchMode.CONTAINS },
-        }));
-        options.filterCallback(val, options.index);
-      }}
-      placeholder="Cerca nome…"
-      style={{ minWidth: 100, fontSize: 12 }}
-    />
-  );
 
   const deviceTypeOptions = useMemo(() => {
     const unique = [...new Set(requests.map((r) => r.deviceType).filter(Boolean))] as string[];
