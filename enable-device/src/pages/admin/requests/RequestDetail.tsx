@@ -28,8 +28,14 @@ export default function RequestDetail() {
   const [privateData, setPrivateData] = useState<any>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [showChangeStatusDialog, setShowChangeStatusDialog] = useState(false);
+  const [notificaVolontari, setNotificaVolontari] = useState(false);
+  const [notificaAdmin, setNotificaAdmin] = useState(false);
+  const [notificaTelegram, setNotificaTelegram] = useState(false);
   const [showAssignVolunteerDialog, setShowAssignVolunteerDialog] = useState(false);
   const [showAddNoteDialog, setShowAddNoteDialog] = useState(false);
+  const [noteNotificaVolontari, setNoteNotificaVolontari] = useState(false);
+  const [noteNotificaAdmin, setNoteNotificaAdmin] = useState(false);
+  const [noteNotificaTelegram, setNoteNotificaTelegram] = useState(false);
   const [volunteers, setVolunteers] = useState<any[]>([]);
   const [noteText, setNoteText] = useState("");
   const [assignedVolunteersList, setAssignedVolunteersList] = useState<{ id: string; label: string }[]>([]);
@@ -85,6 +91,8 @@ export default function RequestDetail() {
   const [showAttentionDialog, setShowAttentionDialog] = useState(false);
   const [attentionNote, setAttentionNote] = useState("");
   const [savingAttention, setSavingAttention] = useState(false);
+  const [attentionNotificaVolontari, setAttentionNotificaVolontari] = useState(false);
+  const [attentionNotificaTelegram, setAttentionNotificaTelegram] = useState(false);
 
   const toast = useRef<any>(null);
 
@@ -241,10 +249,14 @@ export default function RequestDetail() {
   const handleChangeStatus = async () => {
     const fn = httpsCallable(functions, "changeStatus");
     const effectiveNote = note.trim() || `cambio stato da "${request?.status}" a "${newStatus}"`;
+    const notifica = (notificaAdmin || notificaVolontari || notificaTelegram)
+      ? { admin: notificaAdmin, volunteers: notificaVolontari, telegram: notificaTelegram }
+      : undefined;
     await fn({
       requestId: id,
       newStatus,
-      note: effectiveNote
+      note: effectiveNote,
+      ...(notifica ? { notifica } : {}),
     });
     toast.current?.show({
       severity: "success",
@@ -324,12 +336,17 @@ export default function RequestDetail() {
       const lastEvent = events[0];
       const previousStatus = lastEvent?.status || request.status || "sconosciuto";
 
+      const notifica = (noteNotificaAdmin || noteNotificaVolontari || noteNotificaTelegram)
+        ? { admin: noteNotificaAdmin, volunteers: noteNotificaVolontari, telegram: noteNotificaTelegram }
+        : undefined;
+
       // Aggiungi evento come cambiamento di stato con lo stesso stato precedente e nota
       const fn = httpsCallable(functions, "changeStatus");
       await fn({
         requestId: id,
         newStatus: previousStatus,
-        note: noteText.trim()
+        note: noteText.trim(),
+        ...(notifica ? { notifica } : {}),
       });
       toast.current?.show({
         severity: "success",
@@ -339,6 +356,9 @@ export default function RequestDetail() {
       });
       setShowAddNoteDialog(false);
       setNoteText("");
+      setNoteNotificaVolontari(false);
+      setNoteNotificaAdmin(false);
+      setNoteNotificaTelegram(false);
       await loadData();
     } catch (error: any) {
       toast.current?.show({
@@ -467,11 +487,18 @@ export default function RequestDetail() {
     try {
       await updateDoc(doc(db, "deviceRequests", id), { requiresAttention: true });
       const fn = httpsCallable(functions, "changeStatus");
-      await fn({ requestId: id, newStatus: request?.status, note: `⚠️ Richiede attenzione: ${attentionNote.trim()}` });
+      await fn({
+        requestId: id,
+        newStatus: request?.status,
+        note: `⚠️ Richiede attenzione: ${attentionNote.trim()}`,
+        notifica: { admin: true, volunteers: attentionNotificaVolontari, telegram: attentionNotificaTelegram },
+      });
       setRequest((prev: any) => ({ ...prev, requiresAttention: true }));
       toast.current?.show({ severity: "warn", summary: "Flag impostato", detail: "La richiesta è ora segnalata come 'richiede attenzione'.", life: 3000 });
       setShowAttentionDialog(false);
       setAttentionNote("");
+      setAttentionNotificaVolontari(false);
+      setAttentionNotificaTelegram(false);
       await loadData();
     } catch (err: any) {
       toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
@@ -607,6 +634,23 @@ export default function RequestDetail() {
             style={{ width: "100%" }}
             autoFocus
           />
+          <div>
+            <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>Notifiche</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#6b7280" }}>
+                <input type="checkbox" checked disabled />
+                Admin (devices@e-nableitalia.it) — sempre attivo
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={attentionNotificaVolontari} onChange={(e) => setAttentionNotificaVolontari(e.target.checked)} />
+                Volontari assegnati
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={attentionNotificaTelegram} onChange={(e) => setAttentionNotificaTelegram(e.target.checked)} />
+                Gruppo Telegram
+              </label>
+            </div>
+          </div>
         </div>
       </Dialog>
       <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />
@@ -1214,6 +1258,23 @@ export default function RequestDetail() {
             style={{ width: "100%" }}
           />
         </div>
+        <div style={{ marginBottom: 15 }}>
+          <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>Notifiche</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={notificaVolontari} onChange={(e) => setNotificaVolontari(e.target.checked)} />
+              Volontari assegnati
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={notificaAdmin} onChange={(e) => setNotificaAdmin(e.target.checked)} />
+              Admin (devices@e-nableitalia.it)
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={notificaTelegram} onChange={(e) => setNotificaTelegram(e.target.checked)} />
+              Gruppo Telegram
+            </label>
+          </div>
+        </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <Button label="Annulla" className="p-button-text" onClick={() => setShowChangeStatusDialog(false)} />
           <Button label="Conferma" onClick={handleChangeStatus} />
@@ -1315,6 +1376,23 @@ export default function RequestDetail() {
             rows={3}
             style={{ width: "100%" }}
           />
+        </div>
+        <div style={{ marginBottom: 15 }}>
+          <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>Notifiche</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={noteNotificaVolontari} onChange={(e) => setNoteNotificaVolontari(e.target.checked)} />
+              Volontari assegnati
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={noteNotificaAdmin} onChange={(e) => setNoteNotificaAdmin(e.target.checked)} />
+              Admin (devices@e-nableitalia.it)
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={noteNotificaTelegram} onChange={(e) => setNoteNotificaTelegram(e.target.checked)} />
+              Gruppo Telegram
+            </label>
+          </div>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <Button label="Annulla" className="p-button-text" onClick={() => setShowAddNoteDialog(false)} />
