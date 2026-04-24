@@ -1,5 +1,6 @@
 export const REQUEST_STATUSES = [
   "inviata",
+  "validata",
   "famiglia contattata",
   "definizione richiesta",
   "valutazione fattibilità",
@@ -21,6 +22,7 @@ export const REQUEST_STATUSES = [
 
 export const REQUEST_STATUS_DESCRIPTIONS: { [key: string]: string } = {
   "inviata": "La richiesta è stata inserita dalla famiglia e validata via email.",
+  "validata": "La richiesta è stata validata dall'amministratore ed è ora visibile ai volontari.",
   "famiglia contattata": "Primo contatto effettuato per raccolta informazioni.",
   "definizione richiesta": "Fase collaborativa per chiarire esigenze, misure, obiettivi.",
   "valutazione fattibilità": "Verifica tecnica della possibilità di realizzazione.",
@@ -48,8 +50,15 @@ export const CLOSED_STATUSES = [
 ];
 
 export const PUBLIC_STATUS_GROUPS = {
+  /**
+   * "da validare" non è un publicStatus Firestore: è derivato da status==="inviata".
+   * Usato solo per la classificazione interna nell'AdminLayout.
+   */
+  "da validare": [
+    "inviata"
+  ],
   "da gestire": [
-    "inviata",
+    "validata",
     "famiglia contattata",
     "definizione richiesta",
     "valutazione fattibilità",
@@ -87,27 +96,34 @@ export function mapInternalStatusToPublic(status: string): string {
 }
 
 export const REQUEST_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
+  // da validare → info
   "inviata": "info",
-  "famiglia contattata": "info",
-  "definizione richiesta": "info",
+  // da gestire → warning
+  "validata": "warning",
+  "famiglia contattata": "warning",
+  "definizione richiesta": "warning",
   "valutazione fattibilità": "warning",
-  "followup famiglia ko": "danger",
-  "followup famiglia troppo piccolo": "warning",
   "attesa volontario": "warning",
-  "scelta device e dimensionamento": "info",
-  "personalizzazione": "info",
-  "attesa materiali": "warning",
-  "fabbricazione": "info",
-  "fitting": "info",
-  "pronta per spedizione": "success",
-  "spedita": "success",
+  // fabbricazione in corso → secondary
+  "scelta device e dimensionamento": "secondary",
+  "personalizzazione": "secondary",
+  "attesa materiali": "secondary",
+  "fabbricazione": "secondary",
+  "fitting": "secondary",
+  "pronta per spedizione": "secondary",
+  "spedita": "secondary",
   "followup famiglia": "secondary",
+  // completati → success
   "completata": "success",
+  // annullate / non completabili → danger
+  "followup famiglia ko": "danger",
+  "followup famiglia troppo piccolo": "danger",
   "annullata": "danger",
-  "standby": "danger"
+  "standby": "danger",
 };
 
 export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
+  "da validare": "info",
   "da gestire": "warning",
   "fabbricazione in corso": "secondary",
   "completati": "success",

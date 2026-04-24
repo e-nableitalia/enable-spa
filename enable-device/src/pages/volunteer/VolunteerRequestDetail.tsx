@@ -53,6 +53,17 @@ export default function VolunteerRequestDetail() {
     const privateSnap = await getDoc(doc(db, "deviceRequests", id, "private", "data"));
     setPrivateData(privateSnap.exists() ? privateSnap.data() : null);
 
+    // Load public data (contains devicetype and publicStatus)
+    const publicSnap = await getDoc(doc(db, "publicDeviceRequests", id));
+    if (publicSnap.exists()) {
+      const publicData = publicSnap.data();
+      setRequest((prev: any) => ({
+        ...prev,
+        deviceType: publicData.devicetype ?? prev?.deviceType,
+        publicStatus: publicData.publicStatus ?? prev?.publicStatus,
+      }));
+    }
+
     const q = query(
       collection(db, "deviceRequests", id, "events"),
       orderBy("timestamp", "desc")
@@ -143,6 +154,39 @@ export default function VolunteerRequestDetail() {
           </div>
         </div>
       </div>
+
+      {/* Informazioni pubbliche richiesta */}
+      {(request.recipient || request.relation || request.descriptionPublic || request.preferencesPublic) && (
+        <div className="p-panel p-component" style={{ marginBottom: 24 }}>
+          <div className="p-panel-header"><span>Informazioni pubbliche</span></div>
+          <div className="p-panel-content">
+            <div style={{ display: "flex", gap: 40, marginBottom: request.descriptionPublic || request.preferencesPublic ? 12 : 0 }}>
+              {request.recipient && (
+                <div style={{ flex: 1 }}>
+                  <div style={{ marginBottom: 10 }}><strong>Destinatario:</strong> {request.recipient}</div>
+                </div>
+              )}
+              {request.relation && (
+                <div style={{ flex: 1 }}>
+                  <div style={{ marginBottom: 10 }}><strong>Relazione:</strong> {request.relation}</div>
+                </div>
+              )}
+            </div>
+            {request.descriptionPublic && (
+              <div style={{ marginBottom: 10 }}>
+                <strong>Descrizione:</strong>
+                <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{request.descriptionPublic}</div>
+              </div>
+            )}
+            {request.preferencesPublic && (
+              <div style={{ marginBottom: 10 }}>
+                <strong>Preferenze:</strong>
+                <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{request.preferencesPublic}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Dati richiedente */}
       {privateData && (

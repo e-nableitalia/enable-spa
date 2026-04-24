@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { doc, getDoc, collection, query, orderBy, getDocs, updateDoc } from "firebase/firestore";
-import { db, functions } from "../../../firebase";
+import { doc, getDoc, collection, query, orderBy, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db, functions, auth } from "../../../firebase";
 import { httpsCallable } from "firebase/functions";
 import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
@@ -28,8 +28,14 @@ export default function RequestDetail() {
   const [privateData, setPrivateData] = useState<any>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [showChangeStatusDialog, setShowChangeStatusDialog] = useState(false);
+  const [notificaVolontari, setNotificaVolontari] = useState(false);
+  const [notificaAdmin, setNotificaAdmin] = useState(false);
+  const [notificaTelegram, setNotificaTelegram] = useState(false);
   const [showAssignVolunteerDialog, setShowAssignVolunteerDialog] = useState(false);
   const [showAddNoteDialog, setShowAddNoteDialog] = useState(false);
+  const [noteNotificaVolontari, setNoteNotificaVolontari] = useState(false);
+  const [noteNotificaAdmin, setNoteNotificaAdmin] = useState(false);
+  const [noteNotificaTelegram, setNoteNotificaTelegram] = useState(false);
   const [volunteers, setVolunteers] = useState<any[]>([]);
   const [noteText, setNoteText] = useState("");
   const [assignedVolunteersList, setAssignedVolunteersList] = useState<{ id: string; label: string }[]>([]);
@@ -40,6 +46,26 @@ export default function RequestDetail() {
   const [removingVolunteer, setRemovingVolunteer] = useState(false);
   const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [showChangeDeviceTypeDialog, setShowChangeDeviceTypeDialog] = useState(false);
+
+  // ── Validazione richiesta (status "inviata") ─────────────────────────────
+  const [showValidateDialog, setShowValidateDialog] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationForm, setValidationForm] = useState({
+    recipient: "",
+    relation: "",
+    descriptionPublic: "",
+    preferencesPublic: "",
+    // campi privati correggibili in fase di validazione
+    email: "",
+    firstName: "",
+    lastName: "",
+    amputationType: "",
+    // tipo device (su publicDeviceRequests)
+    deviceTypeVal: "",
+  });
+  // gestione "altro" per tipo device nel form di validazione
+  const [valIsDeviceTypeOther, setValIsDeviceTypeOther] = useState(false);
+  const [valDeviceTypeOtherText, setValDeviceTypeOtherText] = useState("");
   const [deviceTypeValue, setDeviceTypeValue] = useState("");
   const [deviceTypeOtherText, setDeviceTypeOtherText] = useState("altro");
   const [isDeviceTypeOther, setIsDeviceTypeOther] = useState(false);
@@ -48,6 +74,26 @@ export default function RequestDetail() {
     fullName: "", street: "", city: "", province: "", postalCode: "", country: "IT",
   });
   const [savingAddress, setSavingAddress] = useState(false);
+
+  // ── Modifica dati privati ─────────────────────────────────────────────────
+  const [showEditPrivateDialog, setShowEditPrivateDialog] = useState(false);
+  const [privateForm, setPrivateForm] = useState({ email: "", firstName: "", lastName: "", amputationType: "", phone: "" });
+  const [privateNote, setPrivateNote] = useState("");
+  const [savingPrivate, setSavingPrivate] = useState(false);
+
+  // ── Modifica dati pubblici ────────────────────────────────────────────────
+  const [showEditPublicDialog, setShowEditPublicDialog] = useState(false);
+  const [publicForm, setPublicForm] = useState({ recipient: "", relation: "", descriptionPublic: "", preferencesPublic: "" });
+  const [publicNote, setPublicNote] = useState("");
+  const [savingPublic, setSavingPublic] = useState(false);
+
+  // ── Flag "richiede attenzione" ────────────────────────────────────────────
+  const [showAttentionDialog, setShowAttentionDialog] = useState(false);
+  const [attentionNote, setAttentionNote] = useState("");
+  const [savingAttention, setSavingAttention] = useState(false);
+  const [attentionNotificaVolontari, setAttentionNotificaVolontari] = useState(false);
+  const [attentionNotificaTelegram, setAttentionNotificaTelegram] = useState(false);
+
   const toast = useRef<any>(null);
 
   /**
@@ -96,9 +142,47 @@ export default function RequestDetail() {
     }
     // Load private data
     const privateSnap = await getDoc(doc(db, "deviceRequests", id, "private", "data"));
-    setPrivateData(privateSnap.exists() ? privateSnap.data() : null);
+    const privateDataLoaded = privateSnap.exists() ? privateSnap.data() : null;
+    setPrivateData(privateDataLoaded);
 
+    // Load public data (contains devicetype and publicStatus)
+    const publicSnap = await getDoc(doc(db, "publicDeviceRequests", id));
+    if (publicSnap.exists()) {
+      const publicData = publicSnap.data();
+      setRequest((prev: any) => ({
+        ...prev,
+        deviceType: publicData.devicetype ?? prev?.deviceType,
+        publicStatus: publicData.publicStatus ?? prev?.publicStatus,
+      }));
+    }
 
+    // Pre-fill validation form only with existing operational fields (if already saved).
+    // Private data fallback is now explicit via the copy buttons in the UI.
+    setRequest((prev: any) => {
+      if (prev) {
+        setValidationForm({
+          recipient: prev.recipient || "",
+          relation: prev.relation || "",
+          descriptionPublic: prev.descriptionPublic || "",
+          preferencesPublic: prev.preferencesPublic || "",
+          email: privateDataLoaded?.email || "",
+          firstName: privateDataLoaded?.firstName || "",
+          lastName: privateDataLoaded?.lastName || "",
+          amputationType: privateDataLoaded?.amputationType || "",
+          deviceTypeVal: prev.deviceType || "",
+        });
+        // init "altro" toggle for device type
+        const currentDevice = prev.deviceType || "";
+        if (currentDevice && !DEVICE_TYPE_OPTIONS.includes(currentDevice)) {
+          setValIsDeviceTypeOther(true);
+          setValDeviceTypeOtherText(currentDevice);
+        } else {
+          setValIsDeviceTypeOther(false);
+          setValDeviceTypeOtherText("");
+        }
+      }
+      return prev;
+    });
 
     const q = query(
       collection(db, "deviceRequests", id, "events"),
@@ -165,10 +249,14 @@ export default function RequestDetail() {
   const handleChangeStatus = async () => {
     const fn = httpsCallable(functions, "changeStatus");
     const effectiveNote = note.trim() || `cambio stato da "${request?.status}" a "${newStatus}"`;
+    const notifica = (notificaAdmin || notificaVolontari || notificaTelegram)
+      ? { admin: notificaAdmin, volunteers: notificaVolontari, telegram: notificaTelegram }
+      : undefined;
     await fn({
       requestId: id,
       newStatus,
-      note: effectiveNote
+      note: effectiveNote,
+      ...(notifica ? { notifica } : {}),
     });
     toast.current?.show({
       severity: "success",
@@ -248,12 +336,17 @@ export default function RequestDetail() {
       const lastEvent = events[0];
       const previousStatus = lastEvent?.status || request.status || "sconosciuto";
 
+      const notifica = (noteNotificaAdmin || noteNotificaVolontari || noteNotificaTelegram)
+        ? { admin: noteNotificaAdmin, volunteers: noteNotificaVolontari, telegram: noteNotificaTelegram }
+        : undefined;
+
       // Aggiungi evento come cambiamento di stato con lo stesso stato precedente e nota
       const fn = httpsCallable(functions, "changeStatus");
       await fn({
         requestId: id,
         newStatus: previousStatus,
-        note: noteText.trim()
+        note: noteText.trim(),
+        ...(notifica ? { notifica } : {}),
       });
       toast.current?.show({
         severity: "success",
@@ -263,6 +356,9 @@ export default function RequestDetail() {
       });
       setShowAddNoteDialog(false);
       setNoteText("");
+      setNoteNotificaVolontari(false);
+      setNoteNotificaAdmin(false);
+      setNoteNotificaTelegram(false);
       await loadData();
     } catch (error: any) {
       toast.current?.show({
@@ -292,8 +388,15 @@ export default function RequestDetail() {
       const newDeviceType = isDeviceTypeOther ? deviceTypeOtherText.trim() : deviceTypeValue;
       await updateDoc(doc(db, "publicDeviceRequests", id), { devicetype: newDeviceType });
       setRequest((prev: any) => ({ ...prev, deviceType: newDeviceType }));
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({
+        requestId: id,
+        newStatus: request?.status,
+        note: `Tipo device aggiornato: ${newDeviceType}.`,
+      });
       toast.current?.show({ severity: "success", summary: "Salvato", detail: "Tipo device aggiornato.", life: 3000 });
       setShowChangeDeviceTypeDialog(false);
+      await loadData();
     } catch (err: any) {
       toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
     }
@@ -309,12 +412,177 @@ export default function RequestDetail() {
       if (!addr.notes) delete addr.notes;
       await updateDoc(doc(db, "deviceRequests", id), { shippingAddress: addr });
       setRequest((prev: any) => ({ ...prev, shippingAddress: addr }));
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({
+        requestId: id,
+        newStatus: request?.status,
+        note: "Indirizzo di spedizione aggiornato.",
+      });
       toast.current?.show({ severity: "success", summary: "Salvato", detail: "Indirizzo aggiornato.", life: 3000 });
       setShowAddressDialog(false);
+      await loadData();
     } catch (err: any) {
       toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
     }
     setSavingAddress(false);
+  };
+
+  const handleSavePrivate = async () => {
+    if (!id) return;
+    setSavingPrivate(true);
+    try {
+      await updateDoc(doc(db, "deviceRequests", id, "private", "data"), {
+        email: privateForm.email.trim(),
+        firstName: privateForm.firstName.trim(),
+        lastName: privateForm.lastName.trim(),
+        amputationType: privateForm.amputationType.trim(),
+        ...(privateForm.phone.trim() ? { phone: privateForm.phone.trim() } : {}),
+      });
+      setPrivateData((prev: any) => ({ ...prev, ...privateForm }));
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({
+        requestId: id,
+        newStatus: request?.status,
+        note: privateNote.trim() || "Aggiornamento dati privati richiedente.",
+      });
+      setPrivateNote("");
+      toast.current?.show({ severity: "success", summary: "Salvato", detail: "Dati privati aggiornati.", life: 3000 });
+      setShowEditPrivateDialog(false);
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSavingPrivate(false);
+  };
+
+  const handleSavePublic = async () => {    if (!id) return;
+    setSavingPublic(true);
+    try {
+      await updateDoc(doc(db, "deviceRequests", id), {
+        recipient: publicForm.recipient.trim(),
+        relation: publicForm.relation.trim(),
+        descriptionPublic: publicForm.descriptionPublic.trim(),
+        preferencesPublic: publicForm.preferencesPublic.trim(),
+      });
+      setRequest((prev: any) => ({ ...prev, ...publicForm }));
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({
+        requestId: id,
+        newStatus: request?.status,
+        note: publicNote.trim() || "Aggiornamento dati pubblici richiedente.",
+      });
+      setPublicNote("");
+      toast.current?.show({ severity: "success", summary: "Salvato", detail: "Dati pubblici aggiornati.", life: 3000 });
+      setShowEditPublicDialog(false);
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSavingPublic(false);
+  };
+
+  const handleSetAttention = async () => {
+    if (!id || !attentionNote.trim()) return;
+    setSavingAttention(true);
+    try {
+      await updateDoc(doc(db, "deviceRequests", id), { requiresAttention: true });
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({
+        requestId: id,
+        newStatus: request?.status,
+        note: `⚠️ Richiede attenzione: ${attentionNote.trim()}`,
+        notifica: { admin: true, volunteers: attentionNotificaVolontari, telegram: attentionNotificaTelegram },
+      });
+      setRequest((prev: any) => ({ ...prev, requiresAttention: true }));
+      toast.current?.show({ severity: "warn", summary: "Flag impostato", detail: "La richiesta è ora segnalata come 'richiede attenzione'.", life: 3000 });
+      setShowAttentionDialog(false);
+      setAttentionNote("");
+      setAttentionNotificaVolontari(false);
+      setAttentionNotificaTelegram(false);
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSavingAttention(false);
+  };
+
+  const handleClearAttention = async () => {
+    if (!id) return;
+    setSavingAttention(true);
+    try {
+      await updateDoc(doc(db, "deviceRequests", id), { requiresAttention: false });
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({ requestId: id, newStatus: request?.status, note: "✅ Flag 'richiede attenzione' rimosso." });
+      setRequest((prev: any) => ({ ...prev, requiresAttention: false }));
+      toast.current?.show({ severity: "success", summary: "Flag rimosso", detail: "La richiesta non richiede più attenzione.", life: 3000 });
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSavingAttention(false);
+  };
+
+  /**
+   * Valida una richiesta con status "inviata":
+   * 1. Salva i campi operativi in deviceRequests/{id}
+   * 2. Aggiorna publicDeviceRequests/{id} con publicStatus = "da gestire"
+   * 3. Cambia lo status interno a "famiglia contattata" via cloud function
+   */
+  const handleValidate = async () => {
+    if (!id) return;
+    setValidating(true);
+    try {
+      const adminUid = auth.currentUser?.uid ?? "";
+
+      // 1. Salva campi operativi + metadati di validazione
+      await updateDoc(doc(db, "deviceRequests", id), {
+        recipient: validationForm.recipient.trim(),
+        relation: validationForm.relation.trim(),
+        descriptionPublic: validationForm.descriptionPublic.trim(),
+        preferencesPublic: validationForm.preferencesPublic.trim(),
+        validatedAt: serverTimestamp(),
+        validatedBy: adminUid,
+      });
+
+      // 1b. Aggiorna dati privati correggibili
+      await updateDoc(doc(db, "deviceRequests", id, "private", "data"), {
+        email: validationForm.email.trim(),
+        firstName: validationForm.firstName.trim(),
+        lastName: validationForm.lastName.trim(),
+        amputationType: validationForm.amputationType.trim(),
+      });
+
+      // 2. Rendi la richiesta visibile ai volontari (publicStatus) e aggiorna devicetype
+      await updateDoc(doc(db, "publicDeviceRequests", id), {
+        publicStatus: "da gestire",
+        devicetype: valIsDeviceTypeOther ? valDeviceTypeOtherText.trim() : validationForm.deviceTypeVal.trim(),
+      });
+
+      // 3. Aggiorna lo status interno tramite cloud function (registra evento + cambia stato)
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({
+        requestId: id,
+        newStatus: "validata",
+        note: "Richiesta validata dall'amministratore.",
+      });
+
+      toast.current?.show({
+        severity: "success",
+        summary: "Validazione completata",
+        detail: "La richiesta è ora visibile ai volontari.",
+        life: 4000,
+      });
+      setShowValidateDialog(false);
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore validazione",
+        detail: err?.message || "Errore durante la validazione.",
+        life: 5000,
+      });
+    }
+    setValidating(false);
   };
 
   const goBack = () => {
@@ -335,8 +603,290 @@ export default function RequestDetail() {
   return (
     <div style={{ padding: 20 }}>
       <Toast ref={toast} />
+      {/* Dialog: segnala richiede attenzione */}
+      <Dialog
+        header="⚠️ Segnala richiede attenzione"
+        visible={showAttentionDialog}
+        style={{ width: "420px" }}
+        modal
+        onHide={() => setShowAttentionDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button label="Annulla" className="p-button-text" onClick={() => setShowAttentionDialog(false)} disabled={savingAttention} />
+            <Button
+              label="Conferma"
+              icon="pi pi-exclamation-triangle"
+              severity="warning"
+              onClick={handleSetAttention}
+              loading={savingAttention}
+              disabled={!attentionNote.trim()}
+            />
+          </div>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <span>Inserisci una nota obbligatoria che descriva il motivo dell'attenzione richiesta.</span>
+          <InputTextarea
+            value={attentionNote}
+            onChange={(e) => setAttentionNote(e.target.value)}
+            rows={4}
+            placeholder="Motivo attenzione..."
+            style={{ width: "100%" }}
+            autoFocus
+          />
+          <div>
+            <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>Notifiche</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#6b7280" }}>
+                <input type="checkbox" checked disabled />
+                Admin (devices@e-nableitalia.it) — sempre attivo
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={attentionNotificaVolontari} onChange={(e) => setAttentionNotificaVolontari(e.target.checked)} />
+                Volontari assegnati
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={attentionNotificaTelegram} onChange={(e) => setAttentionNotificaTelegram(e.target.checked)} />
+                Gruppo Telegram
+              </label>
+            </div>
+          </div>
+        </div>
+      </Dialog>
       <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />
       <h2>Request Detail</h2>
+
+      {/* ── Pannello validazione (visibile solo se status === "inviata") ── */}
+      {request?.status === "inviata" && (
+        <Panel
+          header={
+            <span style={{ color: "#92400e", fontWeight: 700 }}>
+              <span className="pi pi-exclamation-triangle" style={{ marginRight: 8 }} />
+              Richiesta da validare
+            </span>
+          }
+          style={{ marginBottom: 24, border: "2px solid #fcd34d", background: "#fffbeb" }}
+        >
+          <p style={{ color: "#92400e", marginBottom: 16 }}>
+            Questa richiesta è in attesa di validazione e non è ancora visibile ai volontari.
+            Compila i campi operativi e conferma la validazione.
+            <br /><br />
+            <span className="pi pi-exclamation-triangle" style={{ marginRight: 6 }} />
+            <strong>Attenzione:</strong> la descrizione e le preferenze pubbliche devono essere versioni
+            sanificate dei testi originali: <strong>rimuovere tutti i dati sensibili</strong> (nomi,
+            cognomi, indirizzi, recapiti telefonici, email e qualsiasi altro dato personale
+            identificativo) prima di salvare.
+          </p>
+
+          {/* Riga 1: dati anagrafici privati correggibili */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+            <div style={{ flex: "1 1 180px" }}>
+              <label htmlFor="val-firstName" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>Nome</label>
+              <InputText
+                id="val-firstName"
+                value={validationForm.firstName}
+                onChange={(e) => setValidationForm((f) => ({ ...f, firstName: e.target.value }))}
+                style={{ width: "100%" }}
+              />
+              {privateData?.firstName && privateData.firstName !== validationForm.firstName && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <Button icon="pi pi-copy" className="p-button-text p-button-sm p-button-secondary" style={{ padding: "2px 4px", height: "auto", minWidth: "auto" }} tooltip="Copia" onClick={() => setValidationForm((f) => ({ ...f, firstName: privateData.firstName }))} />
+                  <small><strong>Dal modulo: {privateData.firstName}</strong></small>
+                </div>
+              )}
+            </div>
+            <div style={{ flex: "1 1 180px" }}>
+              <label htmlFor="val-lastName" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>Cognome</label>
+              <InputText
+                id="val-lastName"
+                value={validationForm.lastName}
+                onChange={(e) => setValidationForm((f) => ({ ...f, lastName: e.target.value }))}
+                style={{ width: "100%" }}
+              />
+              {privateData?.lastName && privateData.lastName !== validationForm.lastName && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <Button icon="pi pi-copy" className="p-button-text p-button-sm p-button-secondary" style={{ padding: "2px 4px", height: "auto", minWidth: "auto" }} tooltip="Copia" onClick={() => setValidationForm((f) => ({ ...f, lastName: privateData.lastName }))} />
+                  <small><strong>Dal modulo: {privateData.lastName}</strong></small>
+                </div>
+              )}
+            </div>
+            <div style={{ flex: "1 1 220px" }}>
+              <label htmlFor="val-email" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>Email</label>
+              <InputText
+                id="val-email"
+                value={validationForm.email}
+                onChange={(e) => setValidationForm((f) => ({ ...f, email: e.target.value }))}
+                style={{ width: "100%" }}
+              />
+              {privateData?.email && privateData.email !== validationForm.email && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <Button icon="pi pi-copy" className="p-button-text p-button-sm p-button-secondary" style={{ padding: "2px 4px", height: "auto", minWidth: "auto" }} tooltip="Copia" onClick={() => setValidationForm((f) => ({ ...f, email: privateData.email }))} />
+                  <small><strong>Dal modulo: {privateData.email}</strong></small>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Riga 2: tipo amputazione e tipo device */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+            <div style={{ flex: "1 1 240px" }}>
+              <label htmlFor="val-amputationType" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>Tipo amputazione</label>
+              <Dropdown
+                inputId="val-amputationType"
+                value={validationForm.amputationType}
+                options={[
+                  "Mano, polso funzionale con parte residua di palmo",
+                  "Braccio sotto il gomito",
+                  "Braccio sopra il gomito",
+                  "Altro",
+                ]}
+                onChange={(e) => setValidationForm((f) => ({ ...f, amputationType: e.value }))}
+                placeholder="Seleziona tipo amputazione"
+                style={{ width: "100%" }}
+              />
+              {privateData?.amputationType && privateData.amputationType !== validationForm.amputationType && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <Button icon="pi pi-copy" className="p-button-text p-button-sm p-button-secondary" style={{ padding: "2px 4px", height: "auto", minWidth: "auto" }} tooltip="Copia" onClick={() => setValidationForm((f) => ({ ...f, amputationType: privateData.amputationType }))} />
+                  <small><strong>Dal modulo: {privateData.amputationType}</strong></small>
+                </div>
+              )}
+            </div>
+            <div style={{ flex: "1 1 220px" }}>
+              <label htmlFor="val-deviceType" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>Tipo device</label>
+              <Dropdown
+                inputId="val-deviceType"
+                value={valIsDeviceTypeOther ? null : validationForm.deviceTypeVal}
+                options={DEVICE_TYPE_OPTIONS}
+                onChange={(e) => { setValidationForm((f) => ({ ...f, deviceTypeVal: e.value })); setValIsDeviceTypeOther(false); }}
+                placeholder="Seleziona device"
+                style={{ width: "100%" }}
+                disabled={valIsDeviceTypeOther}
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                <Checkbox
+                  inputId="val-deviceType-other"
+                  checked={valIsDeviceTypeOther}
+                  onChange={(e) => {
+                    setValIsDeviceTypeOther(e.checked ?? false);
+                    if (e.checked) setValidationForm((f) => ({ ...f, deviceTypeVal: "" }));
+                  }}
+                />
+                <label htmlFor="val-deviceType-other" style={{ cursor: "pointer" }}>Altro</label>
+              </div>
+              {valIsDeviceTypeOther && (
+                <InputText
+                  value={valDeviceTypeOtherText}
+                  onChange={(e) => setValDeviceTypeOtherText(e.target.value)}
+                  placeholder="Inserisci tipo device"
+                  style={{ width: "100%", marginTop: 6 }}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Riga 3: destinatario e relazione */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+            <div style={{ flex: "1 1 220px" }}>
+              <label htmlFor="val-recipient" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+                Destinatario
+              </label>
+              <InputText
+                id="val-recipient"
+                value={validationForm.recipient}
+                onChange={(e) => setValidationForm((f) => ({ ...f, recipient: e.target.value }))}
+                placeholder="es. Marco..."
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div style={{ flex: "1 1 220px" }}>
+              <label htmlFor="val-relation" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+                Relazione con il richiedente
+              </label>
+              <InputText
+                id="val-relation"
+                value={validationForm.relation}
+                onChange={(e) => setValidationForm((f) => ({ ...f, relation: e.target.value }))}
+                placeholder="es. genitore, coniuge..."
+                style={{ width: "100%" }}
+              />
+              {privateData?.relation && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <Button
+                    icon="pi pi-copy"
+                    className="p-button-text p-button-sm p-button-secondary"
+                    style={{ padding: "2px 4px", height: "auto", minWidth: "auto" }}
+                    tooltip="Copia nel campo"
+                    tooltipOptions={{ position: "right" }}
+                    onClick={() => setValidationForm((f) => ({ ...f, relation: privateData.relation }))}
+                  />
+                  <small>Dal modulo: <strong>{privateData.relation}</strong></small>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label htmlFor="val-descPublic" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+              Descrizione pubblica
+            </label>
+            <InputTextarea
+              id="val-descPublic"
+              value={validationForm.descriptionPublic}
+              onChange={(e) => setValidationForm((f) => ({ ...f, descriptionPublic: e.target.value }))}
+              rows={3}
+              style={{ width: "100%" }}
+              placeholder="Versione sanificata della descrizione (visibile ai volontari)"
+            />
+            {privateData?.description && (
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginTop: 4 }}>
+                <Button
+                  icon="pi pi-copy"
+                  className="p-button-text p-button-sm p-button-secondary"
+                  style={{ padding: "2px 4px", height: "auto", minWidth: "auto", flexShrink: 0 }}
+                  tooltip="Copia nel campo"
+                  tooltipOptions={{ position: "right" }}
+                  onClick={() => setValidationForm((f) => ({ ...f, descriptionPublic: privateData.description }))}
+                />
+                <small>Dal modulo: <strong>{privateData.description}</strong></small>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label htmlFor="val-prefPublic" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+              Preferenze pubbliche
+            </label>
+            <InputTextarea
+              id="val-prefPublic"
+              value={validationForm.preferencesPublic}
+              onChange={(e) => setValidationForm((f) => ({ ...f, preferencesPublic: e.target.value }))}
+              rows={2}
+              style={{ width: "100%" }}
+              placeholder="Versione sanificata delle preferenze (visibile ai volontari)"
+            />
+            {privateData?.preferences && (
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginTop: 4 }}>
+                <Button
+                  icon="pi pi-copy"
+                  className="p-button-text p-button-sm p-button-secondary"
+                  style={{ padding: "2px 4px", height: "auto", minWidth: "auto", flexShrink: 0 }}
+                  tooltip="Copia nel campo"
+                  tooltipOptions={{ position: "right" }}
+                  onClick={() => setValidationForm((f) => ({ ...f, preferencesPublic: privateData.preferences }))}
+                />
+                <small>Dal modulo: <strong>{privateData.preferences}</strong></small>
+              </div>
+            )}
+          </div>
+
+          <Button
+            label="Valida richiesta"
+            icon="pi pi-check-circle"
+            severity="warning"
+            onClick={() => setShowValidateDialog(true)}
+          />
+        </Panel>
+      )}
 
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>
         <div className="p-panel-header">
@@ -390,6 +940,28 @@ export default function RequestDetail() {
                   <span style={{ marginLeft: 8 }}>-</span>
                 )}
               </div>
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <strong>Richiede attenzione:</strong>
+                {request.requiresAttention
+                  ? <Badge value="⚠️ Sì" severity="danger" />
+                  : <span style={{ color: "#888" }}>No</span>
+                }
+                {request.requiresAttention
+                  ? <Button
+                      label="Rimuovi flag"
+                      icon="pi pi-times"
+                      className="p-button-text p-button-sm p-button-secondary"
+                      loading={savingAttention}
+                      onClick={handleClearAttention}
+                    />
+                  : <Button
+                      label="Segnala"
+                      icon="pi pi-exclamation-triangle"
+                      className="p-button-text p-button-sm p-button-warning"
+                      onClick={() => { setAttentionNote(""); setShowAttentionDialog(true); }}
+                    />
+                }
+              </div>
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 10 }}>
@@ -434,8 +1006,23 @@ export default function RequestDetail() {
       </div>
 
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>
-        <div className="p-panel-header">
+        <div className="p-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span>Dati richiedente (privati)</span>
+          <Button
+            label="Modifica"
+            icon="pi pi-pencil"
+            className="p-button-text"
+            onClick={() => {
+              setPrivateForm({
+                email: privateData?.email || "",
+                firstName: privateData?.firstName || "",
+                lastName: privateData?.lastName || "",
+                amputationType: privateData?.amputationType || "",
+                phone: privateData?.phone || "",
+              });
+              setShowEditPrivateDialog(true);
+            }}
+          />
         </div>
         <div className="p-panel-content">
           {privateData ? (
@@ -472,6 +1059,53 @@ export default function RequestDetail() {
           ) : (
             <div>Nessun dato privato disponibile.</div>
           )}
+        </div>
+      </div>
+
+      {/* Dati richiedente (pubblici) */}
+      <div className="p-panel p-component" style={{ marginBottom: 30 }}>
+        <div className="p-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Dati richiedente (pubblici)</span>
+          <Button
+            label="Modifica"
+            icon="pi pi-pencil"
+            className="p-button-text"
+            onClick={() => {
+              setPublicForm({
+                recipient: request.recipient || "",
+                relation: request.relation || "",
+                descriptionPublic: request.descriptionPublic || "",
+                preferencesPublic: request.preferencesPublic || "",
+              });
+              setShowEditPublicDialog(true);
+            }}
+          />
+        </div>
+        <div className="p-panel-content">
+          <div style={{ display: "flex", gap: 40 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ marginBottom: 10 }}>
+                <strong>Destinatario:</strong> {request.recipient || "-"}
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <strong>Relazione:</strong> {request.relation || "-"}
+              </div>
+            </div>
+            <div style={{ flex: 2 }}>
+              <div style={{ marginBottom: 10 }}>
+                <strong>Descrizione pubblica:</strong>
+                <div style={{ marginTop: 4, whiteSpace: "pre-wrap", color: request.descriptionPublic ? undefined : "#888" }}>
+                  {request.descriptionPublic || "-"}
+                </div>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <strong>Preferenze pubbliche:</strong>
+                <div style={{ marginTop: 4, whiteSpace: "pre-wrap", color: request.preferencesPublic ? undefined : "#888" }}>
+                  {request.preferencesPublic || "-"}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -624,6 +1258,23 @@ export default function RequestDetail() {
             style={{ width: "100%" }}
           />
         </div>
+        <div style={{ marginBottom: 15 }}>
+          <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>Notifiche</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={notificaVolontari} onChange={(e) => setNotificaVolontari(e.target.checked)} />
+              Volontari assegnati
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={notificaAdmin} onChange={(e) => setNotificaAdmin(e.target.checked)} />
+              Admin (devices@e-nableitalia.it)
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={notificaTelegram} onChange={(e) => setNotificaTelegram(e.target.checked)} />
+              Gruppo Telegram
+            </label>
+          </div>
+        </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <Button label="Annulla" className="p-button-text" onClick={() => setShowChangeStatusDialog(false)} />
           <Button label="Conferma" onClick={handleChangeStatus} />
@@ -726,10 +1377,172 @@ export default function RequestDetail() {
             style={{ width: "100%" }}
           />
         </div>
+        <div style={{ marginBottom: 15 }}>
+          <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>Notifiche</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={noteNotificaVolontari} onChange={(e) => setNoteNotificaVolontari(e.target.checked)} />
+              Volontari assegnati
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={noteNotificaAdmin} onChange={(e) => setNoteNotificaAdmin(e.target.checked)} />
+              Admin (devices@e-nableitalia.it)
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={noteNotificaTelegram} onChange={(e) => setNoteNotificaTelegram(e.target.checked)} />
+              Gruppo Telegram
+            </label>
+          </div>
+        </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <Button label="Annulla" className="p-button-text" onClick={() => setShowAddNoteDialog(false)} />
           <Button label="Aggiungi" onClick={handleAddNote} disabled={!noteText.trim()} />
         </div>
+      </Dialog>
+
+      {/* Dialog modifica dati privati */}
+      <Dialog
+        header="Modifica dati richiedente (privati)"
+        visible={showEditPrivateDialog}
+        style={{ width: "520px" }}
+        modal
+        onHide={() => setShowEditPrivateDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button label="Annulla" className="p-button-text" onClick={() => setShowEditPrivateDialog(false)} disabled={savingPrivate} />
+            <Button label="Salva" icon="pi pi-check" onClick={handleSavePrivate} loading={savingPrivate} />
+          </div>
+        }
+      >
+        {([
+          { label: "Email", field: "email" },
+          { label: "Nome", field: "firstName" },
+          { label: "Cognome", field: "lastName" },
+          { label: "Telefono", field: "phone" },
+        ] as { label: string; field: keyof typeof privateForm }[]).map(({ label, field }) => (
+          <div key={field} style={{ marginBottom: 12 }}>
+            <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>{label}</label>
+            <InputText
+              value={privateForm[field]}
+              onChange={(e) => setPrivateForm((f) => ({ ...f, [field]: e.target.value }))}
+              style={{ width: "100%" }}
+            />
+          </div>
+        ))}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Tipo amputazione</label>
+          <Dropdown
+            value={privateForm.amputationType}
+            options={[
+              "Mano, polso funzionale con parte residua di palmo",
+              "Braccio sotto il gomito",
+              "Braccio sopra il gomito",
+              "Altro",
+            ]}
+            onChange={(e) => setPrivateForm((f) => ({ ...f, amputationType: e.value }))}
+            placeholder="Seleziona tipo amputazione"
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Nota (opzionale)</label>
+          <InputTextarea
+            value={privateNote}
+            onChange={(e) => setPrivateNote(e.target.value)}
+            rows={2}
+            placeholder="Aggiungi una nota sull'aggiornamento..."
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Dialog>
+
+      {/* Dialog modifica dati pubblici */}
+      <Dialog
+        header="Modifica dati richiedente (pubblici)"
+        visible={showEditPublicDialog}
+        style={{ width: "560px" }}
+        modal
+        onHide={() => setShowEditPublicDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button label="Annulla" className="p-button-text" onClick={() => setShowEditPublicDialog(false)} disabled={savingPublic} />
+            <Button label="Salva" icon="pi pi-check" onClick={handleSavePublic} loading={savingPublic} />
+          </div>
+        }
+      >
+        <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Destinatario</label>
+            <InputText
+              value={publicForm.recipient}
+              onChange={(e) => setPublicForm((f) => ({ ...f, recipient: e.target.value }))}
+              style={{ width: "100%" }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Relazione con il richiedente</label>
+            <InputText
+              value={publicForm.relation}
+              onChange={(e) => setPublicForm((f) => ({ ...f, relation: e.target.value }))}
+              style={{ width: "100%" }}
+            />
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Descrizione pubblica</label>
+          <InputTextarea
+            value={publicForm.descriptionPublic}
+            onChange={(e) => setPublicForm((f) => ({ ...f, descriptionPublic: e.target.value }))}
+            rows={4}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Preferenze pubbliche</label>
+          <InputTextarea
+            value={publicForm.preferencesPublic}
+            onChange={(e) => setPublicForm((f) => ({ ...f, preferencesPublic: e.target.value }))}
+            rows={3}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>Nota (opzionale)</label>
+          <InputTextarea
+            value={publicNote}
+            onChange={(e) => setPublicNote(e.target.value)}
+            rows={2}
+            placeholder="Aggiungi una nota sull'aggiornamento..."
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Dialog>
+
+      {/* Dialog conferma validazione richiesta */}
+      <Dialog
+        header="Conferma validazione"
+        visible={showValidateDialog}
+        style={{ width: "460px" }}
+        modal
+        onHide={() => setShowValidateDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button label="Annulla" className="p-button-text" onClick={() => setShowValidateDialog(false)} disabled={validating} />
+            <Button
+              label="Conferma validazione"
+              icon="pi pi-check-circle"
+              severity="warning"
+              onClick={handleValidate}
+              loading={validating}
+            />
+          </div>
+        }
+      >
+        <p>
+          Confermando, la richiesta sarà resa visibile ai volontari con stato{" "}
+          <strong>«validata»</strong> e publicStatus <strong>«da gestire»</strong>.
+          Questa operazione non può essere annullata automaticamente.
+        </p>
       </Dialog>
 
       {/* Dialog per tipo device */}

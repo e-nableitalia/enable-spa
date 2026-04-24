@@ -11,14 +11,13 @@ import { useNavigate } from "react-router-dom";
 import { db, functions } from "../../firebase";
 import { doc, getDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { Toast } from "primereact/toast";
 import { Dialog } from "primereact/dialog";
 import { MultiSelect } from "primereact/multiselect";
-import { REQUEST_STATUSES } from "../../helpers/requestStatus";
+import { REQUEST_STATUSES, REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType } from "../../helpers/requestStatus";
 import { FilterMatchMode } from "primereact/api";
 import type { DataTableFilterMeta } from "primereact/datatable";
-import { REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType } from "../../helpers/requestStatus";
 
 interface AdminRequestTableProps {
   requests: any[];
@@ -192,21 +191,108 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
     />
   );
 
-  // Stato dei filtri
-  const [filters, setFilters] = useState<DataTableFilterMeta>({
+  // Stato dei filtri — persistito in sessionStorage per sopravvivere alla navigazione
+  const SESSION_KEY = "adminRequestTableFilters";
+
+  const defaultFilters: DataTableFilterMeta = {
     status: { value: null, matchMode: FilterMatchMode.IN },
     firstName: { value: null, matchMode: FilterMatchMode.CONTAINS },
     lastName: { value: null, matchMode: FilterMatchMode.CONTAINS },
     age: { value: null, matchMode: FilterMatchMode.EQUALS },
-    gender: { value: null, matchMode: FilterMatchMode.EQUALS },
-    amputationType: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    deviceType: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    publicStatus: { value: null, matchMode: FilterMatchMode.EQUALS },
+    gender: { value: null, matchMode: FilterMatchMode.IN },
+    amputationType: { value: null, matchMode: FilterMatchMode.IN },
+    deviceType: { value: null, matchMode: FilterMatchMode.IN },
+    publicStatus: { value: null, matchMode: FilterMatchMode.IN },
     province: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    recipient: { value: null, matchMode: FilterMatchMode.CONTAINS },
     assignedVolunteersText: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    seqId: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    requestNumber: { value: null, matchMode: FilterMatchMode.CONTAINS },
     createdAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
     updatedAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
-  });
+    requiresAttention: { value: null, matchMode: FilterMatchMode.EQUALS },
+  };
+
+  const loadFilters = (): DataTableFilterMeta => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      if (!saved) return defaultFilters;
+      const parsed = JSON.parse(saved);
+      // Ripristina i Date serializzati come stringa per i campi data
+      for (const field of ["createdAt", "updatedAt"] as const) {
+        const f = parsed[field];
+        if (f?.value) f.value = new Date(f.value);
+      }
+      return { ...defaultFilters, ...parsed };
+    } catch {
+      return defaultFilters;
+    }
+  };
+
+  const [filters, setFilters] = useState<DataTableFilterMeta>(loadFilters);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(filters));
+    } catch {
+      // sessionStorage non disponibile
+    }
+  }, [filters]);
+
+  const SORT_KEY = "adminRequestTableSort";
+  const COLS_KEY = "adminRequestTableCols";
+
+  const TOGGLEABLE_COLS = [
+    { key: "requestNumber",          label: "Seq" },
+    { key: "firstName",              label: "Nome" },
+    { key: "lastName",               label: "Cognome" },
+    { key: "recipient",              label: "Destinatario" },
+    { key: "age",                    label: "Età" },
+    { key: "gender",                 label: "Genere" },
+    { key: "amputationType",         label: "Tipo amputazione" },
+    { key: "deviceType",             label: "Device" },
+    { key: "status",                 label: "Stato" },
+    { key: "publicStatus",           label: "Stato Pubblico" },
+    { key: "province",               label: "Provincia" },
+    { key: "assignedVolunteersText", label: "Volontari" },
+    { key: "updatedAt",              label: "Aggiornato il" },
+  ];
+
+  const loadVisibleCols = (): string[] => {
+    try {
+      const saved = sessionStorage.getItem(COLS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return TOGGLEABLE_COLS.map((c) => c.key);
+  };
+
+  const [visibleCols, setVisibleCols] = useState<string[]>(loadVisibleCols);
+
+  const handleVisibleCols = (keys: string[]) => {
+    setVisibleCols(keys);
+    try { sessionStorage.setItem(COLS_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
+  };
+
+  const col = (key: string) => visibleCols.includes(key);
+  const loadSort = (): { field: string; order: 1 | -1 } => {
+    try {
+      const saved = sessionStorage.getItem(SORT_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return { field: "updatedAt", order: -1 };
+  };
+  const [sortField, setSortField] = useState<string>(loadSort().field);
+  const [sortOrder, setSortOrder] = useState<1 | -1>(loadSort().order);
+
+  const handleSort = (e: { sortField: string; sortOrder: 0 | 1 | -1 | null | undefined }) => {
+    const field = e.sortField ?? "updatedAt";
+    const order = (e.sortOrder ?? -1) as 1 | -1;
+    setSortField(field);
+    setSortOrder(order);
+    try {
+      sessionStorage.setItem(SORT_KEY, JSON.stringify({ field, order }));
+    } catch { /* ignore */ }
+  };
 
   // Multiselect filter template for status
   const statusFilterTemplate = (options: any) => (
@@ -264,21 +350,41 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
     );
   };
 
-  const assignedVolunteersFilterTemplate = (options: any) => (
-    <InputText
-      value={options.value ?? ""}
-      onChange={(e) => {
-        const val = e.target.value;
-        setFilters((prev) => ({
-          ...prev,
-          assignedVolunteersText: { value: val || null, matchMode: FilterMatchMode.CONTAINS },
-        }));
-        options.filterCallback(val, options.index);
-      }}
-      placeholder="Cerca nome…"
-      style={{ minWidth: 100, fontSize: 12 }}
-    />
-  );
+  const deviceTypeOptions = useMemo(() => {
+    const unique = [...new Set(requests.map((r) => r.deviceType).filter(Boolean))] as string[];
+    return unique.slice().sort((a: string, b: string) => a.localeCompare(b)).map((d: string) => ({ label: d, value: d }));
+  }, [requests]);
+
+  const genderOptions = useMemo(() => {
+    const unique = [...new Set(requests.map((r) => r.gender).filter(Boolean))] as string[];
+    return unique.slice().sort((a: string, b: string) => a.localeCompare(b)).map((g: string) => ({ label: g, value: g }));
+  }, [requests]);
+
+  const amputationTypeOptions = useMemo(() => {
+    const unique = [...new Set(requests.map((r) => r.amputationType).filter(Boolean))] as string[];
+    return unique.slice().sort((a: string, b: string) => a.localeCompare(b)).map((v: string) => ({ label: v, value: v }));
+  }, [requests]);
+
+  const makeMultiSelectFilter = (field: string, opts: { label: string; value: string }[], placeholder: string) =>
+    (options: any) => (
+      <MultiSelect
+        value={options.value || []}
+        options={opts}
+        onChange={(e) => {
+          setFilters((prev) => ({
+            ...prev,
+            [field]: { value: e.value, matchMode: FilterMatchMode.IN },
+          }));
+          options.filterCallback(e.value, options.index);
+        }}
+        placeholder={placeholder}
+        display="chip"
+        style={{ minWidth: 140 }}
+      />
+    );
+
+  const setTextFilter = (field: string, value: string, matchMode = FilterMatchMode.CONTAINS) =>
+    setFilters((prev) => ({ ...prev, [field]: { value: value || null, matchMode } }));
 
   return (
     <>
@@ -345,29 +451,98 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           </span>
         }
         end={
-          <Button
-            label="Bulk Change"
-            icon="pi pi-pencil"
-            onClick={() => setShowBulkDialog(true)}
-            disabled={selectedRows.length === 0}
-          />
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <MultiSelect
+              value={visibleCols}
+              options={TOGGLEABLE_COLS}
+              optionLabel="label"
+              optionValue="key"
+              onChange={(e) => handleVisibleCols(e.value)}
+              placeholder="Colonne visibili"
+              maxSelectedLabels={0}
+              selectedItemsLabel="{0} colonne visibili"
+              display="chip"
+              style={{ minWidth: 200 }}
+            />
+            <Button
+              label="Bulk Change"
+              icon="pi pi-pencil"
+              onClick={() => setShowBulkDialog(true)}
+              disabled={selectedRows.length === 0}
+            />
+          </div>
         }
       />
+      {/* Search bar testo libero */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+        <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
+          <i className="pi pi-search" style={{ left: "0.75rem" }} />
+          <InputText
+            value={(filters.seqId as any)?.value ?? ""}
+            onChange={(e) => setTextFilter("seqId", e.target.value)}
+            placeholder="ID"
+            style={{ paddingLeft: "2rem", width: "100%" }}
+          />
+        </span>
+        {([
+          { field: "requestNumber",          placeholder: "Seq" },
+          { field: "firstName",              placeholder: "Nome" },
+          { field: "lastName",               placeholder: "Cognome" },
+          { field: "recipient",              placeholder: "Destinatario" },
+        ] as { field: string; placeholder: string }[]).map(({ field, placeholder }) => (
+          <span key={field} className="p-input-icon-left" style={{ flex: "1 1 130px" }}>
+            <i className="pi pi-search" style={{ left: "0.75rem" }} />
+            <InputText
+              value={(filters[field] as any)?.value ?? ""}
+              onChange={(e) => setTextFilter(field, e.target.value)}
+              placeholder={placeholder}
+              style={{ paddingLeft: "2rem", width: "100%" }}
+            />
+          </span>
+        ))}
+        <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
+          <i className="pi pi-search" style={{ left: "0.75rem" }} />
+          <InputText
+            value={(filters.age as any)?.value ?? ""}
+            onChange={(e) => setFilters((prev) => ({ ...prev, age: { value: e.target.value ? Number(e.target.value) : null, matchMode: FilterMatchMode.EQUALS } }))}
+            placeholder="Età"
+            type="number"
+            style={{ paddingLeft: "2rem", width: "100%" }}
+          />
+        </span>
+        {([
+          { field: "province",               placeholder: "Provincia" },
+          { field: "assignedVolunteersText", placeholder: "Volontari" },
+        ] as { field: string; placeholder: string }[]).map(({ field, placeholder }) => (
+          <span key={field} className="p-input-icon-left" style={{ flex: "1 1 130px" }}>
+            <i className="pi pi-search" style={{ left: "0.75rem" }} />
+            <InputText
+              value={(filters[field] as any)?.value ?? ""}
+              onChange={(e) => setTextFilter(field, e.target.value)}
+              placeholder={placeholder}
+              style={{ paddingLeft: "2rem", width: "100%" }}
+            />
+          </span>
+        ))}
+      </div>
       <DataTable
         value={tableData}
         paginator
         rows={20}
-        rowsPerPageOptions={[10, 20, 50, requests.length]}
+        rowsPerPageOptions={[10, 20, 50, tableData.length]}
         paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
         currentPageReportTemplate="Mostrati {first}-{last} di {totalRecords}"
         filterDisplay="row"
         filters={filters}
         onFilter={(e) => setFilters(e.filters)}
-        sortField="seqId"
-        sortOrder={1}
+        sortField={sortField}
+        sortOrder={sortOrder}
+        onSort={handleSort}
         selection={selectedRows}
         onSelectionChange={e => setSelectedRows(e.value as RequestRow[])}
         dataKey="id"
+        scrollable
+        scrollHeight="flex"
       >
         <Column selectionMode="multiple" style={{ width: "3rem" }} />
         <Column
@@ -391,79 +566,132 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
         />
           )}
         />
-        <Column field="seqId" header="ID" filter sortable />
-        <Column field="requestNumber" header="Seq" filter sortable />
-        <Column field="firstName" header="Nome" filter sortable />
-        <Column field="lastName" header="Cognome" filter sortable />
-        <Column field="age" header="Età" filter sortable />
-        <Column field="gender" header="Genere" filter sortable />
+        <Column field="seqId" header="ID" sortable style={{ width: "55px" }} />
         <Column
-          field="amputationType"
-          header="Tipo amputazione"
-          filter
+          field="requiresAttention"
+          header="⚠️ Attenzione"
           sortable
-          body={(row) => (
-        <>
-          <span
-            title={row.amputationType}
-            data-pr-tooltip={row.amputationType}
-            data-pr-position="top"
-            className="amputation-type-tooltip"
-          >
-            {shortAmputationType(row.amputationType)}
-          </span>
-        </>
-          )}
-        />
-        <Column field="deviceType" header="Device" filter sortable/>
-        <Column
-          field="status"
-          header="Stato"
           filter
-          sortable
-          filterElement={statusFilterTemplate}
           showFilterMenu={false}
-          filterField="status"
-          filterMatchMode={FilterMatchMode.IN}
-          body={statusTemplate}
-        />
-        <Column
-          header="Stato Pubblico"
-          body={publicStatusTemplate}
-          filter
-          field="publicStatus"
-          sortable
+          filterMatchMode={FilterMatchMode.EQUALS}
           filterElement={(options) => (
-        <MultiSelect
-          value={options.value || []}
-          options={Object.keys(PUBLIC_STATUS_SEVERITY).map(s => ({ label: s, value: s }))}
-          onChange={(e) => {
-            setFilters((prev: DataTableFilterMeta) => ({
-          ...prev,
-          publicStatus: { value: e.value, matchMode: FilterMatchMode.IN }
-            }));
-            options.filterCallback(e.value, options.index);
-          }}
-          placeholder="Filtra stato pubblico"
-          display="chip"
-          style={{ minWidth: 180 }}
-        />
+            <Dropdown
+              value={options.value}
+              options={[
+                { label: "Tutti", value: null },
+                { label: "Sì", value: true },
+                { label: "No", value: false },
+              ]}
+              onChange={(e) => {
+                setFilters((prev) => ({ ...prev, requiresAttention: { value: e.value, matchMode: FilterMatchMode.EQUALS } }));
+                options.filterCallback(e.value, options.index);
+              }}
+              placeholder="Filtra"
+              style={{ minWidth: 100 }}
+            />
           )}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
+          body={(row) => row.requiresAttention
+            ? <span title="Richiede attenzione" style={{ color: "#ef4444", fontWeight: 700, fontSize: 18 }}>&#9888;</span>
+            : null
+          }
+          style={{ width: "90px", textAlign: "center" }}
         />
-        <Column field="province" header="Provincia" filter sortable />
-        <Column
-          field="assignedVolunteersText"
-          header="Volontari assegnati"
-          body={assignedVolunteersTemplate}
-          filter
-          sortable
-          filterElement={assignedVolunteersFilterTemplate}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.CONTAINS}
-          style={{ minWidth: 160 }}
-        />
+        {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: "65px" }} />}
+        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: "90px" }} />}
+        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: "100px" }} />}
+        {col("recipient") && <Column field="recipient" header="Destinatario" sortable style={{ width: "110px" }} />}
+        {col("age") && <Column field="age" header="Età" sortable style={{ width: "55px" }} />}
+        {col("gender") && (
+          <Column
+            field="gender"
+            header="Genere"
+            filter
+            sortable
+            filterElement={makeMultiSelectFilter("gender", genderOptions, "Filtra genere")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "90px" }}
+          />
+        )}
+        {col("amputationType") && (
+          <Column
+            field="amputationType"
+            header="Tipo amputazione"
+            sortable
+            filter
+            filterElement={makeMultiSelectFilter("amputationType", amputationTypeOptions, "Filtra amputazione")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            body={(row) => (
+              <span title={row.amputationType}>{shortAmputationType(row.amputationType)}</span>
+            )}
+            style={{ width: "120px" }}
+          />
+        )}
+        {col("deviceType") && (
+          <Column
+            field="deviceType"
+            header="Device"
+            filter
+            sortable
+            filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "110px" }}
+          />
+        )}
+        {col("status") && (
+          <Column
+            field="status"
+            header="Stato"
+            filter
+            sortable
+            filterElement={statusFilterTemplate}
+            showFilterMenu={false}
+            filterField="status"
+            filterMatchMode={FilterMatchMode.IN}
+            body={statusTemplate}
+            style={{ width: "130px" }}
+          />
+        )}
+        {col("publicStatus") && (
+          <Column
+            header="Stato Pubblico"
+            body={publicStatusTemplate}
+            filter
+            field="publicStatus"
+            sortable
+            filterElement={(options) => (
+              <MultiSelect
+                value={options.value || []}
+                options={Object.keys(PUBLIC_STATUS_SEVERITY).map(s => ({ label: s, value: s }))}
+                onChange={(e) => {
+                  setFilters((prev: DataTableFilterMeta) => ({
+                    ...prev,
+                    publicStatus: { value: e.value, matchMode: FilterMatchMode.IN }
+                  }));
+                  options.filterCallback(e.value, options.index);
+                }}
+                placeholder="Filtra stato pubblico"
+                display="chip"
+                style={{ minWidth: 140 }}
+              />
+            )}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "140px" }}
+          />
+        )}
+        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "75px" }} />}
+        {col("assignedVolunteersText") && (
+          <Column
+            field="assignedVolunteersText"
+            header="Volontari"
+            body={assignedVolunteersTemplate}
+            sortable
+            style={{ width: "130px" }}
+          />
+        )}
         <Column
           field="createdAt"
           header="Creato il"
@@ -472,17 +700,21 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           dataType="date"
           filterElement={dateFilterTemplate}
           sortable
+          style={{ width: "110px" }}
         />
-        <Column
-          field="updatedAt"
-          header="Aggiornato il"
-          body={(row) => dateTemplate(row, "updatedAt")}
-          filter
-          dataType="date"
-          filterElement={dateFilterTemplate}
-          sortable
-        />
-        <Column body={actionTemplate} />
+        {col("updatedAt") && (
+          <Column
+            field="updatedAt"
+            header="Aggiornato il"
+            body={(row) => dateTemplate(row, "updatedAt")}
+            filter
+            dataType="date"
+            filterElement={dateFilterTemplate}
+            sortable
+            style={{ width: "120px" }}
+          />
+        )}
+        <Column body={actionTemplate} style={{ width: "80px" }} />
       </DataTable>
       {/* Tooltip component for PrimeReact */}
       <span style={{ display: "none" }}>
