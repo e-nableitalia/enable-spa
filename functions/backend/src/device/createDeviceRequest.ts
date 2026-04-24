@@ -200,10 +200,12 @@ export const createDeviceRequest = onCall(
       try {
         const emailDoc = {
           to: data.email,
-          template: "confermaRicezione",
-          data: {
-            firstName: data.firstName,
-            lastName: data.lastName
+          template: {
+            name: "confermaRicezione",
+            data: {
+              firstName: data.firstName,
+              lastName: data.lastName
+            },
           },
           createdAt: FieldValue.serverTimestamp()
         };
