@@ -152,7 +152,7 @@ export default function ManageableRequestsPage() {
   }, []);
 
   const deviceTypeOptions = useMemo(
-    () => [...new Set(requests.map((r) => r.devicetype).filter(Boolean))].map((v) => ({ label: v, value: v })),
+    () => [...new Set(requests.map((r) => r.devicetype).filter((v) => v && v !== "unknown"))].map((v) => ({ label: v, value: v })),
     [requests]
   );
 
@@ -326,7 +326,7 @@ export default function ManageableRequestsPage() {
       >
         {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: "7rem" }} />}
         {col("ageRange") && <Column field="ageRange" header="Fascia d'età" sortable style={{ width: "10rem" }} />}
-        {col("devicetype") && <Column field="devicetype" header="Device" sortable style={{ width: "11rem" }} />}
+        {col("devicetype") && <Column field="devicetype" header="Device" sortable body={(row) => row.devicetype && row.devicetype !== "unknown" ? row.devicetype : ""} style={{ width: "11rem" }} />}
         {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "9rem" }} />}
         {col("recipient") && <Column field="recipient" header="Destinatario" sortable style={{ width: "11rem" }} />}
         {col("relation") && <Column field="relation" header="Relazione" sortable style={{ width: "10rem" }} />}

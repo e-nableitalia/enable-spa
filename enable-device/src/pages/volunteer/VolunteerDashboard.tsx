@@ -488,7 +488,7 @@ export default function VolunteerDashboard() {
         >
           <Column field="requestNumber" header="Seq" sortable style={{ width: "6rem" }} />
           <Column field="ageRange" header="Fascia d'età" sortable />
-          <Column field="devicetype" header="Device" sortable />
+          <Column field="devicetype" header="Device" sortable body={(row) => row.devicetype && row.devicetype !== "unknown" ? row.devicetype : ""} />
           <Column field="province" header="Provincia" sortable style={{ width: "8rem" }} />
           <Column field="recipient" header="Destinatario" sortable />
           <Column field="relation" header="Relazione" sortable />
@@ -540,7 +540,7 @@ export default function VolunteerDashboard() {
             <Column field="firstName" header="Nome" sortable />
             <Column field="lastName" header="Cognome" sortable />
             <Column field="age" header="Età" sortable style={{ width: "6rem" }} />
-            <Column field="deviceType" header="Device" sortable />
+            <Column field="deviceType" header="Device" sortable body={(row) => row.deviceType && row.deviceType !== "unknown" ? row.deviceType : ""} />
             <Column field="province" header="Provincia" sortable style={{ width: "8rem" }} />
             <Column
               field="status"

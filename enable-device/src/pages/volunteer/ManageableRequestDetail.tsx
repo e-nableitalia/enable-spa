@@ -152,7 +152,7 @@ export default function ManageableRequestDetail() {
 
       <Panel header="Informazioni richiesta" style={{ marginBottom: 16 }}>
         <Field label="Numero richiesta" value={request.requestNumber} />
-        <Field label="Tipo device" value={request.devicetype} />
+        <Field label="Tipo device" value={request.devicetype && request.devicetype !== "unknown" ? request.devicetype : undefined} />
         <Field label="Fascia d'età" value={request.ageRange} />
         <Field label="Provincia" value={request.province} />
         <Field label="Stato pubblico" value={
