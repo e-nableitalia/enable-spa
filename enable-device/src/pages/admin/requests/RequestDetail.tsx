@@ -81,6 +81,11 @@ export default function RequestDetail() {
   const [publicNote, setPublicNote] = useState("");
   const [savingPublic, setSavingPublic] = useState(false);
 
+  // ── Flag "richiede attenzione" ────────────────────────────────────────────
+  const [showAttentionDialog, setShowAttentionDialog] = useState(false);
+  const [attentionNote, setAttentionNote] = useState("");
+  const [savingAttention, setSavingAttention] = useState(false);
+
   const toast = useRef<any>(null);
 
   /**
@@ -430,8 +435,7 @@ export default function RequestDetail() {
     setSavingPrivate(false);
   };
 
-  const handleSavePublic = async () => {
-    if (!id) return;
+  const handleSavePublic = async () => {    if (!id) return;
     setSavingPublic(true);
     try {
       await updateDoc(doc(db, "deviceRequests", id), {
@@ -455,6 +459,40 @@ export default function RequestDetail() {
       toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
     }
     setSavingPublic(false);
+  };
+
+  const handleSetAttention = async () => {
+    if (!id || !attentionNote.trim()) return;
+    setSavingAttention(true);
+    try {
+      await updateDoc(doc(db, "deviceRequests", id), { requiresAttention: true });
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({ requestId: id, newStatus: request?.status, note: `⚠️ Richiede attenzione: ${attentionNote.trim()}` });
+      setRequest((prev: any) => ({ ...prev, requiresAttention: true }));
+      toast.current?.show({ severity: "warn", summary: "Flag impostato", detail: "La richiesta è ora segnalata come 'richiede attenzione'.", life: 3000 });
+      setShowAttentionDialog(false);
+      setAttentionNote("");
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSavingAttention(false);
+  };
+
+  const handleClearAttention = async () => {
+    if (!id) return;
+    setSavingAttention(true);
+    try {
+      await updateDoc(doc(db, "deviceRequests", id), { requiresAttention: false });
+      const fn = httpsCallable(functions, "changeStatus");
+      await fn({ requestId: id, newStatus: request?.status, note: "✅ Flag 'richiede attenzione' rimosso." });
+      setRequest((prev: any) => ({ ...prev, requiresAttention: false }));
+      toast.current?.show({ severity: "success", summary: "Flag rimosso", detail: "La richiesta non richiede più attenzione.", life: 3000 });
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSavingAttention(false);
   };
 
   /**
@@ -538,6 +576,39 @@ export default function RequestDetail() {
   return (
     <div style={{ padding: 20 }}>
       <Toast ref={toast} />
+      {/* Dialog: segnala richiede attenzione */}
+      <Dialog
+        header="⚠️ Segnala richiede attenzione"
+        visible={showAttentionDialog}
+        style={{ width: "420px" }}
+        modal
+        onHide={() => setShowAttentionDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button label="Annulla" className="p-button-text" onClick={() => setShowAttentionDialog(false)} disabled={savingAttention} />
+            <Button
+              label="Conferma"
+              icon="pi pi-exclamation-triangle"
+              severity="warning"
+              onClick={handleSetAttention}
+              loading={savingAttention}
+              disabled={!attentionNote.trim()}
+            />
+          </div>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <span>Inserisci una nota obbligatoria che descriva il motivo dell'attenzione richiesta.</span>
+          <InputTextarea
+            value={attentionNote}
+            onChange={(e) => setAttentionNote(e.target.value)}
+            rows={4}
+            placeholder="Motivo attenzione..."
+            style={{ width: "100%" }}
+            autoFocus
+          />
+        </div>
+      </Dialog>
       <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />
       <h2>Request Detail</h2>
 
@@ -824,6 +895,28 @@ export default function RequestDetail() {
                 ) : (
                   <span style={{ marginLeft: 8 }}>-</span>
                 )}
+              </div>
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <strong>Richiede attenzione:</strong>
+                {request.requiresAttention
+                  ? <Badge value="⚠️ Sì" severity="danger" />
+                  : <span style={{ color: "#888" }}>No</span>
+                }
+                {request.requiresAttention
+                  ? <Button
+                      label="Rimuovi flag"
+                      icon="pi pi-times"
+                      className="p-button-text p-button-sm p-button-secondary"
+                      loading={savingAttention}
+                      onClick={handleClearAttention}
+                    />
+                  : <Button
+                      label="Segnala"
+                      icon="pi pi-exclamation-triangle"
+                      className="p-button-text p-button-sm p-button-warning"
+                      onClick={() => { setAttentionNote(""); setShowAttentionDialog(true); }}
+                    />
+                }
               </div>
             </div>
             <div style={{ flex: 1 }}>

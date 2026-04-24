@@ -210,6 +210,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
     requestNumber: { value: null, matchMode: FilterMatchMode.CONTAINS },
     createdAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
     updatedAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
+    requiresAttention: { value: null, matchMode: FilterMatchMode.EQUALS },
   };
 
   const loadFilters = (): DataTableFilterMeta => {
@@ -582,6 +583,35 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           )}
         />
         <Column field="seqId" header="ID" sortable style={{ width: "55px" }} />
+        <Column
+          field="requiresAttention"
+          header="⚠️ Attenzione"
+          sortable
+          filter
+          showFilterMenu={false}
+          filterMatchMode={FilterMatchMode.EQUALS}
+          filterElement={(options) => (
+            <Dropdown
+              value={options.value}
+              options={[
+                { label: "Tutti", value: null },
+                { label: "Sì", value: true },
+                { label: "No", value: false },
+              ]}
+              onChange={(e) => {
+                setFilters((prev) => ({ ...prev, requiresAttention: { value: e.value, matchMode: FilterMatchMode.EQUALS } }));
+                options.filterCallback(e.value, options.index);
+              }}
+              placeholder="Filtra"
+              style={{ minWidth: 100 }}
+            />
+          )}
+          body={(row) => row.requiresAttention
+            ? <span title="Richiede attenzione" style={{ color: "#ef4444", fontWeight: 700, fontSize: 18 }}>&#9888;</span>
+            : null
+          }
+          style={{ width: "90px", textAlign: "center" }}
+        />
         {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: "65px" }} />}
         {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: "90px" }} />}
         {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: "100px" }} />}

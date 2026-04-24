@@ -90,6 +90,11 @@ export interface deviceRequestData {
     validatedAt?: any; // Firestore Timestamp
     /** UID dell'admin che ha effettuato la validazione. */
     validatedBy?: string;
+    /**
+     * Flag "richiede attenzione": se true la richiesta è segnalata come
+     * bisognosa di attenzione da parte degli admin. Assente o false = normale.
+     */
+    requiresAttention?: boolean;
 }
 
 export interface privateDeviceRequestData {

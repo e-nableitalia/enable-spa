@@ -22,6 +22,7 @@ import AdminStats from "../../pages/admin/AdminStats";
 import RequestDetail from "../../pages/admin/requests/RequestDetail";
 import AdminMaintenanceRequests from "../../pages/admin/requests/AdminMaintenanceRequests";
 import AdminValidate from "../../pages/admin/requests/AdminValidate";
+import AdminAttention from "../../pages/admin/requests/AdminAttention";
 
 import logo from "../../assets/logo.png";
 import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
@@ -168,6 +169,8 @@ useEffect(() => {
     PUBLIC_STATUS_GROUPS["annullate / non completabili"].includes(r.status)
   );
 
+  const attentionRequests = requests.filter((r) => r.requiresAttention === true);
+
   // Filtra i volontari non attivi
   const pendingVolunteers = volunteers.filter(v => !v.active);
 
@@ -198,7 +201,7 @@ useEffect(() => {
         },
         {
           label: `In attesa volontario (${pendingRequests.length})`,
-          icon: "pi pi-clock",
+          icon: "pi pi-user",
           command: () => navigate("/admin/requests/pending"),
         },
         {
@@ -222,10 +225,11 @@ useEffect(() => {
           command: () => navigate("/admin/requests/cancelled"),
         },
         {
-          label: "Manutenzione (Import CSV)",
-          icon: "pi pi-wrench",
-          command: () => navigate("/admin/requests/maintenance"),
+          label: `Richiede attenzione (${attentionRequests.length})`,
+          icon: "pi pi-exclamation-triangle",
+          command: () => navigate("/admin/requests/attention"),
         },
+        // { label: "Manutenzione (Import CSV)", icon: "pi pi-wrench", command: () => navigate("/admin/requests/maintenance") },
       ],
     },
     {
@@ -418,6 +422,7 @@ useEffect(() => {
             <Route path="requests/shipping" element={<AdminShipping requests={shippingRequests} />} />
             <Route path="requests/completed" element={<AdminCompleted requests={completedRequests} />} />
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
+            <Route path="requests/attention" element={<AdminAttention requests={attentionRequests} />} />
             <Route path="requests/maintenance" element={<AdminMaintenanceRequests />} />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
