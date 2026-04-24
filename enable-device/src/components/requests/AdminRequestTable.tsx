@@ -15,10 +15,9 @@ import { useRef, useState, useEffect, useMemo } from "react";
 import { Toast } from "primereact/toast";
 import { Dialog } from "primereact/dialog";
 import { MultiSelect } from "primereact/multiselect";
-import { REQUEST_STATUSES } from "../../helpers/requestStatus";
+import { REQUEST_STATUSES, REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType } from "../../helpers/requestStatus";
 import { FilterMatchMode } from "primereact/api";
 import type { DataTableFilterMeta } from "primereact/datatable";
-import { REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType } from "../../helpers/requestStatus";
 
 interface AdminRequestTableProps {
   requests: any[];
@@ -240,6 +239,40 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
   }, [filters]);
 
   const SORT_KEY = "adminRequestTableSort";
+  const COLS_KEY = "adminRequestTableCols";
+
+  const TOGGLEABLE_COLS = [
+    { key: "requestNumber",          label: "Seq" },
+    { key: "firstName",              label: "Nome" },
+    { key: "lastName",               label: "Cognome" },
+    { key: "recipient",              label: "Destinatario" },
+    { key: "age",                    label: "Età" },
+    { key: "gender",                 label: "Genere" },
+    { key: "amputationType",         label: "Tipo amputazione" },
+    { key: "deviceType",             label: "Device" },
+    { key: "status",                 label: "Stato" },
+    { key: "publicStatus",           label: "Stato Pubblico" },
+    { key: "province",               label: "Provincia" },
+    { key: "assignedVolunteersText", label: "Volontari" },
+    { key: "updatedAt",              label: "Aggiornato il" },
+  ];
+
+  const loadVisibleCols = (): string[] => {
+    try {
+      const saved = sessionStorage.getItem(COLS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return TOGGLEABLE_COLS.map((c) => c.key);
+  };
+
+  const [visibleCols, setVisibleCols] = useState<string[]>(loadVisibleCols);
+
+  const handleVisibleCols = (keys: string[]) => {
+    setVisibleCols(keys);
+    try { sessionStorage.setItem(COLS_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
+  };
+
+  const col = (key: string) => visibleCols.includes(key);
   const loadSort = (): { field: string; order: 1 | -1 } => {
     try {
       const saved = sessionStorage.getItem(SORT_KEY);
@@ -433,12 +466,26 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           </span>
         }
         end={
-          <Button
-            label="Bulk Change"
-            icon="pi pi-pencil"
-            onClick={() => setShowBulkDialog(true)}
-            disabled={selectedRows.length === 0}
-          />
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <MultiSelect
+              value={visibleCols}
+              options={TOGGLEABLE_COLS}
+              optionLabel="label"
+              optionValue="key"
+              onChange={(e) => handleVisibleCols(e.value)}
+              placeholder="Colonne visibili"
+              maxSelectedLabels={0}
+              selectedItemsLabel="{0} colonne visibili"
+              display="chip"
+              style={{ minWidth: 200 }}
+            />
+            <Button
+              label="Bulk Change"
+              icon="pi pi-pencil"
+              onClick={() => setShowBulkDialog(true)}
+              disabled={selectedRows.length === 0}
+            />
+          </div>
         }
       />
       {/* Search bar testo libero */}
@@ -509,6 +556,8 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
         selection={selectedRows}
         onSelectionChange={e => setSelectedRows(e.value as RequestRow[])}
         dataKey="id"
+        scrollable
+        scrollHeight="flex"
       >
         <Column selectionMode="multiple" style={{ width: "3rem" }} />
         <Column
@@ -532,86 +581,103 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
         />
           )}
         />
-        <Column field="seqId" header="ID" sortable />
-        <Column field="requestNumber" header="Seq" sortable />
-        <Column field="firstName" header="Nome" sortable />
-        <Column field="lastName" header="Cognome" sortable />
-        <Column field="recipient" header="Destinatario" sortable />
-        <Column field="age" header="Età" sortable />
-        <Column
-          field="gender"
-          header="Genere"
-          filter
-          sortable
-          filterElement={makeMultiSelectFilter("gender", genderOptions, "Filtra genere")}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
-        />
-        <Column
-          field="amputationType"
-          header="Tipo amputazione"
-          sortable
-          filter
-          filterElement={makeMultiSelectFilter("amputationType", amputationTypeOptions, "Filtra amputazione")}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
-          body={(row) => (
-            <span title={row.amputationType}>{shortAmputationType(row.amputationType)}</span>
-          )}
-        />
-        <Column
-          field="deviceType"
-          header="Device"
-          filter
-          sortable
-          filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
-        />
-        <Column
-          field="status"
-          header="Stato"
-          filter
-          sortable
-          filterElement={statusFilterTemplate}
-          showFilterMenu={false}
-          filterField="status"
-          filterMatchMode={FilterMatchMode.IN}
-          body={statusTemplate}
-        />
-        <Column
-          header="Stato Pubblico"
-          body={publicStatusTemplate}
-          filter
-          field="publicStatus"
-          sortable
-          filterElement={(options) => (
-        <MultiSelect
-          value={options.value || []}
-          options={Object.keys(PUBLIC_STATUS_SEVERITY).map(s => ({ label: s, value: s }))}
-          onChange={(e) => {
-            setFilters((prev: DataTableFilterMeta) => ({
-          ...prev,
-          publicStatus: { value: e.value, matchMode: FilterMatchMode.IN }
-            }));
-            options.filterCallback(e.value, options.index);
-          }}
-          placeholder="Filtra stato pubblico"
-          display="chip"
-          style={{ minWidth: 180 }}
-        />
-          )}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
-        />
-        <Column field="province" header="Provincia" sortable />
-        <Column
-          field="assignedVolunteersText"
-          header="Volontari"
-          body={assignedVolunteersTemplate}
-          sortable
-          style={{ minWidth: 160 }}
-        />
+        <Column field="seqId" header="ID" sortable style={{ width: "55px" }} />
+        {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: "65px" }} />}
+        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: "90px" }} />}
+        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: "100px" }} />}
+        {col("recipient") && <Column field="recipient" header="Destinatario" sortable style={{ width: "110px" }} />}
+        {col("age") && <Column field="age" header="Età" sortable style={{ width: "55px" }} />}
+        {col("gender") && (
+          <Column
+            field="gender"
+            header="Genere"
+            filter
+            sortable
+            filterElement={makeMultiSelectFilter("gender", genderOptions, "Filtra genere")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "90px" }}
+          />
+        )}
+        {col("amputationType") && (
+          <Column
+            field="amputationType"
+            header="Tipo amputazione"
+            sortable
+            filter
+            filterElement={makeMultiSelectFilter("amputationType", amputationTypeOptions, "Filtra amputazione")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            body={(row) => (
+              <span title={row.amputationType}>{shortAmputationType(row.amputationType)}</span>
+            )}
+            style={{ width: "120px" }}
+          />
+        )}
+        {col("deviceType") && (
+          <Column
+            field="deviceType"
+            header="Device"
+            filter
+            sortable
+            filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "110px" }}
+          />
+        )}
+        {col("status") && (
+          <Column
+            field="status"
+            header="Stato"
+            filter
+            sortable
+            filterElement={statusFilterTemplate}
+            showFilterMenu={false}
+            filterField="status"
+            filterMatchMode={FilterMatchMode.IN}
+            body={statusTemplate}
+            style={{ width: "130px" }}
+          />
+        )}
+        {col("publicStatus") && (
+          <Column
+            header="Stato Pubblico"
+            body={publicStatusTemplate}
+            filter
+            field="publicStatus"
+            sortable
+            filterElement={(options) => (
+              <MultiSelect
+                value={options.value || []}
+                options={Object.keys(PUBLIC_STATUS_SEVERITY).map(s => ({ label: s, value: s }))}
+                onChange={(e) => {
+                  setFilters((prev: DataTableFilterMeta) => ({
+                    ...prev,
+                    publicStatus: { value: e.value, matchMode: FilterMatchMode.IN }
+                  }));
+                  options.filterCallback(e.value, options.index);
+                }}
+                placeholder="Filtra stato pubblico"
+                display="chip"
+                style={{ minWidth: 140 }}
+              />
+            )}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "140px" }}
+          />
+        )}
+        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "75px" }} />}
+        {col("assignedVolunteersText") && (
+          <Column
+            field="assignedVolunteersText"
+            header="Volontari"
+            body={assignedVolunteersTemplate}
+            sortable
+            style={{ width: "130px" }}
+          />
+        )}
         <Column
           field="createdAt"
           header="Creato il"
@@ -620,17 +686,21 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           dataType="date"
           filterElement={dateFilterTemplate}
           sortable
+          style={{ width: "110px" }}
         />
-        <Column
-          field="updatedAt"
-          header="Aggiornato il"
-          body={(row) => dateTemplate(row, "updatedAt")}
-          filter
-          dataType="date"
-          filterElement={dateFilterTemplate}
-          sortable
-        />
-        <Column body={actionTemplate} />
+        {col("updatedAt") && (
+          <Column
+            field="updatedAt"
+            header="Aggiornato il"
+            body={(row) => dateTemplate(row, "updatedAt")}
+            filter
+            dataType="date"
+            filterElement={dateFilterTemplate}
+            sortable
+            style={{ width: "120px" }}
+          />
+        )}
+        <Column body={actionTemplate} style={{ width: "80px" }} />
       </DataTable>
       {/* Tooltip component for PrimeReact */}
       <span style={{ display: "none" }}>

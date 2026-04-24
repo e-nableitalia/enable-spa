@@ -21,6 +21,7 @@ import PendingVolunteers from "../../pages/admin/volunteers/PendingVolunteers";
 import AdminStats from "../../pages/admin/AdminStats";
 import RequestDetail from "../../pages/admin/requests/RequestDetail";
 import AdminMaintenanceRequests from "../../pages/admin/requests/AdminMaintenanceRequests";
+import AdminValidate from "../../pages/admin/requests/AdminValidate";
 
 import logo from "../../assets/logo.png";
 import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
@@ -140,6 +141,9 @@ useEffect(() => {
 
   // ===== CLASSIFICAZIONE RICHIESTE =====
 
+  // Richieste da validare: status "inviata" — non ancora visibili ai volontari
+  const validateRequests = requests.filter((r) => r.status === "inviata");
+
   const triageRequests = requests.filter((r) =>
     PUBLIC_STATUS_GROUPS["da gestire"].includes(r.status)
   );
@@ -181,6 +185,11 @@ useEffect(() => {
           label: `Tutte (${requests.length})`,
           icon: "pi pi-list", // elenco
           command: () => navigate("/admin"),
+        },
+        {
+          label: `Da validare (${validateRequests.length})`,
+          icon: "pi pi-clock",
+          command: () => navigate("/admin/requests/validate"),
         },
         {
           label: `Da gestire (${triageRequests.length})`,
@@ -402,6 +411,7 @@ useEffect(() => {
         >
           <Routes>
             <Route path="requests" element={<AdminAll requests={requests} />} />
+            <Route path="requests/validate" element={<AdminValidate requests={validateRequests} />} />
             <Route path="requests/triage" element={<AdminTriage requests={triageRequests} />} />
             <Route path="requests/pending" element={<AdminPending requests={pendingRequests} />} />
             <Route path="requests/production" element={<AdminProduction requests={productionRequests} />} />

@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDocs, collection } from "firebase/firestore";
+import { getDocs, collection, getDoc, doc, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
+import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { MultiSelect } from "primereact/multiselect";
@@ -12,12 +13,27 @@ import { Button } from "primereact/button";
 
 const SESSION_KEY = "manageableRequestsFilters";
 const SORT_KEY = "manageableRequestsSort";
+const COLS_KEY = "manageableRequestsCols";
+
+const TOGGLEABLE_COLS = [
+  { key: "requestNumber",    label: "Seq" },
+  { key: "ageRange",         label: "Fascia d'età" },
+  { key: "devicetype",       label: "Device" },
+  { key: "province",         label: "Provincia" },
+  { key: "recipient",        label: "Destinatario" },
+  { key: "relation",         label: "Relazione" },
+  { key: "descriptionPublic",label: "Descrizione" },
+  { key: "preferencesPublic",label: "Preferenze" },
+  { key: "createdAt",        label: "Data creazione" },
+];
 
 const defaultFilters: DataTableFilterMeta = {
   requestNumber: { value: null, matchMode: FilterMatchMode.CONTAINS },
-  ageRange: { value: null, matchMode: FilterMatchMode.CONTAINS },
+  ageRange: { value: null, matchMode: FilterMatchMode.IN },
   devicetype: { value: null, matchMode: FilterMatchMode.IN },
   province: { value: null, matchMode: FilterMatchMode.CONTAINS },
+  recipient: { value: null, matchMode: FilterMatchMode.CONTAINS },
+  relation: { value: null, matchMode: FilterMatchMode.CONTAINS },
 };
 
 function loadFilters(): DataTableFilterMeta {
@@ -63,23 +79,71 @@ export default function ManageableRequestsPage() {
   const [sortField, setSortField] = useState<string>(sortInit.field);
   const [sortOrder, setSortOrder] = useState<1 | -1>(sortInit.order);
 
-  // Search bar state (text fields)
+  const loadVisibleCols = (): string[] => {
+    try {
+      const saved = sessionStorage.getItem(COLS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return TOGGLEABLE_COLS.map((c) => c.key);
+  };
+  const [visibleCols, setVisibleCols] = useState<string[]>(loadVisibleCols);
+  const handleVisibleCols = (keys: string[]) => {
+    setVisibleCols(keys);
+    try { sessionStorage.setItem(COLS_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
+  };
+  const col = (key: string) => visibleCols.includes(key);
   const [searchSeq, setSearchSeq] = useState<string>(
     (defaultFilters.requestNumber as any)?.value ?? ""
   );
-  const [searchAgeRange, setSearchAgeRange] = useState<string>(
-    (defaultFilters.ageRange as any)?.value ?? ""
+  const [searchAgeRange, setSearchAgeRange] = useState<string[]>(
+    (defaultFilters.ageRange as any)?.value ?? []
+  );
+  const [searchDeviceType, setSearchDeviceType] = useState<string[]>(
+    (defaultFilters.devicetype as any)?.value ?? []
   );
   const [searchProvince, setSearchProvince] = useState<string>(
     (defaultFilters.province as any)?.value ?? ""
+  );
+  const [searchRecipient, setSearchRecipient] = useState<string>(
+    (defaultFilters.recipient as any)?.value ?? ""
+  );
+  const [searchRelation, setSearchRelation] = useState<string>(
+    (defaultFilters.relation as any)?.value ?? ""
   );
 
   useEffect(() => {
     const fetchRequests = async () => {
       try {
-        const snap = await getDocs(collection(db, "publicDeviceRequests"));
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setRequests(all.filter((r: any) => r.publicStatus === "da gestire"));
+        const daGestireStatuses = PUBLIC_STATUS_GROUPS["da gestire"];
+        const q = query(
+          collection(db, "deviceRequests"),
+          where("assignedVolunteers", "==", []),
+          where("status", "in", daGestireStatuses)
+        );
+        const snap = await getDocs(q);
+        const base = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        // Enrich with public fields (requestNumber, ageRange, devicetype, province, publicStatus)
+        const enriched = await Promise.all(
+          base.map(async (r: any) => {
+            try {
+              const pubSnap = await getDoc(doc(db, "publicDeviceRequests", r.id));
+              if (pubSnap.exists()) {
+                const pub = pubSnap.data();
+                return {
+                  ...r,
+                  requestNumber: pub.requestNumber ?? null,
+                  ageRange: pub.ageRange ?? null,
+                  devicetype: pub.devicetype ?? null,
+                  province: pub.province ?? r.province ?? null,
+                  publicStatus: pub.publicStatus ?? null,
+                };
+              }
+            } catch { /* permission denied or missing — skip */ }
+            return r;
+          })
+        );
+        setRequests(enriched);
       } finally {
         setLoading(false);
       }
@@ -89,6 +153,11 @@ export default function ManageableRequestsPage() {
 
   const deviceTypeOptions = useMemo(
     () => [...new Set(requests.map((r) => r.devicetype).filter(Boolean))].map((v) => ({ label: v, value: v })),
+    [requests]
+  );
+
+  const ageRangeOptions = useMemo(
+    () => [...new Set(requests.map((r) => r.ageRange).filter(Boolean))].sort().map((v) => ({ label: v, value: v })),
     [requests]
   );
 
@@ -154,13 +223,35 @@ export default function ManageableRequestsPage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: "0.85em", fontWeight: 500 }}>Fascia d'età</label>
-          <InputText
+          <MultiSelect
             value={searchAgeRange}
+            options={ageRangeOptions}
             onChange={(e) => {
-              setSearchAgeRange(e.target.value);
-              setTextFilter("ageRange", e.target.value);
+              setSearchAgeRange(e.value ?? []);
+              const updated = { ...filters, ageRange: { value: e.value?.length ? e.value : null, matchMode: FilterMatchMode.IN } };
+              setFilters(updated);
+              sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));
             }}
-            placeholder="Cerca fascia..."
+            placeholder="Fascia d'età"
+            maxSelectedLabels={1}
+            showClear
+            style={{ width: 160 }}
+          />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: "0.85em", fontWeight: 500 }}>Device</label>
+          <MultiSelect
+            value={searchDeviceType}
+            options={deviceTypeOptions}
+            onChange={(e) => {
+              setSearchDeviceType(e.value ?? []);
+              const updated = { ...filters, devicetype: { value: e.value?.length ? e.value : null, matchMode: FilterMatchMode.IN } };
+              setFilters(updated);
+              sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+            }}
+            placeholder="Device"
+            maxSelectedLabels={1}
+            showClear
             style={{ width: 160 }}
           />
         </div>
@@ -176,6 +267,30 @@ export default function ManageableRequestsPage() {
             style={{ width: 140 }}
           />
         </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: "0.85em", fontWeight: 500 }}>Destinatario</label>
+          <InputText
+            value={searchRecipient}
+            onChange={(e) => {
+              setSearchRecipient(e.target.value);
+              setTextFilter("recipient", e.target.value);
+            }}
+            placeholder="Cerca destinatario..."
+            style={{ width: 160 }}
+          />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: "0.85em", fontWeight: 500 }}>Relazione</label>
+          <InputText
+            value={searchRelation}
+            onChange={(e) => {
+              setSearchRelation(e.target.value);
+              setTextFilter("relation", e.target.value);
+            }}
+            placeholder="Cerca relazione..."
+            style={{ width: 140 }}
+          />
+        </div>
         <Button
           icon="pi pi-filter-slash"
           label="Resetta filtri"
@@ -184,10 +299,25 @@ export default function ManageableRequestsPage() {
           onClick={() => {
             setFilters(defaultFilters);
             setSearchSeq("");
-            setSearchAgeRange("");
+            setSearchAgeRange([]);
+            setSearchDeviceType([]);
             setSearchProvince("");
+            setSearchRecipient("");
+            setSearchRelation("");
             sessionStorage.removeItem(SESSION_KEY);
           }}
+        />
+        <MultiSelect
+          value={visibleCols}
+          options={TOGGLEABLE_COLS}
+          optionLabel="label"
+          optionValue="key"
+          onChange={(e) => handleVisibleCols(e.value)}
+          placeholder="Colonne visibili"
+          maxSelectedLabels={0}
+          selectedItemsLabel="{0} colonne visibili"
+          display="chip"
+          style={{ minWidth: 200, alignSelf: "flex-end" }}
         />
       </div>
 
@@ -200,7 +330,6 @@ export default function ManageableRequestsPage() {
         currentPageReportTemplate="Mostrati {first}-{last} di {totalRecords}"
         filters={filters}
         onFilter={handleFilter}
-        filterDisplay="row"
         sortField={sortField}
         sortOrder={sortOrder}
         onSort={handleSort}
@@ -209,24 +338,45 @@ export default function ManageableRequestsPage() {
         rowHover
         style={{ cursor: "pointer" }}
       >
-        <Column field="requestNumber" header="Seq" sortable filter filterPlaceholder="Seq" style={{ width: "7rem" }} />
-        <Column field="ageRange" header="Fascia d'età" sortable filter filterPlaceholder="Fascia" />
-        <Column
-          field="devicetype"
-          header="Device"
-          sortable
-          filter
-          filterElement={makeMultiSelectFilter("devicetype", deviceTypeOptions, "Device")}
-          showFilterMenu={false}
-        />
-        <Column field="province" header="Provincia" sortable filter filterPlaceholder="Provincia" style={{ width: "9rem" }} />
-        <Column
-          field="createdAt"
-          header="Data creazione"
-          sortable
-          body={(row) => formatDate(row.createdAt)}
-          style={{ width: "11rem" }}
-        />
+        {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: "7rem" }} />}
+        {col("ageRange") && <Column field="ageRange" header="Fascia d'età" sortable style={{ width: "10rem" }} />}
+        {col("devicetype") && <Column field="devicetype" header="Device" sortable style={{ width: "11rem" }} />}
+        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "9rem" }} />}
+        {col("recipient") && <Column field="recipient" header="Destinatario" sortable style={{ width: "11rem" }} />}
+        {col("relation") && <Column field="relation" header="Relazione" sortable style={{ width: "10rem" }} />}
+        {col("descriptionPublic") && (
+          <Column
+            field="descriptionPublic"
+            header="Descrizione"
+            sortable
+            body={(row) => row.descriptionPublic
+              ? <span title={row.descriptionPublic}>{row.descriptionPublic.length > 60 ? row.descriptionPublic.slice(0, 60) + "…" : row.descriptionPublic}</span>
+              : "-"
+            }
+            style={{ width: "16rem" }}
+          />
+        )}
+        {col("preferencesPublic") && (
+          <Column
+            field="preferencesPublic"
+            header="Preferenze"
+            sortable
+            body={(row) => row.preferencesPublic
+              ? <span title={row.preferencesPublic}>{row.preferencesPublic.length > 50 ? row.preferencesPublic.slice(0, 50) + "…" : row.preferencesPublic}</span>
+              : "-"
+            }
+            style={{ width: "14rem" }}
+          />
+        )}
+        {col("createdAt") && (
+          <Column
+            field="createdAt"
+            header="Data creazione"
+            sortable
+            body={(row) => formatDate(row.createdAt)}
+            style={{ width: "11rem" }}
+          />
+        )}
         <Column
           header=""
           style={{ width: "5rem", textAlign: "center" }}

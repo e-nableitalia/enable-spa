@@ -48,6 +48,22 @@ export default function ManageableRequestDetail() {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  async function getUserFullName(userId: string): Promise<string> {
+    if (!userId || userId.includes("/")) return userId;
+    try {
+      const profileRef = doc(db, "users", userId, "private", "profile");
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        const data = profileSnap.data();
+        const firstName = data.firstName || "";
+        const lastName = data.lastName || "";
+        const fullName = `${firstName} ${lastName}`.trim();
+        return fullName || userId;
+      }
+    } catch { /* skip */ }
+    return userId;
+  }
+
   const loadData = useCallback(async () => {
     if (!id) return;
     try {
@@ -56,14 +72,37 @@ export default function ManageableRequestDetail() {
         setRequest(null);
         return;
       }
-      setRequest({ id: publicSnap.id, ...publicSnap.data() });
+      const publicData = { id: publicSnap.id, ...publicSnap.data() };
+
+      // Load public operational fields stored in deviceRequests
+      try {
+        const reqSnap = await getDoc(doc(db, "deviceRequests", id));
+        if (reqSnap.exists()) {
+          const d = reqSnap.data();
+          (publicData as Record<string, unknown>).recipient = d.recipient ?? null;
+          (publicData as Record<string, unknown>).relation = d.relation ?? null;
+          (publicData as Record<string, unknown>).descriptionPublic = d.descriptionPublic ?? null;
+          (publicData as Record<string, unknown>).preferencesPublic = d.preferencesPublic ?? null;
+        }
+      } catch {
+        // not accessible — skip
+      }
+
+      setRequest(publicData);
 
       // Try loading events (may fail if the volunteer isn't assigned - handled silently)
       try {
         const eventsSnap = await getDocs(
           query(collection(db, "deviceRequests", id, "events"), orderBy("timestamp", "desc"))
         );
-        setEvents(eventsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const rawEvents = eventsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const enriched = await Promise.all(
+          rawEvents.map(async (ev: any) => ({
+            ...ev,
+            userName: ev.createdBy ? await getUserFullName(ev.createdBy) : "-",
+          }))
+        );
+        setEvents(enriched);
       } catch {
         setEvents([]);
       }
@@ -126,6 +165,25 @@ export default function ManageableRequestDetail() {
         <Field label="Aggiornata il" value={formatDate(request.updatedAt)} />
       </Panel>
 
+      {(request.recipient || request.relation || request.descriptionPublic || request.preferencesPublic) && (
+        <Panel header="Informazioni pubbliche" style={{ marginBottom: 16 }}>
+          {request.recipient && <Field label="Destinatario" value={request.recipient} />}
+          {request.relation && <Field label="Relazione" value={request.relation} />}
+          {request.descriptionPublic && (
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 600 }}>Descrizione:</span>
+              <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{request.descriptionPublic}</div>
+            </div>
+          )}
+          {request.preferencesPublic && (
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 600 }}>Preferenze:</span>
+              <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{request.preferencesPublic}</div>
+            </div>
+          )}
+        </Panel>
+      )}
+
       {events.length > 0 && (
         <Panel header={`Storico eventi (${events.length})`} toggleable style={{ marginBottom: 16 }}>
           <DataTable value={events} size="small">
@@ -135,7 +193,8 @@ export default function ManageableRequestDetail() {
               body={(row) => formatDate(row.timestamp)}
               style={{ width: "13rem" }}
             />
-            <Column field="status" header="Stato" />
+            <Column field="status" header="Stato" body={(row) => row.toStatus ?? row.status ?? "-"} style={{ width: "12rem" }} />
+            <Column field="userName" header="Inserito da" style={{ width: "12rem" }} />
             <Column field="note" header="Nota" />
           </DataTable>
         </Panel>

@@ -20,6 +20,33 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
 
   console.log("Rendering RequestTable with requests:", requests);
 
+  const TOGGLEABLE_COLS = [
+    { key: "firstName",   label: "Nome" },
+    { key: "lastName",    label: "Cognome" },
+    { key: "age",         label: "Età" },
+    { key: "province",    label: "Provincia" },
+    { key: "deviceType",  label: "Device" },
+    { key: "status",      label: "Stato" },
+    { key: "publicStatus",label: "Stato Pubblico" },
+    { key: "createdAt",   label: "Creata" },
+    { key: "updatedAt",   label: "Modificata" },
+  ];
+
+  const COLS_KEY = sessionKey + "_cols";
+  const loadVisibleCols = (): string[] => {
+    try {
+      const saved = sessionStorage.getItem(COLS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return TOGGLEABLE_COLS.map((c) => c.key);
+  };
+  const [visibleCols, setVisibleCols] = useState<string[]>(loadVisibleCols);
+  const handleVisibleCols = (keys: string[]) => {
+    setVisibleCols(keys);
+    try { sessionStorage.setItem(COLS_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
+  };
+  const col = (key: string) => visibleCols.includes(key);
+
   const defaultFilters: DataTableFilterMeta = {
     firstName: { value: null, matchMode: FilterMatchMode.CONTAINS },
     lastName: { value: null, matchMode: FilterMatchMode.CONTAINS },
@@ -154,6 +181,20 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
 
   return (
     <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <MultiSelect
+          value={visibleCols}
+          options={TOGGLEABLE_COLS}
+          optionLabel="label"
+          optionValue="key"
+          onChange={(e) => handleVisibleCols(e.value)}
+          placeholder="Colonne visibili"
+          maxSelectedLabels={0}
+          selectedItemsLabel="{0} colonne visibili"
+          display="chip"
+          style={{ minWidth: 200 }}
+        />
+      </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
         <span className="p-input-icon-left" style={{ flex: "1 1 160px" }}>
           <i className="pi pi-search" style={{ left: "0.75rem" }} />
@@ -207,58 +248,73 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
         sortOrder={sortOrder}
         onSort={handleSort}
       >
-        <Column field="firstName" header="Nome" sortable />
-        <Column field="lastName" header="Cognome" sortable />
-        <Column field="age" header="Età" sortable />
-        <Column field="province" header="Provincia" sortable />
-        <Column
-          field="deviceType"
-          header="Device"
-          sortable
-          filter
-          filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
-        />
-        <Column
-          field="status"
-          header="Stato"
-          sortable
-          body={internalStatusTemplate}
-          filter
-          filterElement={makeMultiSelectFilter("status", statusOptions, "Filtra stato")}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
-        />
-        <Column
-          header="Stato Pubblico"
-          sortable
-          body={statusTemplate}
-          filter
-          field="publicStatus"
-          filterElement={makeMultiSelectFilter("publicStatus", publicStatusOptions, "Filtra stato pubblico")}
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.IN}
-        />
-        <Column
-          header="Creata"
-          sortable
-          body={(row) => dateTemplate(row, "createdAt")}
-          filter
-          field="createdAt"
-          dataType="date"
-          filterElement={dateFilterTemplate}
-        />
-        <Column
-          header="Modificata"
-          sortable
-          body={(row) => dateTemplate(row, "updatedAt")}
-          filter
-          field="updatedAt"
-          dataType="date"
-          filterElement={dateFilterTemplate}
-        />
-        <Column body={actionTemplate} />
+        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: "100px" }} />}
+        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: "110px" }} />}
+        {col("age") && <Column field="age" header="Età" sortable style={{ width: "60px" }} />}
+        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "90px" }} />}
+        {col("deviceType") && (
+          <Column
+            field="deviceType"
+            header="Device"
+            sortable
+            filter
+            filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "130px" }}
+          />
+        )}
+        {col("status") && (
+          <Column
+            field="status"
+            header="Stato"
+            sortable
+            body={internalStatusTemplate}
+            filter
+            filterElement={makeMultiSelectFilter("status", statusOptions, "Filtra stato")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "130px" }}
+          />
+        )}
+        {col("publicStatus") && (
+          <Column
+            header="Stato Pubblico"
+            sortable
+            body={statusTemplate}
+            filter
+            field="publicStatus"
+            filterElement={makeMultiSelectFilter("publicStatus", publicStatusOptions, "Filtra stato pubblico")}
+            showFilterMenu={false}
+            filterMatchMode={FilterMatchMode.IN}
+            style={{ width: "150px" }}
+          />
+        )}
+        {col("createdAt") && (
+          <Column
+            header="Creata"
+            sortable
+            body={(row) => dateTemplate(row, "createdAt")}
+            filter
+            field="createdAt"
+            dataType="date"
+            filterElement={dateFilterTemplate}
+            style={{ width: "110px" }}
+          />
+        )}
+        {col("updatedAt") && (
+          <Column
+            header="Modificata"
+            sortable
+            body={(row) => dateTemplate(row, "updatedAt")}
+            filter
+            field="updatedAt"
+            dataType="date"
+            filterElement={dateFilterTemplate}
+            style={{ width: "120px" }}
+          />
+        )}
+        <Column body={actionTemplate} style={{ width: "90px" }} />
       </DataTable>
     </div>
   );
