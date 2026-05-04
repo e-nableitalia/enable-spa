@@ -21,6 +21,8 @@ import PendingVolunteers from "../../pages/admin/volunteers/PendingVolunteers";
 import AdminStats from "../../pages/admin/AdminStats";
 import RequestDetail from "../../pages/admin/requests/RequestDetail";
 import AdminMaintenanceRequests from "../../pages/admin/requests/AdminMaintenanceRequests";
+import AdminValidate from "../../pages/admin/requests/AdminValidate";
+import AdminAttention from "../../pages/admin/requests/AdminAttention";
 
 import logo from "../../assets/logo.png";
 import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
@@ -140,6 +142,9 @@ useEffect(() => {
 
   // ===== CLASSIFICAZIONE RICHIESTE =====
 
+  // Richieste da validare: status "inviata" — non ancora visibili ai volontari
+  const validateRequests = requests.filter((r) => r.status === "inviata");
+
   const triageRequests = requests.filter((r) =>
     PUBLIC_STATUS_GROUPS["da gestire"].includes(r.status)
   );
@@ -164,6 +169,8 @@ useEffect(() => {
     PUBLIC_STATUS_GROUPS["annullate / non completabili"].includes(r.status)
   );
 
+  const attentionRequests = requests.filter((r) => r.requiresAttention === true);
+
   // Filtra i volontari non attivi
   const pendingVolunteers = volunteers.filter(v => !v.active);
 
@@ -183,13 +190,18 @@ useEffect(() => {
           command: () => navigate("/admin"),
         },
         {
+          label: `Da validare (${validateRequests.length})`,
+          icon: "pi pi-clock",
+          command: () => navigate("/admin/requests/validate"),
+        },
+        {
           label: `Da gestire (${triageRequests.length})`,
           icon: "pi pi-inbox",
           command: () => navigate("/admin/requests/triage"),
         },
         {
           label: `In attesa volontario (${pendingRequests.length})`,
-          icon: "pi pi-clock",
+          icon: "pi pi-user",
           command: () => navigate("/admin/requests/pending"),
         },
         {
@@ -213,10 +225,11 @@ useEffect(() => {
           command: () => navigate("/admin/requests/cancelled"),
         },
         {
-          label: "Manutenzione (Import CSV)",
-          icon: "pi pi-wrench",
-          command: () => navigate("/admin/requests/maintenance"),
+          label: `Richiede attenzione (${attentionRequests.length})`,
+          icon: "pi pi-exclamation-triangle",
+          command: () => navigate("/admin/requests/attention"),
         },
+        // { label: "Manutenzione (Import CSV)", icon: "pi pi-wrench", command: () => navigate("/admin/requests/maintenance") },
       ],
     },
     {
@@ -402,12 +415,14 @@ useEffect(() => {
         >
           <Routes>
             <Route path="requests" element={<AdminAll requests={requests} />} />
+            <Route path="requests/validate" element={<AdminValidate requests={validateRequests} />} />
             <Route path="requests/triage" element={<AdminTriage requests={triageRequests} />} />
             <Route path="requests/pending" element={<AdminPending requests={pendingRequests} />} />
             <Route path="requests/production" element={<AdminProduction requests={productionRequests} />} />
             <Route path="requests/shipping" element={<AdminShipping requests={shippingRequests} />} />
             <Route path="requests/completed" element={<AdminCompleted requests={completedRequests} />} />
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
+            <Route path="requests/attention" element={<AdminAttention requests={attentionRequests} />} />
             <Route path="requests/maintenance" element={<AdminMaintenanceRequests />} />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />

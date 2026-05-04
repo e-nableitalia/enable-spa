@@ -64,6 +64,37 @@ export interface deviceRequestData {
      * usato dalla logistica senza accesso ai dati sensibili del richiedente.
      */
     shippingAddress?: ShippingAddress;
+
+    // ── Campi operativi creati durante la validazione admin ──────────────────
+    /**
+     * Nome del destinatario del device (es. "Marco", "il figlio di").
+     * Versione curata/pubblica dell'informazione, compilata dall'admin.
+     */
+    recipient?: string;
+    /**
+     * Relazione del richiedente con il destinatario (es. "genitore", "coniuge").
+     * Versione operativa, curata dall'admin a partire dal campo privato omonimo.
+     */
+    relation?: string;
+    /**
+     * Descrizione pubblica/sanificata della situazione clinica/funzionale.
+     * Derivata da privateDeviceRequestData.description, editata dall'admin.
+     */
+    descriptionPublic?: string;
+    /**
+     * Preferenze pubbliche/sanificata sul device desiderato.
+     * Derivata da privateDeviceRequestData.preferences, editata dall'admin.
+     */
+    preferencesPublic?: string;
+    /** Timestamp della validazione admin. Impostato al momento della conferma. */
+    validatedAt?: any; // Firestore Timestamp
+    /** UID dell'admin che ha effettuato la validazione. */
+    validatedBy?: string;
+    /**
+     * Flag "richiede attenzione": se true la richiesta è segnalata come
+     * bisognosa di attenzione da parte degli admin. Assente o false = normale.
+     */
+    requiresAttention?: boolean;
 }
 
 export interface privateDeviceRequestData {

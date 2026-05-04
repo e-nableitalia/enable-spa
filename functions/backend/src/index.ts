@@ -15,5 +15,6 @@ export { inviteVolunteer } from "./volunteer/invite";
 export { acceptVolunteerConsents } from "./volunteer/acceptVolunteerConsents";
 export { setUserRole } from "./volunteer/setUserRole";
 export { createShipmentRequest, approveShipmentRequest, deleteShipmentRequest } from "./shipments/shipmentRequests";
+export { saveGlobalMessage } from "./device/saveGlobalMessage";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
