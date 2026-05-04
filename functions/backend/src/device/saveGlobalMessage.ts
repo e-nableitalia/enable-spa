@@ -11,33 +11,41 @@ function htmlToTelegram(text: string): string {
 
   let t = text;
 
-  // 1. Normalizza newline
+  // normalize newline
   t = t.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
 
-  // 2. Link <a>
+  // remove indentation
+  t = t.replace(/^[ \t]+/gm, "");
+
+  // links
   t = t.replace(/<a[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, (_, url, label) => {
     return `<a href="${url}">${(label as string).trim()}</a>`;
   });
 
-  // 3. Bold
+  // bold
   t = t.replace(/<(b|strong)>(.*?)<\/\1>/gi, "<b>$2</b>");
 
-  // 4. Liste → bullet
+  // headings → bold
+  t = t.replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "<b>$1</b>\n\n");
+
+  // list items
   t = t.replace(/<li[^>]*>(.*?)<\/li>/gi, (_, item) => {
     return `• ${(item as string).trim()}\n`;
   });
 
-  // 5. Paragrafi → newline
+  // block elements
   t = t.replace(/<\/p>/gi, "\n\n");
+  t = t.replace(/<\/div>/gi, "\n\n");
   t = t.replace(/<br\s*\/?>/gi, "\n");
 
-  // 6. Rimuovi tutti gli altri tag HTML
+  // remove all other tags
   t = t.replace(/<[^>]+>/g, "");
 
-  // 7. Cleanup spazi e newline
+  // final cleanup
   t = t
-    .replace(/\n{3,}/g, "\n\n") // max 2 newline
-    .replace(/[ \t]+\n/g, "\n") // spazi prima di newline
+    .replace(/\n[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
     .trim();
 
   return t;
