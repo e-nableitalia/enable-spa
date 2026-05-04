@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
-  collection, getDocs, addDoc, updateDoc, deleteDoc,
-  doc, serverTimestamp, query, orderBy,
+  collection, getDocs, deleteDoc,
+  doc, query, orderBy,
 } from "firebase/firestore";
-import { db } from "../../firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../../firebase";
 import type { GlobalMessage, PersonalMessage } from "../../shared/types/messageData";
 
 import { DataTable } from "primereact/datatable";
@@ -34,6 +35,7 @@ interface GlobalMessageForm {
   target: "all" | "volunteer" | "admin";
   expiresAt: Date | null;
   active: boolean;
+  notifyTelegram: boolean;
 }
 
 // ---- Helpers ----
@@ -80,6 +82,7 @@ const EMPTY_GLOBAL_FORM: GlobalMessageForm = {
   target: "all",
   expiresAt: null,
   active: true,
+  notifyTelegram: false,
 };
 
 // ============================================================
@@ -187,6 +190,7 @@ export default function AdminMessagesPage() {
       target: msg.target,
       expiresAt: toDate(msg.expiresAt),
       active: msg.active,
+      notifyTelegram: msg.notifyTelegram ?? false,
     });
     setShowGlobalDialog(true);
   };
@@ -203,29 +207,43 @@ export default function AdminMessagesPage() {
     }
     setSavingGlobal(true);
     try {
-      const data: Record<string, unknown> = {
+      const payload = {
+        id: editingGlobal?.id ?? undefined,
         title: globalForm.title.trim(),
         body: globalForm.body.trim(),
         target: globalForm.target,
         active: globalForm.active,
-        expiresAt: globalForm.expiresAt ?? null,
+        expiresAt: globalForm.expiresAt ? globalForm.expiresAt.toISOString() : null,
+        notifyTelegram: globalForm.notifyTelegram,
       };
-      if (editingGlobal) {
-        await updateDoc(doc(db, `messages/${editingGlobal.id}`), data);
-        setGlobalMessages((prev) =>
-          prev.map((m) => (m.id === editingGlobal.id ? { ...m, ...data } as GlobalMessage : m))
-        );
-        toast.current?.show({ severity: "success", summary: "Salvato", detail: "Messaggio aggiornato.", life: 3000 });
-      } else {
-        const docRef = await addDoc(collection(db, "messages"), {
-          ...data,
-          createdAt: serverTimestamp(),
-        });
+      const fn = httpsCallable<typeof payload, { id: string; isNew: boolean }>(functions, "saveGlobalMessage");
+      const result = await fn(payload);
+      const { id: savedId, isNew } = result.data;
+
+      if (isNew) {
         setGlobalMessages((prev) => [
-          { id: docRef.id, ...data, createdAt: new Date() } as unknown as GlobalMessage,
+          {
+            id: savedId,
+            title: payload.title,
+            body: payload.body,
+            target: payload.target,
+            active: payload.active,
+            expiresAt: globalForm.expiresAt,
+            notifyTelegram: payload.notifyTelegram,
+            createdAt: new Date(),
+          } as unknown as GlobalMessage,
           ...prev,
         ]);
         toast.current?.show({ severity: "success", summary: "Creato", detail: "Messaggio globale creato.", life: 3000 });
+      } else {
+        setGlobalMessages((prev) =>
+          prev.map((m) =>
+            m.id === editingGlobal!.id
+              ? { ...m, ...payload, expiresAt: globalForm.expiresAt } as unknown as GlobalMessage
+              : m
+          )
+        );
+        toast.current?.show({ severity: "success", summary: "Salvato", detail: "Messaggio aggiornato.", life: 3000 });
       }
       setShowGlobalDialog(false);
     } catch (err) {
@@ -433,6 +451,19 @@ export default function AdminMessagesPage() {
               style={{ minWidth: 90 }}
             />
             <Column
+              field="notifyTelegram"
+              header="Telegram"
+              sortable
+              body={(row: GlobalMessage) => (
+                <Tag
+                  value={row.notifyTelegram ? "Sì" : "No"}
+                  severity={row.notifyTelegram ? "success" : "secondary"}
+                  icon={row.notifyTelegram ? "pi pi-send" : undefined}
+                />
+              )}
+              style={{ minWidth: 100 }}
+            />
+            <Column
               header="Scadenza"
               body={(row: GlobalMessage) =>
                 row.expiresAt ? (
@@ -634,15 +665,27 @@ export default function AdminMessagesPage() {
               />
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <label style={{ fontWeight: 600 }}>Attivo:</label>
-            <Button
-              label={globalForm.active ? "Sì" : "No"}
-              icon={globalForm.active ? "pi pi-check" : "pi pi-times"}
-              className={`p-button-sm ${globalForm.active ? "p-button-success" : "p-button-secondary"}`}
-              onClick={() => setGlobalForm((f) => ({ ...f, active: !f.active }))}
-              type="button"
-            />
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <label style={{ fontWeight: 600 }}>Attivo:</label>
+              <Button
+                label={globalForm.active ? "Sì" : "No"}
+                icon={globalForm.active ? "pi pi-check" : "pi pi-times"}
+                className={`p-button-sm ${globalForm.active ? "p-button-success" : "p-button-secondary"}`}
+                onClick={() => setGlobalForm((f) => ({ ...f, active: !f.active }))}
+                type="button"
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <label style={{ fontWeight: 600 }}>Notifica Telegram:</label>
+              <Button
+                label={globalForm.notifyTelegram ? "Sì" : "No"}
+                icon={globalForm.notifyTelegram ? "pi pi-send" : "pi pi-times"}
+                className={`p-button-sm ${globalForm.notifyTelegram ? "p-button-info" : "p-button-secondary"}`}
+                onClick={() => setGlobalForm((f) => ({ ...f, notifyTelegram: !f.notifyTelegram }))}
+                type="button"
+              />
+            </div>
           </div>
         </div>
       </Dialog>
