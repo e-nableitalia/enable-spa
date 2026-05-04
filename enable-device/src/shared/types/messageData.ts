@@ -11,6 +11,7 @@ export interface GlobalMessage {
   createdAt: unknown;
   expiresAt?: unknown;
   active: boolean;
+  notifyTelegram?: boolean;
 }
 
 // ========================================
