@@ -6,6 +6,43 @@ import { sendTelegramMessage } from "../utils/telegram";
 
 const REGION = "europe-west1";
 
+function htmlToTelegram(text: string): string {
+  if (!text) return "";
+
+  let t = text;
+
+  // 1. Normalizza newline
+  t = t.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
+
+  // 2. Link <a>
+  t = t.replace(/<a[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, (_, url, label) => {
+    return `<a href="${url}">${(label as string).trim()}</a>`;
+  });
+
+  // 3. Bold
+  t = t.replace(/<(b|strong)>(.*?)<\/\1>/gi, "<b>$2</b>");
+
+  // 4. Liste → bullet
+  t = t.replace(/<li[^>]*>(.*?)<\/li>/gi, (_, item) => {
+    return `• ${(item as string).trim()}\n`;
+  });
+
+  // 5. Paragrafi → newline
+  t = t.replace(/<\/p>/gi, "\n\n");
+  t = t.replace(/<br\s*\/?>/gi, "\n");
+
+  // 6. Rimuovi tutti gli altri tag HTML
+  t = t.replace(/<[^>]+>/g, "");
+
+  // 7. Cleanup spazi e newline
+  t = t
+    .replace(/\n{3,}/g, "\n\n") // max 2 newline
+    .replace(/[ \t]+\n/g, "\n") // spazi prima di newline
+    .trim();
+
+  return t;
+}
+
 interface SaveGlobalMessageData {
   id?: string;
   title: string;
@@ -91,7 +128,7 @@ export const saveGlobalMessage = onCall(
         const apiUrl = process.env.TELEGRAM_API_URL;
         const secret = process.env.TELEGRAM_API_SECRET;
         if (apiUrl && secret) {
-          const tgText = `📢 Nuovo messaggio: [${target}]\n*${title.trim()}*\n\n${body.trim()}`;
+          const tgText = `📢 Nuovo messaggio: <b>${title.trim()}</b>\n\n${htmlToTelegram(body.trim())}`;
           await sendTelegramMessage(apiUrl, secret, tgText).catch((err) => {
             console.warn("[saveGlobalMessage] Telegram notification failed:", err);
           });
