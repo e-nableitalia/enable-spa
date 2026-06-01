@@ -33,6 +33,7 @@ import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
 import AdminEmailLogsPage from "../../pages/admin/AdminEmailLogsPage";
 import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
 import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
+import AdminTasksPage from "../../pages/admin/tasks/AdminTasksPage";
 import { version } from "../../../package.json";
 
 export default function AdminLayout() {
@@ -274,6 +275,11 @@ useEffect(() => {
       command: () => navigate("/admin/messages"),
     },
     {
+      label: "Tasks / Progetti",
+      icon: "pi pi-check-square",
+      command: () => navigate("/admin/tasks"),
+    },
+    {
       label: "Log Email",
       icon: "pi pi-envelope",
       command: () => navigate("/admin/email-logs"),
@@ -430,6 +436,7 @@ useEffect(() => {
             <Route path="volunteers/maintenance" element={<VolunteerMaintenance />} />
             <Route path="shipments" element={<ShipmentRequestsPage />} />
             <Route path="messages" element={<AdminMessagesPage />} />
+            <Route path="tasks" element={<AdminTasksPage />} />
             <Route path="email-logs" element={<AdminEmailLogsPage />} />
             <Route path="security-logs" element={<AdminSecurityLogsPage />} />
             <Route path="stats" element={<AdminStats />} />
