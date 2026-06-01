@@ -15,6 +15,17 @@ export { inviteVolunteer } from "./volunteer/invite";
 export { acceptVolunteerConsents } from "./volunteer/acceptVolunteerConsents";
 export { setUserRole } from "./volunteer/setUserRole";
 export { listVolunteerAdminData } from "./volunteer/listVolunteerAdminData";
+export { createTask } from "./tasks/createTask";
+export { updateTask } from "./tasks/updateTask";
+export { changeTaskStatus } from "./tasks/changeTaskStatus";
+export { addTaskNote } from "./tasks/addTaskNote";
+export { listTasks } from "./tasks/listTasks";
+export { deleteTask } from "./tasks/deleteTask";
+export { createProject } from "./tasks/createProject";
+export { updateProject } from "./tasks/updateProject";
+export { listProjects } from "./tasks/listProjects";
+export { deleteProject } from "./tasks/deleteProject";
+export { listVolunteerOptions } from "./tasks/listVolunteerOptions";
 export { createShipmentRequest, approveShipmentRequest, deleteShipmentRequest } from "./shipments/shipmentRequests";
 export { saveGlobalMessage } from "./device/saveGlobalMessage";
 
