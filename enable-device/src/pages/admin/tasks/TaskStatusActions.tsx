@@ -8,6 +8,7 @@ interface Props {
 
 export default function TaskStatusActions({task, onChangeStatus}: Readonly<Props>) {
   const actions: Array<{label: string; value: TaskStatus; disabled: boolean}> = [
+    {label: "Waiting volunteer", value: "waiting_volunteer", disabled: task.status === "waiting_volunteer"},
     {label: "To do", value: "todo", disabled: task.status === "todo"},
     {label: "In progress", value: "in_progress", disabled: task.status === "in_progress"},
     {label: "Done", value: "done", disabled: task.status === "done"},

@@ -30,12 +30,14 @@ interface VolunteerOption {
 interface TaskDraft {
   title: string;
   description: string;
+  status: TaskStatus;
   type: TaskType;
   linkedDeviceRequestId: string;
   linkedProjectId: string;
   priority: TaskPriority;
   assignees: TaskData["assignees"];
   notes: string;
+  notifyTelegramWaitingVolunteer: boolean;
 }
 
 interface ProjectDraft {
@@ -214,10 +216,11 @@ export default function AdminTasksPage() {
             deviceRequestId: draft.type === "deviceRequest" ? draft.linkedDeviceRequestId : undefined,
             projectId: draft.type === "project" ? draft.linkedProjectId : undefined,
           },
-          status: "todo",
+          status: draft.status,
           priority: draft.priority,
           assignees: draft.assignees,
           notes: draft.notes,
+          notifyTelegramWaitingVolunteer: draft.notifyTelegramWaitingVolunteer,
         });
       }
 

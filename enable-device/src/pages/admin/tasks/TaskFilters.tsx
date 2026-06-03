@@ -31,6 +31,7 @@ interface Props {
 }
 
 const STATUS_OPTIONS: Option[] = [
+  {label: "Waiting volunteer", value: "waiting_volunteer"},
   {label: "To do", value: "todo"},
   {label: "In progress", value: "in_progress"},
   {label: "Done", value: "done"},

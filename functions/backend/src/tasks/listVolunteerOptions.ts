@@ -3,15 +3,15 @@ import {getFirestore} from "firebase-admin/firestore";
 import {
   REGION,
   asString,
-  ensureAdmin,
   ensureAuthenticated,
+  ensureTaskOperator,
   getActorContext,
 } from "./helpers";
 
 export const listVolunteerOptions = onCall({region: REGION}, async (req) => {
   const uid = ensureAuthenticated(req.auth);
   const actor = await getActorContext(uid);
-  ensureAdmin(actor);
+  ensureTaskOperator(actor);
 
   const db = getFirestore();
   const usersSnap = await db.collection("users").get();

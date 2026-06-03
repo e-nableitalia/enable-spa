@@ -1,5 +1,6 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {getFirestore} from "firebase-admin/firestore";
+import {sendTaskStatusChangedToAdmins} from "../utils/email";
 import {
   REGION,
   asArray,
@@ -62,6 +63,15 @@ export const changeTaskStatus = onCall({region: REGION}, async (req) => {
   };
 
   await taskRef.update(updatePayload);
+
+  await sendTaskStatusChangedToAdmins({
+    taskId,
+    title: asString(task.title) ?? "Task",
+    fromStatus: currentStatus,
+    toStatus: newStatus,
+    changedBy: actor.displayName,
+    note,
+  });
 
   return {success: true};
 });

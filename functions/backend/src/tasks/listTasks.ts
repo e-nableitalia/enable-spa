@@ -21,13 +21,12 @@ export const listTasks = onCall({region: REGION}, async (req) => {
   const deviceRequestId = asString(data.deviceRequestId);
   const projectId = asString(data.projectId);
   const assigneeUid = asString(data.assigneeUid);
+  const view = asString(data.view);
   const createdFrom = timestampFromInput(data.createdFrom);
   const createdTo = timestampFromInput(data.createdTo);
 
   const db = getFirestore();
-  const baseQuery = actor.role === "admin"
-    ? db.collection("tasks")
-    : db.collection("tasks").where("assigneeUids", "array-contains", uid);
+  const baseQuery = db.collection("tasks");
 
   const snapshot = await baseQuery.get();
 
@@ -37,6 +36,18 @@ export const listTasks = onCall({region: REGION}, async (req) => {
   }));
 
   const tasks = taskDocs
+    .filter((task) => {
+      if (actor.role === "admin") {
+        return true;
+      }
+
+      const uids: string[] = Array.isArray(task.assigneeUids) ? task.assigneeUids : [];
+      if (view === "unassigned") {
+        return uids.length === 0;
+      }
+
+      return uids.includes(uid);
+    })
     .filter((task) => task.deleted !== true)
     .filter((task) => (status ? task.status === status : true))
     .filter((task) => (priority ? task.priority === priority : true))

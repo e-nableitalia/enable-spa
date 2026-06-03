@@ -23,6 +23,7 @@ import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
 import VolunteerRequestDetail from "../../pages/volunteer/VolunteerRequestDetail";
 import ManageableRequestsPage from "../../pages/volunteer/ManageableRequestsPage";
 import ManageableRequestDetail from "../../pages/volunteer/ManageableRequestDetail";
+import VolunteerTasksPage from "../../pages/volunteer/VolunteerTasksPage";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { version } from "../../../package.json";
 
@@ -138,6 +139,11 @@ export default function VolunteerLayout() {
             label: "Le mie richieste",
             icon: "pi pi-inbox",
             command: () => navigate("/volunteer/my-requests")
+        },
+        {
+            label: "Task",
+            icon: "pi pi-check-square",
+            command: () => navigate("/volunteer/tasks")
         },
         {
             label: "In produzione",
@@ -356,6 +362,7 @@ export default function VolunteerLayout() {
                     <Routes>
                         <Route index element={<VolunteerDashboard />} />
                         <Route path="my-requests" element={<MyRequests requests={requests} />} />
+                        <Route path="tasks" element={<VolunteerTasksPage />} />
                         <Route path="manageable-requests" element={<ManageableRequestsPage />} />
                         <Route path="manageable-requests/:id" element={<ManageableRequestDetail />} />
                         <Route path="my-requests/:id" element={<VolunteerRequestDetail />} />

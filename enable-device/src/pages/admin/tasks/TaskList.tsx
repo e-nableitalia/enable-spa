@@ -2,7 +2,7 @@ import {DataTable} from "primereact/datatable";
 import {Column} from "primereact/column";
 import {Button} from "primereact/button";
 import {Tag} from "primereact/tag";
-import type {TaskData} from "../../../shared/types/taskData";
+import type {TaskData, TaskStatus} from "../../../shared/types/taskData";
 import type {ProjectData} from "../../../shared/types/projectData";
 import {
   assigneeLabel,
@@ -23,7 +23,7 @@ interface Props {
   onEdit: (task: TaskData) => void;
   onDelete: (task: TaskData) => void;
   onAddNote: (task: TaskData) => void;
-  onStatusChange: (task: TaskData, newStatus: "todo" | "in_progress" | "done") => void;
+  onStatusChange: (task: TaskData, newStatus: TaskStatus) => void;
 }
 
 export default function TaskList({

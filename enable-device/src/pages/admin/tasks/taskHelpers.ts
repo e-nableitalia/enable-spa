@@ -2,6 +2,7 @@ import type {TaskAssignee, TaskData, TaskPriority, TaskStatus, TaskType} from ".
 
 export function taskStatusLabel(status: TaskStatus): string {
   const map: Record<TaskStatus, string> = {
+    waiting_volunteer: "Waiting volunteer",
     todo: "To do",
     in_progress: "In progress",
     done: "Done",
@@ -9,8 +10,9 @@ export function taskStatusLabel(status: TaskStatus): string {
   return map[status];
 }
 
-export function taskStatusSeverity(status: TaskStatus): "secondary" | "info" | "success" {
-  const map: Record<TaskStatus, "secondary" | "info" | "success"> = {
+export function taskStatusSeverity(status: TaskStatus): "secondary" | "info" | "success" | "warning" {
+  const map: Record<TaskStatus, "secondary" | "info" | "success" | "warning"> = {
+    waiting_volunteer: "warning",
     todo: "secondary",
     in_progress: "info",
     done: "success",

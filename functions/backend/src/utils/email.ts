@@ -81,3 +81,69 @@ export async function sendEmailToDeviceAdmins(
     return false;
   }
 }
+
+export async function sendTaskAssignedEmail(
+  to: string,
+  payload: {
+    taskId: string;
+    title: string;
+    priority: string;
+    status: string;
+    assignedBy: string;
+  }
+) {
+  const db = getFirestore();
+  const {taskId, title, priority, status, assignedBy} = payload;
+
+  try {
+    await db.collection("mail").add({
+      to: [to],
+      message: {
+        subject: `[e-Nable] Nuovo task assegnato: ${title}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width:600px; margin:auto;">
+            <h2 style="color:#2c7be5;">Ti e stato assegnato un task</h2>
+            <p><strong>Titolo:</strong> ${title}</p>
+            <p><strong>ID task:</strong> ${taskId}</p>
+            <p><strong>Priorita:</strong> ${priority}</p>
+            <p><strong>Stato:</strong> ${status}</p>
+            <p><strong>Assegnato da:</strong> ${assignedBy}</p>
+          </div>
+        `,
+      },
+    });
+    console.log(`Task assignment email sent to ${to}`);
+    return true;
+  } catch (error) {
+    console.error("Error sending task assignment email:", error);
+    return false;
+  }
+}
+
+export async function sendTaskStatusChangedToAdmins(
+  payload: {
+    taskId: string;
+    title: string;
+    fromStatus: string;
+    toStatus: string;
+    changedBy: string;
+    note?: string;
+  }
+) {
+  const {taskId, title, fromStatus, toStatus, changedBy, note} = payload;
+
+  const subject = `[e-Nable] Task aggiornato: ${title} (${fromStatus} -> ${toStatus})`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width:600px; margin:auto;">
+      <h2 style="color:#2c7be5;">Cambio stato task</h2>
+      <p><strong>Titolo:</strong> ${title}</p>
+      <p><strong>ID task:</strong> ${taskId}</p>
+      <p><strong>Da:</strong> ${fromStatus}</p>
+      <p><strong>A:</strong> ${toStatus}</p>
+      <p><strong>Aggiornato da:</strong> ${changedBy}</p>
+      ${note ? `<p><strong>Nota:</strong> ${note}</p>` : ""}
+    </div>
+  `;
+
+  return sendEmailToVolunteersAdmins(subject, html);
+}

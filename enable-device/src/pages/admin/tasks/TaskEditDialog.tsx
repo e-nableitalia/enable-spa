@@ -5,7 +5,8 @@ import {InputText} from "primereact/inputtext";
 import {InputTextarea} from "primereact/inputtextarea";
 import {Dropdown} from "primereact/dropdown";
 import {MultiSelect} from "primereact/multiselect";
-import type {TaskAssignee, TaskData, TaskPriority, TaskType} from "../../../shared/types/taskData";
+import {Checkbox} from "primereact/checkbox";
+import type {TaskAssignee, TaskData, TaskPriority, TaskStatus, TaskType} from "../../../shared/types/taskData";
 
 interface VolunteerOption {
   uid: string;
@@ -21,12 +22,14 @@ interface ProjectOption {
 interface TaskDraft {
   title: string;
   description: string;
+  status: TaskStatus;
   type: TaskType;
   linkedDeviceRequestId: string;
   linkedProjectId: string;
   priority: TaskPriority;
   assignees: TaskAssignee[];
   notes: string;
+  notifyTelegramWaitingVolunteer: boolean;
 }
 
 interface Props {
@@ -52,6 +55,13 @@ const PRIORITY_OPTIONS = [
   {label: "Urgent", value: "urgent"},
 ];
 
+const STATUS_OPTIONS = [
+  {label: "Waiting volunteer", value: "waiting_volunteer"},
+  {label: "To do", value: "todo"},
+  {label: "In progress", value: "in_progress"},
+  {label: "Done", value: "done"},
+];
+
 export default function TaskEditDialog({
   visible,
   task,
@@ -64,12 +74,14 @@ export default function TaskEditDialog({
   const [draft, setDraft] = useState<TaskDraft>({
     title: "",
     description: "",
+    status: "todo",
     type: "generic",
     linkedDeviceRequestId: "",
     linkedProjectId: "",
     priority: "medium",
     assignees: [],
     notes: "",
+    notifyTelegramWaitingVolunteer: false,
   });
 
   useEffect(() => {
@@ -77,12 +89,14 @@ export default function TaskEditDialog({
       setDraft({
         title: "",
         description: "",
+        status: "todo",
         type: "generic",
         linkedDeviceRequestId: "",
         linkedProjectId: "",
         priority: "medium",
         assignees: [],
         notes: "",
+        notifyTelegramWaitingVolunteer: false,
       });
       return;
     }
@@ -90,12 +104,14 @@ export default function TaskEditDialog({
     setDraft({
       title: task.title,
       description: task.description || "",
+      status: task.status,
       type: task.type,
       linkedDeviceRequestId: task.linkedEntity?.deviceRequestId || "",
       linkedProjectId: task.linkedEntity?.projectId || "",
       priority: task.priority,
       assignees: task.assignees,
       notes: task.notes || "",
+      notifyTelegramWaitingVolunteer: false,
     });
   }, [task, visible]);
 
@@ -144,6 +160,19 @@ export default function TaskEditDialog({
           />
         </div>
         <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10}}>
+          <div>
+            <label htmlFor="task-status">Stato</label>
+            <Dropdown
+              inputId="task-status"
+              value={draft.status}
+              options={STATUS_OPTIONS}
+              optionLabel="label"
+              optionValue="value"
+              onChange={(e) => setDraft({...draft, status: e.value as TaskStatus})}
+              style={{width: "100%"}}
+              disabled={Boolean(task)}
+            />
+          </div>
           <div>
             <label htmlFor="task-type">Tipo</label>
             <Dropdown
@@ -222,6 +251,20 @@ export default function TaskEditDialog({
             style={{width: "100%"}}
           />
         </div>
+
+        {!task ? (
+          <div style={{display: "flex", alignItems: "center", gap: 8}}>
+            <Checkbox
+              inputId="task-notify-telegram"
+              checked={draft.notifyTelegramWaitingVolunteer}
+              disabled={draft.status !== "waiting_volunteer"}
+              onChange={(e) => setDraft({...draft, notifyTelegramWaitingVolunteer: Boolean(e.checked)})}
+            />
+            <label htmlFor="task-notify-telegram">
+              Notifica Telegram nuovo task in attesa volontario
+            </label>
+          </div>
+        ) : null}
       </div>
     </Dialog>
   );

@@ -1,7 +1,7 @@
 import {FieldValue, getFirestore, Timestamp} from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v2/https";
 
-export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskStatus = "waiting_volunteer" | "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type TaskType = "generic" | "deviceRequest" | "project";
 export type TaskHistoryEventType =
@@ -43,9 +43,10 @@ export interface ActorContext {
   uid: string;
   role: string;
   displayName: string;
+  email?: string;
 }
 
-const TASK_STATUS_VALUES: TaskStatus[] = ["todo", "in_progress", "done"];
+const TASK_STATUS_VALUES: TaskStatus[] = ["waiting_volunteer", "todo", "in_progress", "done"];
 const TASK_PRIORITY_VALUES: TaskPriority[] = ["low", "medium", "high", "urgent"];
 const TASK_TYPE_VALUES: TaskType[] = ["generic", "deviceRequest", "project"];
 
@@ -86,12 +87,18 @@ export async function getActorContext(uid: string): Promise<ActorContext> {
   const lastName = asString(profile.lastName) ?? "";
   const displayName = `${firstName} ${lastName}`.trim() || email || uid;
 
-  return {uid, role, displayName};
+  return {uid, role, displayName, email};
 }
 
 export function ensureAdmin(actor: ActorContext): void {
   if (actor.role !== "admin") {
     throw new HttpsError("permission-denied", "Only admins can perform this action");
+  }
+}
+
+export function ensureTaskOperator(actor: ActorContext): void {
+  if (actor.role !== "admin" && actor.role !== "volunteer") {
+    throw new HttpsError("permission-denied", "Only admins and volunteers can perform this action");
   }
 }
 
@@ -123,12 +130,19 @@ export function normalizeAssignees(raw: unknown): {assignees: TaskAssignee[]; as
       const volunteerUid = asString(item.volunteerUid);
       const groupId = asString(item.groupId);
       const displayName = asString(item.displayName);
-      return {
-        type,
-        volunteerUid,
-        groupId,
-        displayName,
-      } as TaskAssignee;
+
+      const assignee: TaskAssignee = {type};
+      if (volunteerUid) {
+        assignee.volunteerUid = volunteerUid;
+      }
+      if (groupId) {
+        assignee.groupId = groupId;
+      }
+      if (displayName) {
+        assignee.displayName = displayName;
+      }
+
+      return assignee;
     })
     .filter((item) => (item.type === "volunteer" ? Boolean(item.volunteerUid) : Boolean(item.groupId)));
 
@@ -185,8 +199,9 @@ export function isAssignedTo(uid: string, assigneeUids: unknown): boolean {
 
 export function isValidStatusTransition(fromStatus: TaskStatus, toStatus: TaskStatus): boolean {
   const transitions: Record<TaskStatus, TaskStatus[]> = {
-    todo: ["in_progress"],
-    in_progress: ["todo", "done"],
+    waiting_volunteer: ["todo", "in_progress"],
+    todo: ["waiting_volunteer", "in_progress"],
+    in_progress: ["waiting_volunteer", "todo", "done"],
     done: ["in_progress"],
   };
 
