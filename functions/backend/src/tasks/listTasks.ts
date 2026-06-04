@@ -37,13 +37,18 @@ export const listTasks = onCall({region: REGION}, async (req) => {
 
   const tasks = taskDocs
     .filter((task) => {
-      if (actor.role === "admin") {
-        return true;
-      }
-
       const uids: string[] = Array.isArray(task.assigneeUids) ? task.assigneeUids : [];
+
       if (view === "unassigned") {
         return uids.length === 0;
+      }
+
+      if (view === "mine") {
+        return uids.includes(uid);
+      }
+
+      if (actor.role === "admin") {
+        return true;
       }
 
       return uids.includes(uid);

@@ -14,6 +14,15 @@ import {
   withUpdatedAndCompleted,
 } from "./helpers";
 
+function isActorAssigned(uid: string, task: Record<string, unknown>): boolean {
+  if (isAssignedTo(uid, task.assigneeUids)) {
+    return true;
+  }
+
+  const assignees = asArray<Record<string, unknown>>(task.assignees);
+  return assignees.some((item) => item.type === "volunteer" && asString(item.volunteerUid) === uid);
+}
+
 export const changeTaskStatus = onCall({region: REGION}, async (req) => {
   const uid = ensureAuthenticated(req.auth);
   const actor = await getActorContext(uid);
@@ -38,7 +47,7 @@ export const changeTaskStatus = onCall({region: REGION}, async (req) => {
   const currentStatus = ensureTaskStatus(task.status ?? "todo");
 
   const canManageAll = actor.role === "admin";
-  const assigned = isAssignedTo(actor.uid, task.assigneeUids);
+  const assigned = isActorAssigned(actor.uid, task);
   if (!canManageAll && !assigned) {
     throw new HttpsError("permission-denied", "You can only update assigned tasks");
   }

@@ -84,10 +84,24 @@ export function asDateString(value: unknown): string {
   if (value instanceof Date) {
     return value.toLocaleString();
   }
-  if (typeof value === "object" && value !== null && "toDate" in value) {
-    const toDate = (value as {toDate?: () => Date}).toDate;
-    if (typeof toDate === "function") {
-      return toDate().toLocaleString();
+  if (typeof value === "object" && value !== null) {
+    const maybeTimestamp = value as {toDate?: () => Date; seconds?: number; _seconds?: number};
+    if (typeof maybeTimestamp.toDate === "function") {
+      try {
+        const parsed = maybeTimestamp.toDate();
+        if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) {
+          return parsed.toLocaleString();
+        }
+      } catch {
+        // Ignore and fallback to seconds parsing.
+      }
+    }
+
+    const seconds = typeof maybeTimestamp.seconds === "number" ? maybeTimestamp.seconds :
+      typeof maybeTimestamp._seconds === "number" ? maybeTimestamp._seconds : null;
+    if (seconds !== null) {
+      const parsed = new Date(seconds * 1000);
+      return Number.isNaN(parsed.getTime()) ? "-" : parsed.toLocaleString();
     }
   }
   return "-";
