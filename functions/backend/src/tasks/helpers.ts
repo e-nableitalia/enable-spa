@@ -226,10 +226,35 @@ export function timestampFromInput(value: unknown): Date | null {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
-  if (typeof value === "object" && value !== null && "toDate" in value) {
-    const toDate = (value as {toDate?: () => Date}).toDate;
-    if (typeof toDate === "function") {
-      return toDate();
+  if (typeof value === "object" && value !== null) {
+    const record = value as {
+      toDate?: () => Date;
+      seconds?: unknown;
+      _seconds?: unknown;
+      nanoseconds?: unknown;
+      _nanoseconds?: unknown;
+    };
+
+    if (typeof record.toDate === "function") {
+      try {
+        const date = record.toDate();
+        if (date instanceof Date && !Number.isNaN(date.getTime())) {
+          return date;
+        }
+      } catch {
+        // Fallback to seconds-based parsing below.
+      }
+    }
+
+    const rawSeconds = typeof record.seconds === "number" ? record.seconds :
+      typeof record._seconds === "number" ? record._seconds : null;
+    const rawNanoseconds = typeof record.nanoseconds === "number" ? record.nanoseconds :
+      typeof record._nanoseconds === "number" ? record._nanoseconds : 0;
+
+    if (rawSeconds !== null) {
+      const millis = rawSeconds * 1000 + Math.floor(rawNanoseconds / 1_000_000);
+      const parsed = new Date(millis);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
   }
   return null;
