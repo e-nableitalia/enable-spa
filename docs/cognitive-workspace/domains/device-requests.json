@@ -7,15 +7,32 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["public-form", "anti-spam", "recaptcha", "firestore-transaction"],
+    "tags": [
+      "public-form",
+      "anti-spam",
+      "recaptcha",
+      "firestore-transaction"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "relates_to" },
-      { "id": "device-requests/dc-device-request", "type": "implements" },
-      { "id": "device-requests/dc-request-number", "type": "implements" },
-      { "id": "device-requests/dc-private-data-separation", "type": "implements" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "implements"
+      },
+      {
+        "id": "device-requests/dc-request-number",
+        "type": "implements"
+      },
+      {
+        "id": "device-requests/dc-private-data-separation",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1736705",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -33,7 +50,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/cap-request-lifecycle-management",
     "type": "capability",
@@ -42,17 +58,40 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["status-machine", "event-sourcing", "notifications", "rbac"],
+    "tags": [
+      "status-machine",
+      "event-sourcing",
+      "notifications",
+      "rbac"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-public-request-submission", "type": "relates_to" },
-      { "id": "device-requests/cap-volunteer-assignment", "type": "relates_to" },
-      { "id": "device-requests/dc-status-lifecycle", "type": "implements" },
-      { "id": "device-requests/dc-public-status", "type": "implements" },
-      { "id": "device-requests/dc-request-event", "type": "implements" },
-      { "id": "device-requests/dc-volunteer-transition", "type": "implements" }
+      {
+        "id": "device-requests/cap-public-request-submission",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/cap-volunteer-assignment",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-status-lifecycle",
+        "type": "implements"
+      },
+      {
+        "id": "device-requests/dc-public-status",
+        "type": "implements"
+      },
+      {
+        "id": "device-requests/dc-request-event",
+        "type": "implements"
+      },
+      {
+        "id": "device-requests/dc-volunteer-transition",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1736725",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -76,7 +115,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/cap-request-validation",
     "type": "capability",
@@ -85,14 +123,28 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "pii-sanitization", "validation", "triage"],
+    "tags": [
+      "admin",
+      "pii-sanitization",
+      "validation",
+      "triage"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
-      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" },
-      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-private-data-separation",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-status-lifecycle",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1769473",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -110,7 +162,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/cap-volunteer-assignment",
     "type": "capability",
@@ -119,13 +170,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "assignment", "replace-whole-list"],
+    "tags": [
+      "admin",
+      "assignment",
+      "replace-whole-list"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "relates_to" },
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1802241",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -149,7 +210,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/cap-admin-request-views",
     "type": "capability",
@@ -158,15 +218,33 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "kanban", "datatable", "bulk-operations", "session-storage"],
+    "tags": [
+      "admin",
+      "kanban",
+      "datatable",
+      "bulk-operations",
+      "session-storage"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
-      { "id": "device-requests/cap-request-validation", "type": "depends_on" },
-      { "id": "device-requests/cap-volunteer-assignment", "type": "depends_on" },
-      { "id": "device-requests/dc-requires-attention", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-request-validation",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-volunteer-assignment",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-requires-attention",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1835009",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -214,7 +292,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/cap-internal-import",
     "type": "capability",
@@ -223,14 +300,30 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "import", "csv", "legacy", "migration", "batch"],
+    "tags": [
+      "admin",
+      "import",
+      "csv",
+      "legacy",
+      "migration",
+      "batch"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-public-request-submission", "type": "relates_to" },
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
-      { "id": "device-requests/cap-volunteer-assignment", "type": "depends_on" }
+      {
+        "id": "device-requests/cap-public-request-submission",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-volunteer-assignment",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1835029",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -248,7 +341,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/cap-global-messaging",
     "type": "capability",
@@ -257,12 +349,20 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "messaging", "telegram", "broadcast"],
+    "tags": [
+      "admin",
+      "messaging",
+      "telegram",
+      "broadcast"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-global-message", "type": "implements" }
+      {
+        "id": "device-requests/dc-global-message",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1867777",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -280,7 +380,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/cap-email-log-monitoring",
     "type": "capability",
@@ -289,13 +388,24 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "email", "monitoring", "firebase-trigger-email"],
+    "tags": [
+      "admin",
+      "email",
+      "monitoring",
+      "firebase-trigger-email"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-public-request-submission", "type": "relates_to" },
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-public-request-submission",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1900545",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -307,7 +417,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-citizen-requests-device",
     "type": "use_case",
@@ -316,13 +425,22 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["public", "citizen-facing"],
+    "tags": [
+      "public",
+      "citizen-facing"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-public-request-submission", "type": "depends_on" },
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-public-request-submission",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1933313",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -340,7 +458,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-validates-request",
     "type": "use_case",
@@ -349,13 +466,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "triage", "validation"],
+    "tags": [
+      "admin",
+      "triage",
+      "validation"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-validation", "type": "depends_on" },
-      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-request-validation",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-private-data-separation",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1966081",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -373,7 +500,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-assigns-volunteer",
     "type": "use_case",
@@ -382,12 +508,18 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "assignment"],
+    "tags": [
+      "admin",
+      "assignment"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-volunteer-assignment", "type": "depends_on" }
+      {
+        "id": "device-requests/cap-volunteer-assignment",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1966101",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -405,7 +537,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-volunteer-advances-production",
     "type": "use_case",
@@ -414,13 +545,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["volunteer", "production", "status-transition"],
+    "tags": [
+      "volunteer",
+      "production",
+      "status-transition"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
-      { "id": "device-requests/dc-volunteer-transition", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-volunteer-transition",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1966121",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -438,7 +579,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-marks-attention",
     "type": "use_case",
@@ -447,13 +587,24 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "flag", "attention", "notification"],
+    "tags": [
+      "admin",
+      "flag",
+      "attention",
+      "notification"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-requires-attention", "type": "implements" },
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" }
+      {
+        "id": "device-requests/dc-requires-attention",
+        "type": "implements"
+      },
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1703938",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -471,7 +622,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-adds-note",
     "type": "use_case",
@@ -480,13 +630,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "note", "timeline"],
+    "tags": [
+      "admin",
+      "note",
+      "timeline"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
-      { "id": "device-requests/dc-request-event", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-request-event",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1998849",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -504,7 +664,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-bulk-change-status",
     "type": "use_case",
@@ -513,13 +672,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "bulk", "batch-operation"],
+    "tags": [
+      "admin",
+      "bulk",
+      "batch-operation"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
-      { "id": "device-requests/cap-admin-request-views", "type": "depends_on" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-admin-request-views",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1933333",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -531,7 +700,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-imports-legacy-data",
     "type": "use_case",
@@ -540,12 +708,20 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "import", "csv", "legacy"],
+    "tags": [
+      "admin",
+      "import",
+      "csv",
+      "legacy"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-internal-import", "type": "depends_on" }
+      {
+        "id": "device-requests/cap-internal-import",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2031617",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -557,7 +733,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-migrates-volunteer-field",
     "type": "use_case",
@@ -566,13 +741,24 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "migration", "idempotent", "backward-compat"],
+    "tags": [
+      "admin",
+      "migration",
+      "idempotent",
+      "backward-compat"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-internal-import", "type": "depends_on" },
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-internal-import",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2064385",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -584,7 +770,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-admin-sends-global-message",
     "type": "use_case",
@@ -593,13 +778,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "messaging", "broadcast"],
+    "tags": [
+      "admin",
+      "messaging",
+      "broadcast"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-global-messaging", "type": "depends_on" },
-      { "id": "device-requests/dc-global-message", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-global-messaging",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-global-message",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2097153",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -617,7 +812,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/uc-followup-failure",
     "type": "use_case",
@@ -626,13 +820,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "terminal-state", "followup"],
+    "tags": [
+      "admin",
+      "terminal-state",
+      "followup"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
-      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/dc-status-lifecycle",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2129921",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -650,7 +854,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-device-request",
     "type": "domain_concept",
@@ -659,15 +862,30 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["firestore", "core-entity"],
+    "tags": [
+      "firestore",
+      "core-entity"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" },
-      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" },
-      { "id": "device-requests/dc-request-number", "type": "relates_to" },
-      { "id": "device-requests/dc-public-status", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-status-lifecycle",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-private-data-separation",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-request-number",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-public-status",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2162689",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -685,7 +903,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-status-lifecycle",
     "type": "domain_concept",
@@ -694,13 +911,22 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["state-machine", "lifecycle"],
+    "tags": [
+      "state-machine",
+      "lifecycle"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-public-status", "type": "relates_to" },
-      { "id": "device-requests/dc-volunteer-transition", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-public-status",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-volunteer-transition",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2195457",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -718,7 +944,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-public-status",
     "type": "domain_concept",
@@ -727,13 +952,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["firestore", "public-projection", "pii-free"],
+    "tags": [
+      "firestore",
+      "public-projection",
+      "pii-free"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" },
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-status-lifecycle",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2228225",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -751,7 +986,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-request-event",
     "type": "domain_concept",
@@ -760,12 +994,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["firestore", "event-sourcing", "timeline"],
+    "tags": [
+      "firestore",
+      "event-sourcing",
+      "timeline"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1933353",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -783,7 +1024,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-private-data-separation",
     "type": "domain_concept",
@@ -792,12 +1032,20 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["privacy", "gdpr", "pii", "firestore"],
+    "tags": [
+      "privacy",
+      "gdpr",
+      "pii",
+      "firestore"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2064405",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -815,7 +1063,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-request-number",
     "type": "domain_concept",
@@ -824,13 +1071,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["firestore", "sequential-id", "counter"],
+    "tags": [
+      "firestore",
+      "sequential-id",
+      "counter"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-device-request", "type": "relates_to" },
-      { "id": "device-requests/dc-counter", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-counter",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2260993",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -848,7 +1105,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-requires-attention",
     "type": "domain_concept",
@@ -857,12 +1113,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["flag", "admin", "attention"],
+    "tags": [
+      "flag",
+      "admin",
+      "attention"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2293761",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -880,7 +1143,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-amputation-type",
     "type": "domain_concept",
@@ -889,12 +1151,18 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["medical", "private-data"],
+    "tags": [
+      "medical",
+      "private-data"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-private-data-separation",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2064425",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -912,7 +1180,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-device-type",
     "type": "domain_concept",
@@ -921,13 +1188,22 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["device-catalog", "admin"],
+    "tags": [
+      "device-catalog",
+      "admin"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-public-status", "type": "relates_to" },
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-public-status",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2195477",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -945,7 +1221,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-global-message",
     "type": "domain_concept",
@@ -954,12 +1229,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["messaging", "broadcast", "firestore"],
+    "tags": [
+      "messaging",
+      "broadcast",
+      "firestore"
+    ],
     "relates_to": [
-      { "id": "device-requests/cap-global-messaging", "type": "relates_to" }
+      {
+        "id": "device-requests/cap-global-messaging",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "1998869",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -977,7 +1259,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-volunteer-transition",
     "type": "domain_concept",
@@ -986,12 +1267,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["rbac", "volunteer", "state-machine"],
+    "tags": [
+      "rbac",
+      "volunteer",
+      "state-machine"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-status-lifecycle",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2293781",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -1003,7 +1291,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-age-range",
     "type": "domain_concept",
@@ -1012,13 +1299,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["privacy", "derived-field", "statistics"],
+    "tags": [
+      "privacy",
+      "derived-field",
+      "statistics"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-public-status", "type": "relates_to" },
-      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-public-status",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-device-request",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2064445",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -1036,7 +1333,6 @@
       }
     ]
   },
-
   {
     "id": "device-requests/dc-counter",
     "type": "domain_concept",
@@ -1045,12 +1341,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["firestore", "counter", "sequential-id"],
+    "tags": [
+      "firestore",
+      "counter",
+      "sequential-id"
+    ],
     "relates_to": [
-      { "id": "device-requests/dc-request-number", "type": "relates_to" }
+      {
+        "id": "device-requests/dc-request-number",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2326529",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
