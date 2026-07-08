@@ -1,0 +1,506 @@
+{
+  "$schema": "https://cognitive-workspace.dev/schemas/domain-manifest/v1.json",
+  "manifest_version": "1.0",
+  "generated_at": "2026-07-08T00:00:00Z",
+
+  "project": {
+    "name": "enable-spa",
+    "display_name": "e-Nable Italia — Portale Dispositivi e Volontari",
+    "repo_url": "https://github.com/e-nableitalia/enable-spa",
+    "jira_project": "ENABLE-APP",
+    "confluence_space": "EACWV",
+    "description": "Piattaforma web per la gestione delle richieste di dispositivi prostetici stampati in 3D e per il coordinamento dei volontari dell'associazione e-Nable Italia.",
+    "public_url": "https://app.e-nableitalia.it",
+    "firebase_project": "enableitalia",
+    "firebase_region": "europe-west1",
+    "language": "TypeScript",
+    "license": {
+      "code": "MIT",
+      "documentation": "CC BY-NC-SA 4.0"
+    }
+  },
+
+  "architecture": {
+    "style": "monorepo",
+    "type": "SPA + Serverless Backend",
+    "subprojects": [
+      {
+        "id": "frontend",
+        "name": "enable-device",
+        "path": "enable-device/",
+        "description": "Single Page Application React/TypeScript per utenti finali, volontari e amministratori.",
+        "tech_stack": {
+          "bundler": "Vite 7",
+          "framework": "React 19",
+          "language": "TypeScript 5.9",
+          "ui_library": "PrimeReact 10 + PrimeIcons",
+          "routing": "React Router DOM 7",
+          "charts": "Chart.js 4 (via primereact/chart)",
+          "kanban": "@caldwell619/react-kanban",
+          "csv": "PapaParse",
+          "http_client": "Firebase SDK (callable functions)"
+        },
+        "build_output": "enable-device/dist",
+        "deploy_target": "Firebase Hosting"
+      },
+      {
+        "id": "backend",
+        "name": "functions/backend",
+        "path": "functions/backend/",
+        "description": "Cloud Functions Firebase v2 che espongono tutta la business logic come callable HTTPS.",
+        "tech_stack": {
+          "runtime": "Node.js 22",
+          "framework": "Firebase Functions v2",
+          "language": "TypeScript 5.7",
+          "auth_sdk": "firebase-admin 13",
+          "jwt": "jose 6",
+          "deploy_target": "Firebase Functions (europe-west1)"
+        },
+        "entry_point": "functions/backend/src/index.ts",
+        "compiled_output": "functions/backend/lib/"
+      }
+    ]
+  },
+
+  "cloud_functions": {
+    "region": "europe-west1",
+    "transport": "Firebase onCall (HTTPS Callable)",
+    "groups": [
+      {
+        "group": "auth",
+        "source": "functions/backend/src/auth/",
+        "functions": [
+          {
+            "name": "register",
+            "description": "Avvia la registrazione via email link. Verifica reCAPTCHA, applica rate limit, genera l'oobCode, salva pendingRegistrations e invia l'email di conferma.",
+            "secrets": ["RECAPTCHA_API_KEY", "RECAPTCHA_SITE_KEY", "MAIL_FROM_ADDRESS"],
+            "auth_required": false
+          },
+          {
+            "name": "checkRegistration",
+            "description": "Valida l'oobCode (scade dopo 24 ore) e lo marca come utilizzato.",
+            "auth_required": false
+          },
+          {
+            "name": "completeRegistration",
+            "description": "Crea il documento utente in Firestore dopo la verifica email, imposta ruolo volunteer e active=false.",
+            "secrets": ["MAIL_FROM_ADDRESS", "TELEGRAM_API_URL", "TELEGRAM_API_SECRET"],
+            "auth_required": true
+          },
+          {
+            "name": "registerWithIntegratedAuth",
+            "description": "Registrazione integrata (Google OAuth / provider esterno): crea il documento utente se non esiste.",
+            "secrets": ["MAIL_FROM_ADDRESS", "TELEGRAM_API_URL", "TELEGRAM_API_SECRET"],
+            "auth_required": true
+          },
+          {
+            "name": "doLogin",
+            "description": "Registra l'evento di login nel security log.",
+            "auth_required": true
+          },
+          {
+            "name": "setPassword",
+            "description": "Permette all'utente di impostare la password dopo la registrazione.",
+            "source": "functions/backend/src/auth/setPassword.ts",
+            "auth_required": true
+          }
+        ]
+      },
+      {
+        "group": "device",
+        "source": "functions/backend/src/device/",
+        "functions": [
+          {
+            "name": "createDeviceRequest",
+            "description": "Crea una nuova richiesta dispositivo dal form pubblico. Verifica reCAPTCHA, rate limit, salva in Firestore in transazione (deviceRequests + private/data + events + publicDeviceRequests + counters), invia email di conferma e notifica Telegram.",
+            "secrets": ["RECAPTCHA_API_KEY", "RECAPTCHA_SITE_KEY", "MAIL_FROM_ADDRESS", "TELEGRAM_API_URL", "TELEGRAM_API_SECRET"],
+            "auth_required": false
+          },
+          {
+            "name": "createDeviceRequestInternal",
+            "description": "Crea una richiesta dispositivo da flusso interno (admin).",
+            "auth_required": true
+          },
+          {
+            "name": "changeStatus",
+            "description": "Cambia lo stato di una richiesta dispositivo. Admin: qualsiasi transizione. Volunteer: solo le transizioni consentite sulla propria richiesta assegnata. Aggiorna deviceRequests, publicDeviceRequests e registra l'evento. Supporta notifiche opzionali via email e Telegram.",
+            "secrets": ["TELEGRAM_API_URL", "TELEGRAM_API_SECRET"],
+            "auth_required": true,
+            "role_check": "admin | volunteer (own assigned request, restricted transitions)"
+          },
+          {
+            "name": "assignVolunteer",
+            "description": "Assegna/sostituisce la lista completa dei volontari a una richiesta dispositivo. Solo admin.",
+            "auth_required": true,
+            "role_check": "admin"
+          },
+          {
+            "name": "saveGlobalMessage",
+            "description": "Crea o aggiorna un messaggio globale con notifica opzionale Telegram.",
+            "auth_required": true,
+            "role_check": "admin"
+          }
+        ]
+      },
+      {
+        "group": "volunteer",
+        "source": "functions/backend/src/volunteer/",
+        "functions": [
+          {
+            "name": "activateVolunteers",
+            "description": "Attiva uno o piu volontari (imposta active=true). Solo admin.",
+            "auth_required": true,
+            "role_check": "admin"
+          },
+          {
+            "name": "deactivateVolunteers",
+            "description": "Disattiva uno o piu volontari (imposta active=false). Solo admin.",
+            "auth_required": true,
+            "role_check": "admin"
+          },
+          {
+            "name": "updateVolunteerProfile",
+            "description": "Aggiorna il profilo privato/skills del volontario autenticato.",
+            "auth_required": true,
+            "role_check": "volunteer"
+          },
+          {
+            "name": "addPrinter",
+            "description": "Registra una nuova stampante 3D nella sub-collection printers del volontario.",
+            "auth_required": true,
+            "role_check": "volunteer"
+          },
+          {
+            "name": "inviteVolunteer",
+            "description": "Invia email di invito a una lista di contatti e aggiorna lo stato in contacts/{id}. Solo admin.",
+            "auth_required": true,
+            "role_check": "admin"
+          },
+          {
+            "name": "acceptVolunteerConsents",
+            "description": "Registra l'accettazione dei consensi privacy e operativi da parte del volontario (prerequisito per operazioni sensibili).",
+            "auth_required": true
+          },
+          {
+            "name": "setUserRole",
+            "description": "Modifica il ruolo di un utente. Solo admin.",
+            "auth_required": true,
+            "role_check": "admin"
+          },
+          {
+            "name": "listVolunteerAdminData",
+            "description": "Restituisce la lista dei volontari con dati aggregati per la vista amministrativa.",
+            "auth_required": true,
+            "role_check": "admin"
+          }
+        ]
+      },
+      {
+        "group": "shipments",
+        "source": "functions/backend/src/shipments/",
+        "functions": [
+          {
+            "name": "createShipmentRequest",
+            "description": "Crea una richiesta di spedizione (mittente, destinatario, dimensioni pacco).",
+            "auth_required": true
+          },
+          {
+            "name": "approveShipmentRequest",
+            "description": "Approva una richiesta di spedizione e invia email di conferma a richiedente e spedizione@e-nableitalia.it. Solo admin.",
+            "auth_required": true,
+            "role_check": "admin"
+          },
+          {
+            "name": "deleteShipmentRequest",
+            "description": "Elimina una richiesta di spedizione (soft delete, status=deleted). L'admin puo eliminare qualsiasi richiesta; il volontario solo le proprie in stato pending.",
+            "auth_required": true
+          }
+        ]
+      }
+    ]
+  },
+
+  "domain_entities": {
+    "deviceRequest": {
+      "description": "Richiesta di dispositivo prostetico da parte di un richiedente (familiari, tutori). Entita centrale dell'applicazione.",
+      "firestore_paths": {
+        "main": "deviceRequests/{requestId}",
+        "private_data": "deviceRequests/{requestId}/private/data",
+        "events": "deviceRequests/{requestId}/events/{eventId}",
+        "public_ref": "publicDeviceRequests/{requestId}"
+      },
+      "key_fields": {
+        "main": ["age", "gender", "status", "publicStatus", "assignedVolunteers", "seqId", "requestNumber", "createdAt", "updatedAt", "createdBy", "shippingAddress", "recipient", "relation", "descriptionPublic", "preferencesPublic", "validatedAt", "validatedBy", "requiresAttention"],
+        "private_data": ["email", "firstName", "lastName", "phone", "relation", "province", "therapy", "amputationType", "description", "preferences", "consentPrivacy"],
+        "public_ref": ["province", "publicStatus", "createdAt", "devicetype", "requestNumber", "ageRange"]
+      },
+      "status_lifecycle": {
+        "type": "linear_with_branches",
+        "all_statuses": [
+          "inviata", "validata", "famiglia contattata", "definizione richiesta",
+          "valutazione fattibilita", "followup famiglia ko", "followup famiglia troppo piccolo",
+          "attesa volontario", "scelta device e dimensionamento", "personalizzazione",
+          "attesa materiali", "fabbricazione", "fitting", "pronta per spedizione",
+          "spedita", "followup famiglia", "completata", "annullata", "standby"
+        ],
+        "terminal_statuses": ["completata", "annullata", "followup famiglia ko", "followup famiglia troppo piccolo"],
+        "public_status_groups": {
+          "da validare": ["inviata"],
+          "da gestire": ["validata", "famiglia contattata", "definizione richiesta", "valutazione fattibilita", "attesa volontario"],
+          "fabbricazione in corso": ["scelta device e dimensionamento", "personalizzazione", "attesa materiali", "fabbricazione", "fitting", "pronta per spedizione", "spedita", "followup famiglia"],
+          "completati": ["completata"],
+          "annullate / non completabili": ["followup famiglia ko", "followup famiglia troppo piccolo", "annullata", "standby"]
+        },
+        "volunteer_allowed_transitions": [
+          {"from": "scelta device e dimensionamento", "to": "personalizzazione"},
+          {"from": "personalizzazione", "to": "attesa materiali"},
+          {"from": "attesa materiali", "to": "fabbricazione"},
+          {"from": "fabbricazione", "to": "pronta per spedizione"},
+          {"from": "pronta per spedizione", "to": "spedita"}
+        ]
+      },
+      "amputation_types": [
+        "Mano, polso funzionale con parte residua di palmo",
+        "Braccio sotto il gomito",
+        "Braccio sopra il gomito",
+        "Altro"
+      ],
+      "request_number_format": "REQ-{6-digit-padded-sequential}"
+    },
+
+    "user": {
+      "description": "Utente della piattaforma. Puo essere admin o volunteer.",
+      "firestore_paths": {
+        "core": "users/{uid}",
+        "private_profile": "users/{uid}/private/profile",
+        "skills": "users/{uid}/private/skills",
+        "printers": "users/{uid}/printers/{printerId}",
+        "public_profile": "users/{uid}/public/profile",
+        "personal_messages": "users/{uid}/messages/{messageId}"
+      },
+      "roles": ["admin", "volunteer"],
+      "core_fields": ["email", "role", "active", "createdAt", "mustSetPassword", "authProvider"],
+      "private_profile_fields": ["firstName", "lastName", "phone", "city", "telegramUsername", "availability", "continuityType", "desiredInvolvementLevel", "mainInterest", "howDidYouKnowEnable", "additionalNotes", "consentPrivacy", "notificationPreferences", "shippingAddress", "updatedAt"],
+      "skills_fields": ["aboutMe", "mainInterest", "enableInterestAreas", "contributionPreferences", "desiredSkills", "updatedAt"],
+      "printer_fields": ["brand", "model", "buildVolumeX", "buildVolumeY", "buildVolumeZ", "multiMaterial", "flexibleSupported", "directDrive", "notes", "active", "createdAt", "updatedAt"],
+      "public_profile_fields": ["showInVolunteerList", "publicEmail", "bio", "facebook", "instagram", "linkedin", "updatedAt"],
+      "continuity_types": ["continuativa", "spot", "saltuaria"],
+      "involvement_levels": ["bassa", "progetti", "coordinamento", "non so"]
+    },
+
+    "shipmentRequest": {
+      "description": "Richiesta di spedizione di un pacco (es. dispositivo prodotto da spedire al destinatario).",
+      "firestore_path": "shipmentRequests/{requestId}",
+      "key_fields": ["createdAt", "updatedAt", "createdBy", "email", "reason", "senderName", "senderAddress", "senderNotes", "recipientName", "recipientAddress", "recipientPhone", "deliveryNotes", "length", "width", "height", "weight", "status"],
+      "statuses": ["pending", "approved", "deleted"]
+    },
+
+    "globalMessage": {
+      "description": "Messaggio di sistema/comunicazione globale visibile a tutti, ai soli volontari o ai soli admin.",
+      "firestore_path": "messages/{messageId}",
+      "key_fields": ["title", "body", "target", "createdAt", "expiresAt", "active", "notifyTelegram"],
+      "targets": ["all", "volunteer", "admin"]
+    },
+
+    "contact": {
+      "description": "Contatto CRM per l'invio di inviti a diventare volontario.",
+      "firestore_path": "contacts/{contactId}",
+      "key_fields": ["firstName", "lastName", "email", "status", "updatedAt"],
+      "statuses": ["invited"]
+    },
+
+    "securityLog": {
+      "description": "Evento di sicurezza registrato per audit trail.",
+      "firestore_path": "securityLogs/{logId}",
+      "key_fields": ["type", "action", "outcome", "severity", "actor", "context", "createdAt"],
+      "event_types": ["security", "auth", "form", "system"],
+      "outcomes": ["success", "failure", "blocked"],
+      "severities": ["low", "medium", "high", "critical"]
+    },
+
+    "pendingRegistration": {
+      "description": "Registrazione in attesa di verifica email (TTL: 24 ore).",
+      "firestore_path": "pendingRegistrations/{oobCode}",
+      "key_fields": ["email", "oobCode", "createdAt", "validated", "validatedAt"]
+    },
+
+    "mailQueue": {
+      "description": "Coda email (Firebase Mail Extension). I documenti vengono processati dall'estensione Firebase Trigger Email.",
+      "firestore_path": "mail/{mailId}",
+      "email_templates": ["confermaRicezione", "inviteVolunteer", "shipmentRequest", "attivazioneVolontario"]
+    },
+
+    "rateLimit": {
+      "description": "Controllo rate limiting per email e IP.",
+      "firestore_path": "rateLimits/{key}",
+      "key_patterns": {
+        "email": "email_{email}",
+        "ip": "ip_{sha256(ip)}"
+      },
+      "limits": {
+        "email": {"window_ms": 300000, "description": "1 richiesta per email ogni 5 minuti"},
+        "ip": {"window_ms": 3600000, "max_requests": 3, "description": "3 richieste per IP ogni ora"}
+      }
+    },
+
+    "counter": {
+      "description": "Contatore per la generazione di ID sequenziali.",
+      "firestore_path": "counters/{name}",
+      "known_counters": ["deviceRequests"]
+    },
+
+    "shippingAddress": {
+      "description": "Tipo condiviso per indirizzi di spedizione (riusato in deviceRequestData e VolunteerPrivateProfile).",
+      "fields": ["fullName", "street", "city", "province", "postalCode", "country", "phone", "notes"]
+    }
+  },
+
+  "frontend": {
+    "entry": "enable-device/src/main.tsx",
+    "router": "React Router DOM 7 (BrowserRouter)",
+    "routes": [
+      {"path": "/login", "component": "Login", "access": "public", "description": "Login email + Google OAuth"},
+      {"path": "/register", "component": "Register", "access": "public", "description": "Registrazione volontario (step 1: email)"},
+      {"path": "/complete-registration", "component": "CompleteRegistration", "access": "public", "description": "Completamento registrazione via link email"},
+      {"path": "/set-password", "component": "SetPassword", "access": "authenticated", "description": "Impostazione password post-registrazione"},
+      {"path": "/request-device", "component": "RequestDevice", "access": "public", "description": "Form pubblico di richiesta dispositivo"},
+      {"path": "/home", "component": "Home", "access": "authenticated", "description": "Home page"},
+      {"path": "/volunteer-consent", "component": "VolunteerConsentPage", "access": "authenticated", "description": "Accettazione consensi volontario"},
+      {"path": "/admin/*", "component": "AdminLayout", "access": "admin", "description": "Area amministrativa (layout + sub-routes)"},
+      {"path": "/volunteer/*", "component": "VolunteerLayout", "access": "volunteer", "description": "Area volontario (layout + sub-routes)"}
+    ],
+    "admin_sections": {
+      "dashboard": "AdminDashboard (Kanban board per status pubblici)",
+      "stats": "AdminStats (grafici richieste, province, dispositivi)",
+      "logs": {"email": "AdminEmailLogsPage", "security": "AdminSecurityLogsPage"},
+      "messages": "AdminMessagesPage (CRUD messaggi globali)",
+      "requests": {
+        "all": "AdminAll", "pending": "AdminPending", "triage": "AdminTriage",
+        "validate": "AdminValidate", "attention": "AdminAttention", "production": "AdminProduction",
+        "shipping": "AdminShipping", "completed": "AdminCompleted", "cancelled": "AdminCancelled",
+        "maintenance": "AdminMaintenanceRequests", "detail": "RequestDetail"
+      },
+      "volunteers": {
+        "list": "AdminVolunteers / VolunteerAdminList", "pending": "PendingVolunteers",
+        "contacts": "ContactsList", "maintenance": "VolunteerMaintenance",
+        "printer_summary": "VolunteerPrinterSummary", "detail_dialog": "VolunteerAdminDetailDialog"
+      }
+    },
+    "volunteer_sections": {
+      "dashboard": "VolunteerDashboard (statistiche personali + messaggi)",
+      "profile": "VolunteerProfile", "availability": "VolunteerAvailability",
+      "printers": "MyPrinters", "my_requests": "MyRequests",
+      "manageable_requests": "ManageableRequestsPage / ManageableRequestDetail",
+      "production": "Production", "shipping": "Shipping", "archive": "Archive",
+      "request_detail": "VolunteerRequestDetail", "shipments": "ShipmentRequestsPage"
+    }
+  },
+
+  "security": {
+    "authentication": {
+      "providers": ["Firebase Email Link", "Google OAuth (Firebase Auth)"],
+      "registration_flow": "Email → oobCode → completeRegistration → active=false (pending admin activation)",
+      "consent_gate": "acceptVolunteerConsents — prerequisito obbligatorio per operazioni sensibili dei volontari"
+    },
+    "authorization": {
+      "model": "RBAC (Role-Based Access Control)",
+      "roles": {
+        "admin": "Accesso completo a tutte le operazioni e viste",
+        "volunteer": "Accesso limitato alle proprie richieste assegnate e alle transizioni di stato consentite"
+      },
+      "activation": "I nuovi volontari partono con active=false; l'admin deve attivare manualmente l'account"
+    },
+    "anti_spam": {
+      "recaptcha": {
+        "product": "Google reCAPTCHA Enterprise",
+        "min_score": 0.6,
+        "actions": ["register_email", "create_device_request"]
+      },
+      "rate_limiting": {
+        "email_window": "5 minuti (1 request)",
+        "ip_window": "1 ora (max 3 request)",
+        "ip_hashing": "SHA-256"
+      }
+    },
+    "http_headers": ["Strict-Transport-Security", "X-Content-Type-Options", "Referrer-Policy", "Cross-Origin-Opener-Policy", "Permissions-Policy", "Content-Security-Policy"],
+    "audit_log": "securityLogs collection — ogni azione registra tipo, azione, esito, severita, attore, contesto"
+  },
+
+  "integrations": {
+    "firebase": {
+      "auth": "Firebase Authentication",
+      "database": "Cloud Firestore",
+      "functions": "Firebase Cloud Functions v2",
+      "hosting": "Firebase Hosting",
+      "mail_extension": "Firebase Trigger Email Extension (collection: mail)"
+    },
+    "google_recaptcha": {
+      "product": "reCAPTCHA Enterprise",
+      "secrets": ["RECAPTCHA_API_KEY", "RECAPTCHA_SITE_KEY"]
+    },
+    "telegram": {
+      "description": "Notifiche push su canale Telegram dell'associazione",
+      "secrets": ["TELEGRAM_API_URL", "TELEGRAM_API_SECRET"],
+      "events_notified": [
+        "Nuova registrazione volontario",
+        "Nuova richiesta dispositivo",
+        "Cambio stato richiesta (opzionale)",
+        "Nuovo messaggio globale con notifyTelegram=true"
+      ]
+    },
+    "email": {
+      "addresses": {
+        "volunteers_admins": "volontari@e-nableitalia.it",
+        "device_admins": "devices@e-nableitalia.it",
+        "shipments": "spedizione@e-nableitalia.it"
+      }
+    }
+  },
+
+  "data_flow": {
+    "device_request_lifecycle": [
+      "Richiedente compila form /request-device",
+      "createDeviceRequest: verifica reCAPTCHA + rate limit → salva in Firestore (transazione) → invia email conferma + notifica Telegram",
+      "Admin riceve notifica → valida richiesta (status: inviata → validata) su AdminValidate",
+      "Admin assegna volontario/i tramite assignVolunteer",
+      "Volontario visualizza richiesta su ManageableRequestsPage e avanza lo stato (fabbricazione)",
+      "Admin gestisce spedizione → changeStatus: pronta per spedizione → spedita",
+      "Admin chiude con followup famiglia → completata"
+    ],
+    "volunteer_registration_lifecycle": [
+      "Utente va su /register → inserisce email",
+      "register: verifica reCAPTCHA + rate limit → genera oobCode → salva pendingRegistrations → invia email link",
+      "Utente clicca link → /complete-registration → checkRegistration (valida oobCode)",
+      "completeRegistration: crea users/{uid} (role=volunteer, active=false)",
+      "Utente va su /volunteer-consent → acceptVolunteerConsents",
+      "Admin attiva l'account su PendingVolunteers → activateVolunteers"
+    ]
+  },
+
+  "development": {
+    "local_dev": {
+      "frontend": "cd enable-device && npm install && npm run dev",
+      "backend": "cd functions/backend && npm install && firebase emulators:start --only functions",
+      "build_frontend": "cd enable-device && npm run build",
+      "build_backend": "cd functions/backend && npm run build"
+    },
+    "deployment": {
+      "script": "deploy.sh",
+      "hosting": "firebase deploy --only hosting",
+      "functions": "firebase deploy --only functions",
+      "full": "firebase deploy"
+    },
+    "firebase_config": "firebase.json (hosting: enable-device/dist, functions source: functions/backend)"
+  },
+
+  "conventions": {
+    "firestore_timestamps": "Usare FieldValue.serverTimestamp() lato backend; frontend riceve Timestamp Firestore con metodo .toDate()",
+    "backward_compat_volunteers": "I documenti precedenti usano assignedVolunteer (stringa), i nuovi usano assignedVolunteers (array). Leggere entrambi finche migrazione completata.",
+    "private_data_separation": "I dati PII del richiedente sono sempre in sub-collection private/data, mai nel documento principale",
+    "public_status_sync": "Ogni cambio di status in deviceRequests deve aggiornare anche publicDeviceRequests (merge)",
+    "security_logging": "Ogni Cloud Function deve loggare inizio, fine ed errori in securityLogs via logSecurityEvent",
+    "invoke_id": "Ogni callable genera un invokeId (getInvokeId) per la correlazione dei log",
+    "email_queue": "Le email non vengono inviate direttamente ma accodate in collection mail (Firebase Trigger Email)",
+    "recaptcha_threshold": "Score minimo reCAPTCHA: 0.6 (sotto → blocked)"
+  }
+}
