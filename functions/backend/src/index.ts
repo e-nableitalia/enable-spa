@@ -17,5 +17,6 @@ export { setUserRole } from "./volunteer/setUserRole";
 export { listVolunteerAdminData } from "./volunteer/listVolunteerAdminData";
 export { createShipmentRequest, approveShipmentRequest, deleteShipmentRequest } from "./shipments/shipmentRequests";
 export { saveGlobalMessage } from "./device/saveGlobalMessage";
+export { createChecklist } from "./organizer/createChecklist";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
