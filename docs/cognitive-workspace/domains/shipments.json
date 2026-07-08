@@ -1,0 +1,180 @@
+[
+  {
+    "id": "shipments/cap-shipment-request-lifecycle",
+    "type": "capability",
+    "name": "Gestione ciclo di vita richieste di spedizione",
+    "body": "## What it does\n\nGestisce il ciclo di vita completo delle richieste di spedizione pacchi dell'associazione: creazione da parte di volontari o admin, approvazione da parte di un admin con invio email automatico, e cancellazione (soft delete). L'entità centrale è `shipmentRequest` (collection Firestore `shipmentRequests/{requestId}`).\n\nLe tre Cloud Functions coinvolte sono:\n- **`createShipmentRequest`** — crea un documento con `status: \"pending\"`. Richiede autenticazione (volunteer o admin). Campi obbligatori: `reason`, `senderName`, `senderAddress`, `recipientName`, `recipientAddress`. Campi opzionali: `senderNotes`, `recipientPhone`, `deliveryNotes`, dimensioni pacco (`length`, `width`, `height`, `weight`). Ritorna `{success: true, id: docRef.id}`.\n- **`approveShipmentRequest`** — imposta `status: \"approved\"`. Solo admin (verifica `users/{uid}.role === \"admin\"` a runtime). Accoda un'email alla collection `mail` con template `shipmentRequest` verso `[data.email, 'spedizione@e-nableitalia.it']`.\n- **`deleteShipmentRequest`** — soft delete: imposta `status: \"deleted\"`. Admin: qualsiasi richiesta. Volunteer: solo le proprie (`createdBy === uid`) in stato `pending` — tentare su richiesta altrui o non-pending restituisce `permission-denied`.\n\nTutte e tre le function loggano inizio, esito e anomalie in `securityLogs` via `logSecurityEvent` (convenzione trasversale del repo).\n\n## Boundaries\n\n- Il dominio NON gestisce la spedizione fisica né si integra con corrieri: si limita a registrare la richiesta e a notificare il team logistica via email.\n- Non c'è integrazione con il ciclo di vita delle `deviceRequests`: le spedizioni sono un'entità Firestore separata, anche se front-end le pagina può pre-popolare gli indirizzi partendo dalle richieste dispositivo assegnate al volontario.\n- Non ci sono stati intermedi tra `pending` e `approved`: non esiste uno stato `in_lavorazione` o simile.\n- Il soft delete (`status: \"deleted\"`) non è reversibile via API.\n\n## Key entry points\n\n- **Backend**: `functions/backend/src/shipments/shipmentRequests.ts` — esporta `createShipmentRequest`, `approveShipmentRequest`, `deleteShipmentRequest` come `onCall` Firebase v2 (region `europe-west1`).\n- **Frontend**: `enable-device/src/pages/shipments/ShipmentRequestsPage.tsx` — pagina React che gestisce tutta la UI (lista real-time, dialogo creazione, dialogo dettaglio, azioni approva/elimina).",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["shipments", "firestore", "cloud-functions"],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/shipments/shipmentRequests.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/shipments/ShipmentRequestsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "shipments/cap-known-address-suggestion",
+    "type": "capability",
+    "name": "Suggerimento indirizzi noti nel form di spedizione",
+    "body": "## What it does\n\nQuando il volontario (o admin) apre il dialogo di creazione di una nuova richiesta di spedizione, può attivare una checkbox **\"da lista\"** per mittente e/o destinatario: viene proposto un `Dropdown` filtrabile con gli indirizzi già noti dell'utente, caricati on-demand dalla funzione `loadKnownAddresses`.\n\nLe fonti degli indirizzi noti sono due, lette direttamente da Firestore (senza passare per Cloud Functions):\n1. **Indirizzo del profilo del volontario**: da `users/{uid}/private/profile` → campo `shippingAddress` (tipo `ShippingAddress` condiviso).\n2. **Indirizzi dei beneficiari delle richieste dispositivo assegnate al volontario**: query su `deviceRequests` con `assignedVolunteers array-contains uid`; per ciascuna richiesta con `shippingAddress` valorizzato, legge il nome del beneficiario da `deviceRequests/{id}/private/data` (firstName, lastName).\n\nL'etichetta mostrata nel dropdown ha formato:\n- Profilo: `Il mio indirizzo — {fullName}, {street}, {postalCode} {city}`\n- Richiesta dispositivo: `Richiesta {seqId} — {beneficiaryName}, {street}, {city}`\n\nSelezionando un indirizzo dalla lista, i campi `senderName`/`senderAddress` (o `recipientName`/`recipientAddress`/`recipientPhone`) vengono pre-popolati nel form.\n\n## Boundaries\n\n- La lettura degli indirizzi avviene client-side (Firestore SDK diretto), non tramite Cloud Function: nessun log di sicurezza per questa operazione.\n- La feature è disponibile sia per i volontari sia per gli admin.\n- Gli indirizzi sono mostrati in plain text (campo `addressText` multiriga: via, CAP città provincia, paese).\n\n## Key entry points\n\n- **Frontend**: `enable-device/src/pages/shipments/ShipmentRequestsPage.tsx` — funzione `loadKnownAddresses` (righe 138–188); stato `knownAddresses`, `senderFromList`, `recipientFromList`, `selectedSenderAddress`, `selectedRecipientAddress`.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["shipments", "ux", "address-book"],
+    "relates_to": [
+      { "id": "shipments/cap-shipment-request-lifecycle", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/shipments/ShipmentRequestsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "shipments/uc-create-shipment-request",
+    "type": "use_case",
+    "name": "Volontario (o admin) crea una richiesta di spedizione",
+    "body": "## Scenario\n\n1. Il volontario (o admin) è autenticato e naviga su `ShipmentRequestsPage`.\n2. Clicca **\"Nuova richiesta\"**: si apre il dialogo di creazione e vengono caricati gli indirizzi noti (`loadKnownAddresses`).\n3. Compila il form: motivo della spedizione (obbligatorio), mittente (nome + indirizzo, obbligatori; note opzionali), destinatario (nome + indirizzo obbligatori; telefono e note consegna opzionali), dimensioni pacco (lunghezza/larghezza/altezza/peso — tutti opzionali, devono essere > 0 se inseriti).\n4. Per mittente e/o destinatario può usare la checkbox **\"da lista\"** per selezionare un indirizzo noto dal dropdown (pre-popola nome e indirizzo nel form).\n5. Clicca **\"Crea richiesta\"**: il frontend valida il form lato client, poi chiama `createShipmentRequest` (Firebase callable).\n6. Il backend verifica autenticazione e campi obbligatori, salva il documento in `shipmentRequests` con `status: \"pending\"` e `createdBy: uid`, registra l'evento in `securityLogs`, e ritorna `{success: true, id}`.\n7. La lista si aggiorna in real-time via `onSnapshot`.\n\n## Depends on capabilities\n\n- `shipments/cap-shipment-request-lifecycle` — Cloud Function `createShipmentRequest`\n- `shipments/cap-known-address-suggestion` — pre-popolamento indirizzi\n\n## Known gaps\n\n- Non c'è notifica Telegram o email al momento della creazione (a differenza di `createDeviceRequest`): il team di logistica viene notificato solo all'approvazione.\n- Non è possibile modificare una richiesta già inviata: l'unica azione successiva per il volontario è eliminarla (se ancora in stato `pending`).",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["shipments", "volunteer", "admin"],
+    "relates_to": [
+      { "id": "shipments/cap-shipment-request-lifecycle", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/shipments/shipmentRequests.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/shipments/ShipmentRequestsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "shipments/uc-approve-shipment-request",
+    "type": "use_case",
+    "name": "Admin approva una richiesta di spedizione",
+    "body": "## Scenario\n\n1. L'admin visualizza la lista delle richieste su `ShipmentRequestsPage` (vede tutte, filtrate solo per `status !== \"deleted\"`).\n2. Per le richieste in stato `pending`, nella colonna **Azioni** compare il pulsante **\"Approva\"**.\n3. L'admin clicca **\"Approva\"**: il frontend chiama `approveShipmentRequest` con `{requestId}`.\n4. Il backend verifica che l'utente sia admin (lettura `users/{uid}.role`), aggiorna `status: \"approved\"` su `shipmentRequests/{requestId}`, e accoda un'email alla collection `mail` con template `shipmentRequest` verso due destinatari: l'email del richiedente (`data.email`) e `spedizione@e-nableitalia.it`.\n5. La email include tutti i dati della richiesta (mittente, destinatario, dimensioni, data).\n6. L'evento viene registrato in `securityLogs`.\n7. Il badge di stato nella lista passa da **\"In attesa\"** (giallo) a **\"Approvata\"** (verde) in real-time.\n\n## Depends on capabilities\n\n- `shipments/cap-shipment-request-lifecycle` — Cloud Function `approveShipmentRequest`\n\n## Known gaps\n\n- Non esiste un meccanismo di **rifiuto** esplicito: l'admin può solo approvare o eliminare. Una richiesta respinta viene cancellata (soft delete), senza notifica specifica al richiedente.\n- Non c'è notifica in-app al volontario richiedente: solo email.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["shipments", "admin", "email-notification"],
+    "relates_to": [
+      { "id": "shipments/cap-shipment-request-lifecycle", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/shipments/shipmentRequests.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/shipments/ShipmentRequestsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "shipments/uc-delete-shipment-request",
+    "type": "use_case",
+    "name": "Eliminazione di una richiesta di spedizione",
+    "body": "## Scenario\n\n**Caso A — Volontario elimina la propria richiesta pending:**\n1. Il volontario vede la propria richiesta in stato `pending` nella lista.\n2. Clicca **\"Elimina\"**: compare un `ConfirmDialog` di conferma.\n3. Confermando, il frontend chiama `deleteShipmentRequest` con `{requestId}`.\n4. Il backend verifica autenticazione, poi controlla che `createdBy === uid` e che `status === \"pending\"`: se una delle due condizioni non è soddisfatta, lancia `permission-denied`.\n5. Il documento viene aggiornato a `status: \"deleted\"` (soft delete).\n6. Il frontend filtra automaticamente i documenti con `status === \"deleted\"`, quindi la riga sparisce dalla lista.\n\n**Caso B — Admin elimina qualsiasi richiesta:**\n1. L'admin vede il pulsante **\"Elimina\"** su tutte le richieste non già eliminate.\n2. Il flusso è identico al caso A, ma il backend salta i controlli su `createdBy` e `status`: l'admin può eliminare qualsiasi richiesta indipendentemente dallo stato.\n\n## Depends on capabilities\n\n- `shipments/cap-shipment-request-lifecycle` — Cloud Function `deleteShipmentRequest`\n\n## Known gaps\n\n- Il soft delete non è reversibile: non esiste un'API di ripristino.\n- Non viene inviata nessuna notifica al richiedente in caso di eliminazione da parte dell'admin.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["shipments", "soft-delete", "rbac"],
+    "relates_to": [
+      { "id": "shipments/cap-shipment-request-lifecycle", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/shipments/shipmentRequests.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/shipments/ShipmentRequestsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "shipments/dc-shipment-request",
+    "type": "domain_concept",
+    "name": "ShipmentRequest",
+    "body": "## Definition\n\nEntità Firestore che rappresenta una richiesta di spedizione di un pacco da parte di un volontario (o admin) dell'associazione. È **separata** dal ciclo di vita di `deviceRequest`: può essere usata per spedire qualsiasi materiale, non solo dispositivi prostetici prodotti.\n\n**Path Firestore**: `shipmentRequests/{requestId}`\n\n**Campi**:\n- `createdAt`, `updatedAt` — `FieldValue.serverTimestamp()`\n- `createdBy` — uid dell'utente che ha creato la richiesta\n- `email` — email del richiedente (da Firebase Auth token)\n- `reason` — motivo della spedizione (obbligatorio)\n- `senderName`, `senderAddress` — mittente (obbligatori)\n- `senderNotes` — note mittente (opzionale)\n- `recipientName`, `recipientAddress` — destinatario (obbligatori)\n- `recipientPhone` — telefono destinatario (opzionale)\n- `deliveryNotes` — note per la consegna (opzionale)\n- `length`, `width`, `height` — dimensioni in cm (opzionali, > 0)\n- `weight` — peso in kg (opzionale, > 0)\n- `status` — `\"pending\"` | `\"approved\"` | `\"deleted\"`\n\n**Ciclo di stato**: `pending` → `approved` (admin) oppure `pending` → `deleted` (admin qualsiasi, volunteer solo proprie in pending). Non ci sono altri stati intermedi e il soft delete non è reversibile.\n\n## Also known as\n\n- **Richiesta di spedizione** (label UI)\n- `ShipmentRequest` (interfaccia TypeScript nel frontend)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["shipments", "firestore", "entity"],
+    "relates_to": [
+      { "id": "shipments/cap-shipment-request-lifecycle", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/shipments/shipmentRequests.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/shipments/ShipmentRequestsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T12:00:00Z"
+      }
+    ]
+  }
+]
