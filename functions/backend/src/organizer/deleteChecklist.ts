@@ -1,21 +1,10 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { getFirestore } from "firebase-admin/firestore";
-import { logSecurityEvent } from "../security/securityLog";
-import { getInvokeId } from "../utils/invoke";
+import {onCall, HttpsError} from "firebase-functions/v2/https";
+import {getFirestore} from "firebase-admin/firestore";
+import {logSecurityEvent} from "../security/securityLog";
+import {getInvokeId} from "../utils/invoke";
 
-const REGION = "europe-west1";
-
-/**
- * Cloud Function callable per l'eliminazione di un'istanza di checklist
- * esistente nel core Organizer.
- *
- * Riceve dal consumer `checklistId` e, se il documento
- * `checklists/{checklistId}` esiste, lo elimina insieme a tutti i suoi
- * dati (inclusi gli eventuali item). Una successiva lettura dello stesso
- * `checklistId` deve quindi risultare not-found.
- */
 export const deleteChecklist = onCall(
-  { region: REGION },
+  {region: "europe-west1"},
   async (request) => {
     const invokeId = getInvokeId(request);
     console.log(`[deleteChecklist] Invoke ID: ${invokeId} - Function called`);
@@ -32,26 +21,40 @@ export const deleteChecklist = onCall(
       }
 
       const db = getFirestore();
-      const checklistRef = db.collection("checklists").doc(checklistId);
-      const checklistSnap = await checklistRef.get();
 
-      if (!checklistSnap.exists) {
+      const userSnap = await db.collection("users").doc(uid).get();
+      if (!userSnap.exists) {
+        throw new HttpsError("permission-denied", "User not found");
+      }
+      const role = userSnap.data()?.role;
+
+      const ref = db.collection("checklists").doc(checklistId);
+      const snap = await ref.get();
+      if (!snap.exists) {
         throw new HttpsError("not-found", "Checklist not found");
       }
 
-      await checklistRef.delete();
+      const data = snap.data()!;
+
+      if (role !== "admin" && data.createdBy !== uid) {
+        console.log(`[deleteChecklist] KO: uid ${uid} tried to delete checklist ${checklistId} owned by another user`);
+        throw new HttpsError("permission-denied", "Cannot delete another user's checklist");
+      }
+
+      // Elimina il documento e tutte le sue subcollection (es. items)
+      await db.recursiveDelete(ref);
 
       await logSecurityEvent({
         type: "system",
         action: "delete_checklist",
         outcome: "success",
         severity: "low",
-        actor: { uid, email: request.auth?.token?.email ?? undefined },
-        context: { function: "deleteChecklist", invokeId, requestId: checklistId },
+        actor: {uid, email: request.auth?.token?.email ?? undefined},
+        context: {function: "deleteChecklist", invokeId, requestId: checklistId},
       });
 
       console.log(`[deleteChecklist] OK: checklist ${checklistId} deleted by ${uid}`);
-      return { success: true };
+      return {success: true};
     } catch (error) {
       console.error("[deleteChecklist] KO:", error);
       await logSecurityEvent({
@@ -59,8 +62,8 @@ export const deleteChecklist = onCall(
         action: "delete_checklist_failed",
         outcome: "failure",
         severity: "high",
-        actor: { uid: request.auth?.uid, email: request.auth?.token?.email ?? undefined },
-        context: { function: "deleteChecklist", invokeId, requestId: request.data?.checklistId },
+        actor: {uid: request.auth?.uid, email: request.auth?.token?.email ?? undefined},
+        context: {function: "deleteChecklist", invokeId, requestId: request.data?.checklistId},
       });
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "Internal Server Error");
