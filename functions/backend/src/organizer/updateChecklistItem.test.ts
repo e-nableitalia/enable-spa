@@ -88,6 +88,22 @@ describe("updateChecklistItem", () => {
     expect(updatePayload.updatedAt).toBe(SERVER_TIMESTAMP_SENTINEL);
   });
 
+  it("updates only the title field, leaving status, assignee, quantity, notes and completed unchanged", async () => {
+    await updateChecklistItem.run(
+      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, title: "Prepara stampante 3D" })
+    );
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    const [updatePayload] = updateMock.mock.calls[0];
+    const updatedItem = updatePayload.items.find((item: { id: string }) => item.id === ITEM_ID);
+
+    expect(updatedItem).toEqual({
+      ...ORIGINAL_ITEM,
+      title: "Prepara stampante 3D",
+    });
+    expect(updatePayload.updatedAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+  });
+
   it("updates only the assignee field, leaving status, quantity, notes and completed unchanged", async () => {
     await updateChecklistItem.run(
       buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, assignee: "Nuovo Assegnatario" })
