@@ -1,0 +1,121 @@
+{
+  "$schema": "https://cognitive-workspace.dev/schemas/epic-draft/v1.json",
+  "draft_version": "1.0",
+  "generated_at": "2026-07-08T00:00:00Z",
+  "drafted_by": "planning-agent",
+
+  "jira": {
+    "project": "EA",
+    "issue_type": "Epic",
+    "suggested_title": "Semplificazione macro-stato richieste dispositivo e separazione responsabilità da Organizer",
+    "fields": {
+      "Pipeline Stage": "Pending Epic Approval",
+      "Request Category": "refactoring",
+      "Target Domains": ["device-requests"],
+      "Related Capabilities": [
+        "device-requests/cap-request-lifecycle-management",
+        "device-requests/dc-status-lifecycle",
+        "device-requests/dc-public-status",
+        "device-requests/dc-volunteer-transition"
+      ],
+      "Drafted By": "planning-agent",
+      "Source Reference": "docs/requests/device-lifecycle-refactoring.md"
+    }
+  },
+
+  "description": {
+    "obiettivo": "La Cloud Function `changeStatus` (fonte: `functions/backend/src/device/changeStatus.ts`) governa oggi 19 stati interni distinti (elencati in `device-requests/dc-status-lifecycle`), ma molti di questi stati servono solo a tracciare l'avanzamento granulare del processo di fabbricazione — una responsabilità che verrà delegata al modulo Organizer (vedi Epic distinte da `docs/requests/process-organizer-core.md` e `docs/requests/device-organizer-integration.md`). L'obiettivo di questa Epic è ridurre il macro-stato gestito da `changeStatus` ai soli stati pubblici (o un loro piccolo superset esplicito, da definire in fase di Story) e ripulire la separazione di responsabilità nel codice di `changeStatus.ts` e `RequestDetail.tsx`, che oggi mescolano lifecycle macro, gestione flag critico e logica di assegnazione.",
+
+    "domini_e_capability_collegate": [
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "ruolo": "Capability primaria oggetto del refactoring. La Cloud Function `changeStatus` (`functions/backend/src/device/changeStatus.ts`) e il frontend `RequestDetail.tsx` vengono riorganizzati: la logica di lifecycle macro, gestione `requiresAttention` e interazione con l'assegnazione volontari restano qui ma vengono separate in responsabilità più nette."
+      },
+      {
+        "id": "device-requests/dc-status-lifecycle",
+        "ruolo": "I 19 stati interni (da `inviata` a `standby`) vengono ridotti: quelli di triage e completamento restano nel macro-stato, quelli di produzione granulare (`scelta device e dimensionamento`, `personalizzazione`, `attesa materiali`, `fabbricazione`, `fitting`) diventano responsabilità dell'Organizer. La sequenza esatta degli stati macro residui va definita in fase di Story."
+      },
+      {
+        "id": "device-requests/dc-public-status",
+        "ruolo": "I 5 gruppi di stato pubblico (`da validare`, `da gestire`, `fabbricazione in corso`, `completati`, `annullate / non completabili`) e il loro mapping via `mapToPublicStatus` (`functions/backend/src/utils/mapToPublicStatus.ts`) devono rimanere invariati come output osservabile. La funzione di mapping può essere aggiornata internamente per riflettere i nuovi stati macro, ma i 5 valori di output non cambiano. Nota: il nodo `dc-public-status` nel workspace dichiara erroneamente '4 valori' — il dato corretto è 5, come da `domain-manifest.json` e dalla richiesta originale."
+      },
+      {
+        "id": "device-requests/dc-volunteer-transition",
+        "ruolo": "La funzione `isAllowedVolunteerTransition` e le 5 transizioni consentite ai volontari (`scelta device e dimensionamento → personalizzazione → attesa materiali → fabbricazione → pronta per spedizione → spedita`) sono oggi hardcoded in `changeStatus.ts`. Con la riduzione degli stati macro, queste transizioni granulari diventano responsabilità dell'Organizer — la logica RBAC per i volontari deve rimanere funzionante ma ridefinita su un sottoinsieme di stati macro residuo. Il comportamento osservabile (volontario assegnato può avanzare, altri no) non cambia."
+      }
+    ],
+
+    "categoria_e_razionale": "Questa richiesta è classificata come **refactoring** perché: (1) non introduce nuove funzionalità per gli utenti finali — tutti i flussi visibili dall'esterno (validazione, avanzamento volontario, notifiche, flag attenzione, timeline) devono rimanere comportamentalmente identici; (2) la motivazione è tecnica — ridurre la complessità interna di `changeStatus` (19 stati, logica mista) per abilitare la delega corretta al modulo Organizer senza che i due moduli si sovrappongano; (3) il rischio principale è la regressione, non l'introduzione di comportamenti errati.",
+
+    "cosa_non_deve_cambiare": {
+      "nota": "Per la categoria refactoring, questa sezione è vincolante quanto la sezione 'cosa cambia'. Ogni Story nella fase successiva deve avere acceptance criteria formulati come verifica di non-regressione sui punti elencati qui.",
+      "invarianti": [
+        {
+          "id": "INV-01",
+          "cosa": "I 5 gruppi di stato pubblico (publicStatus)",
+          "grounding": "device-requests/dc-public-status, domain-manifest.json §status_lifecycle.public_status_groups",
+          "dettaglio": "I valori `da validare`, `da gestire`, `fabbricazione in corso`, `completati`, `annullate / non completabili` devono rimanere i soli valori possibili di `publicStatus`. La collection `publicDeviceRequests` deve rimanere sincronizzata ad ogni transizione."
+        },
+        {
+          "id": "INV-02",
+          "cosa": "`da validare` come gruppo distinto per lo stato `inviata`",
+          "grounding": "domain-manifest.json §status_lifecycle.public_status_groups, docs/requests/device-lifecycle-refactoring.md",
+          "dettaglio": "Lo stato `inviata` e il suo mapping a `publicStatus: 'da validare'` (visibilità ristretta fino alla validazione admin) devono rimanere invariati. Non va assorbito in `da gestire`."
+        },
+        {
+          "id": "INV-03",
+          "cosa": "Regole RBAC: admin libero, volontario solo su richieste assegnate e solo transizioni consentite",
+          "grounding": "device-requests/cap-request-lifecycle-management, device-requests/dc-volunteer-transition",
+          "dettaglio": "L'admin può effettuare qualsiasi transizione. Il volontario può effettuare transizioni solo se è in `assignedVolunteers` e solo per le transizioni consentite. Il meccanismo di enforcement (oggi `isAllowedVolunteerTransition` in `changeStatus.ts`) può essere reimplementato ma deve produrre lo stesso risultato."
+        },
+        {
+          "id": "INV-04",
+          "cosa": "Notifiche opzionali post-transizione (admin, volunteers, Telegram)",
+          "grounding": "device-requests/cap-request-lifecycle-management §Boundaries e §Gestisce notifiche opzionali",
+          "dettaglio": "Il parametro `notifica: { admin?, volunteers?, telegram? }` in `changeStatus` deve continuare a funzionare con la stessa semantica (email a `devices@e-nableitalia.it`, email ai volontari assegnati, messaggio Telegram)."
+        },
+        {
+          "id": "INV-05",
+          "cosa": "Flag requiresAttention e sua gestione",
+          "grounding": "device-requests/dc-requires-attention, device-requests/uc-admin-marks-attention",
+          "dettaglio": "Il flusso di impostazione/rimozione del flag `requiresAttention` (nota obbligatoria, updateDoc + changeStatus, vista AdminAttention) deve rimanere invariato."
+        },
+        {
+          "id": "INV-06",
+          "cosa": "Event sourcing su deviceRequests/{id}/events",
+          "grounding": "device-requests/dc-request-event, device-requests/cap-request-lifecycle-management §event sourcing",
+          "dettaglio": "Ogni transizione deve continuare a generare un documento in `deviceRequests/{id}/events/{eventId}` con struttura `{ type, fromStatus, toStatus, timestamp, createdBy, note }`. La timeline in `RequestTimeline.tsx` deve continuare a funzionare."
+        },
+        {
+          "id": "INV-07",
+          "cosa": "Nota senza cambio stato (fromStatus === toStatus)",
+          "grounding": "device-requests/uc-admin-adds-note",
+          "dettaglio": "Il meccanismo di aggiunta nota tramite `changeStatus(newStatus === currentStatus)` deve continuare a funzionare o essere sostituito da un meccanismo equivalente che produca lo stesso evento in timeline."
+        },
+        {
+          "id": "INV-08",
+          "cosa": "Flusso di validazione admin (inviata → validata)",
+          "grounding": "device-requests/cap-request-validation, device-requests/uc-admin-validates-request",
+          "dettaglio": "Il pannello di validazione in `RequestDetail.tsx`, la transizione `inviata → validata`, e il cambio di `publicStatus` da `da validare` a `da gestire` alla validazione devono rimanere invariati. Questa capability non è in scope per il refactoring."
+        }
+      ]
+    },
+
+    "fuori_scope": [
+      "Il modulo Organizer stesso (checklist, template, condivisione tra volontari) — è oggetto delle Epic distinte `process-organizer-core.md` e `device-organizer-integration.md`.",
+      "Cambiamenti alla logica di validazione/anonimizzazione (`device-requests/cap-request-validation`) — resta come oggi.",
+      "Cambiamenti alla logica di assegnazione volontari (`device-requests/cap-volunteer-assignment`, Cloud Function `assignVolunteer.ts`) — resta come oggi.",
+      "Nuove funzionalità visibili all'utente finale (nessuna nuova capability in questa Epic).",
+      "Form pubblico di richiesta dispositivo (`device-requests/cap-public-request-submission`) — invariato.",
+      "Import/manutenzione batch (`device-requests/cap-internal-import`) — invariato."
+    ],
+
+    "dipendenza_di_sequenza": "Questa Epic ha senso essere completata DOPO `device-organizer-integration.md` (o in parallelo con forte coordinamento). Semplificare il macro-stato prima che l'Organizer sappia gestire il dettaglio granulare lascerebbe un vuoto funzionale: gli stati di fabbricazione granulare (`scelta device`, `personalizzazione`, ecc.) non potrebbero essere rimossi dal macro-stato finché l'Organizer non è pronto a gestirli. Da confermare nella pianificazione congiunta delle tre Epic.",
+
+    "note_tecniche_da_workspace": [
+      "Bug noto documentato in `dc-public-status`: `mapToPublicStatus.ts` usa `'valutazione fattibilità'` (con accento) mentre i dati Firestore possono contenere `'valutazione fattibilita'` (senza accento) — potenziale mismatch di mapping. Va risolto nell'ambito di questa Epic o segnalato come rischio di regressione nelle Story.",
+      "Inconsistenza di casing `devicetype` vs `deviceType` (documentata in `dc-device-type`): non è in scope per questa Epic ma la pulizia di `changeStatus.ts` non deve peggiorare la situazione.",
+      "Il tipo evento `'set_volunteers'` viene renderizzato come `'assign_volunteer'` in `RequestTimeline.tsx` (documentato in `dc-request-event`): non in scope ma da non rompere."
+    ]
+  }
+}
