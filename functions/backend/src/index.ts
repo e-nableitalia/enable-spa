@@ -23,6 +23,7 @@ export { createChecklist } from "./organizer/createChecklist";
 export { createTemplate } from "./organizer/createTemplate";
 export { updateTemplate } from "./organizer/updateTemplate";
 export { listTemplates } from "./organizer/listTemplates";
+export { deleteTemplate } from "./organizer/deleteTemplate";
 export { deleteChecklist } from "./organizer/deleteChecklist";
 export { addChecklistItem } from "./organizer/addChecklistItem";
 export { updateChecklistItem } from "./organizer/updateChecklistItem";
