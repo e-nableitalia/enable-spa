@@ -17,6 +17,10 @@ jest.mock("firebase-admin/firestore", () => ({
   },
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { updateChecklist } from "./updateChecklist";
 
 function buildRequest(data: Record<string, unknown>): CallableRequest {

@@ -17,11 +17,17 @@ const deleteMock = jest.fn(() => {
   storedChecklist = undefined;
   return Promise.resolve();
 });
+const recursiveDeleteMock = jest.fn(() => {
+  documentExists = false;
+  storedChecklist = undefined;
+  return Promise.resolve();
+});
 const docMock = jest.fn((_id?: string) => ({ get: getMock, delete: deleteMock }));
-const collectionMock = jest.fn(() => ({ doc: docMock }));
+const userDocMock = jest.fn(() => ({ get: jest.fn(() => Promise.resolve({ exists: true, data: () => ({ role: "admin" }) })) }));
+const collectionMock = jest.fn();
 
 jest.mock("firebase-admin/firestore", () => ({
-  getFirestore: jest.fn(() => ({ collection: collectionMock })),
+  getFirestore: jest.fn(() => ({ collection: collectionMock, recursiveDelete: recursiveDeleteMock })),
 }));
 
 jest.mock("../security/securityLog", () => ({
@@ -62,6 +68,7 @@ describe("deleteChecklist", () => {
     storedChecklist = {
       category: "devicetype-arto-superiore",
       title: "Checklist evento",
+      createdBy: "user-1",
       items: [
         {
           id: "item-1",
@@ -93,8 +100,15 @@ describe("deleteChecklist", () => {
       storedChecklist = undefined;
       return Promise.resolve();
     });
+    recursiveDeleteMock.mockImplementation(() => {
+      documentExists = false;
+      storedChecklist = undefined;
+      return Promise.resolve();
+    });
     docMock.mockReturnValue({ get: getMock, delete: deleteMock });
-    collectionMock.mockReturnValue({ doc: docMock });
+    collectionMock.mockImplementation((name: string) =>
+      name === "users" ? { doc: userDocMock } : { doc: docMock }
+    );
   });
 
   it("deletes the checklists/{checklistId} document (with its items) from Firestore", async () => {
@@ -102,7 +116,7 @@ describe("deleteChecklist", () => {
 
     expect(collectionMock).toHaveBeenCalledWith("checklists");
     expect(docMock).toHaveBeenCalledWith(CHECKLIST_ID);
-    expect(deleteMock).toHaveBeenCalledTimes(1);
+    expect(recursiveDeleteMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ success: true });
   });
 

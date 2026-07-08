@@ -23,10 +23,10 @@ export const updateChecklist = onCall(
       };
 
       if (!checklistId || typeof checklistId !== "string") {
-        throw new HttpsError("invalid-argument", "Missing checklistId");
+        throw new HttpsError("invalid-argument", "Missing parameter: checklistId");
       }
       if (!title || typeof title !== "string" || !title.trim()) {
-        throw new HttpsError("invalid-argument", "Missing title");
+        throw new HttpsError("invalid-argument", "Missing or invalid title");
       }
 
       const db = getFirestore();
@@ -52,7 +52,7 @@ export const updateChecklist = onCall(
       });
 
       console.log(`[updateChecklist] OK: checklist ${checklistId} updated by ${uid}`);
-      return { success: true };
+      return { checklistId, title };
     } catch (error) {
       console.error("[updateChecklist] KO:", error);
       await logSecurityEvent({

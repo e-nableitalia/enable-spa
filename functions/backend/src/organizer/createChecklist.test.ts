@@ -20,6 +20,7 @@ import { createChecklist } from "./createChecklist";
 
 function buildRequest(data: Record<string, unknown>): CallableRequest {
   return {
+    auth: { uid: "user-1", token: { email: "user@example.com" } } as CallableRequest["auth"],
     data,
     rawRequest: { headers: {} } as CallableRequest["rawRequest"],
   } as CallableRequest;
@@ -55,18 +56,20 @@ describe("createChecklist", () => {
       title: "Checklist evento",
       items: [
         {
+          id: expect.any(String),
           title: "Prepara stampante",
-          assignee: "user-1",
+          assignee: null,
           quantity: 2,
           notes: "Nota",
           status: "Assegnare",
           completed: false,
         },
         {
+          id: expect.any(String),
           title: "Verifica materiale",
           assignee: null,
           quantity: null,
-          notes: null,
+          notes: "",
           status: "Assegnare",
           completed: false,
         },
