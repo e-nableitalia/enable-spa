@@ -1,0 +1,424 @@
+[
+  {
+    "id": "volunteer-management/cap-volunteer-activation",
+    "type": "capability",
+    "name": "Attivazione e Disattivazione Volontari",
+    "body": "## What it does\n\nPermette all'admin di attivare o disattivare uno o più account volontario in un'unica operazione batch. L'attivazione imposta `active=true` sul documento `users/{uid}` e accoda due email via la collection `mail` (una inline HTML + una con template `attivazioneVolontario`). La disattivazione imposta `active=false` senza inviare email (il blocco di invio è commentato nel codice). In entrambi i casi viene registrato un security event in `securityLogs`.\n\nLa funzione `setUserRole` (stesso modulo) consente all'admin di promuovere un volontario ad admin o retrocedere un admin a volontario — con divieto esplicito di auto-modifica del ruolo.\n\n## Boundaries\n\n- Solo utenti con `role=admin` possono chiamare `activateVolunteers`, `deactivateVolunteers` e `setUserRole`.\n- Il campo `active` è gestito **esclusivamente** lato backend; il frontend non lo scrive direttamente.\n- L'email di disattivazione è al momento disabilitata (codice commentato in `volunteerState.ts`).\n- `setUserRole` non accetta ruoli al di fuori di `[\"volunteer\", \"admin\"]` e rifiuta cambi di ruolo sull'account dell'admin chiamante.\n\n## Key entry points\n\n- Cloud Function `activateVolunteers` → `functions/backend/src/volunteer/volunteerState.ts`\n- Cloud Function `deactivateVolunteers` → `functions/backend/src/volunteer/volunteerState.ts`\n- Cloud Function `setUserRole` → `functions/backend/src/volunteer/setUserRole.ts`\n- UI admin: `PendingVolunteers.tsx` (attivazione bulk), `AdminVolunteers.tsx` (cambio ruolo con dialog di conferma)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "rbac", "volunteer-lifecycle"],
+    "relates_to": [
+      { "id": "volunteer-management/uc-admin-activates-volunteer", "type": "implements" },
+      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/volunteerState.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/setUserRole.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/PendingVolunteers.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/AdminVolunteers.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/cap-volunteer-profile-management",
+    "type": "capability",
+    "name": "Gestione Profilo Volontario",
+    "body": "## What it does\n\nPermette al volontario (o all'admin) di aggiornare le tre sezioni del proprio profilo in una singola transazione Firestore:\n\n- **privateProfile** (`users/{uid}/private/profile`): dati anagrafici e di contatto — nome, cognome, telefono, città, telegramUsername, disponibilità (`availability`), tipo di continuità (`continuityType`: `continuativa | spot | saltuaria`), livello di coinvolgimento desiderato (`desiredInvolvementLevel`: `bassa | progetti | coordinamento | non so`), note aggiuntive, indirizzo di spedizione.\n- **skills** (`users/{uid}/private/skills`): interessi principali (`mainInterest`), aree di interesse e-Nable (`enableInterestAreas`), preferenze di contribuzione, competenze desiderate.\n- **publicProfile** (`users/{uid}/public/profile`): flag `showInVolunteerList`, email pubblica, bio, link social (Facebook, Instagram, LinkedIn).\n\nLa funzione backend valida le preferenze di notifica: se il canale Telegram è selezionato richiede `telegramUsername`; se WhatsApp richiede `phone`; se nessun canale è attivo, forza `email: true`. Ogni aggiornamento è loggato in `securityLogs`.\n\nLato frontend, `VolunteerProfile.tsx` e `VolunteerAvailability.tsx` espongono le sezioni corrispondenti con form PrimeReact. La `VolunteerDashboard` rileva le sezioni non compilate e mostra avvisi informativi.\n\n## Boundaries\n\n- Solo utenti con `role=volunteer` o `role=admin` possono aggiornare il profilo.\n- L'aggiornamento è con `merge: true` (set parziale), non sovrascrive campi non passati.\n- La sezione skills include `enableInterestAreas` e `mainInterest` come array di stringhe — non sono validati server-side contro un vocabolario fisso.\n\n## Key entry points\n\n- Cloud Function `updateVolunteerProfile` → `functions/backend/src/volunteer/updateVolunteerProfile.ts`\n- UI: `enable-device/src/pages/volunteer/VolunteerProfile.tsx`\n- UI: `enable-device/src/pages/volunteer/VolunteerAvailability.tsx`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["volunteer", "profile", "firestore"],
+    "relates_to": [
+      { "id": "volunteer-management/uc-volunteer-onboarding", "type": "implements" },
+      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/updateVolunteerProfile.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/volunteer/VolunteerProfile.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/volunteer/VolunteerAvailability.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/cap-printer-registry",
+    "type": "capability",
+    "name": "Registro Stampanti 3D del Volontario",
+    "body": "## What it does\n\nPermette al volontario di registrare le proprie stampanti 3D nella sub-collection `users/{uid}/printers`. Ogni documento stampante include: brand, model (obbligatori), dimensioni volume di stampa (X/Y/Z in mm), supporto filamenti flessibili (`flexibleSupported`), stampa multi-materiale (`multiMaterial`), estrusore a trazione diretta (`directDrive`), note libere, flag `active`.\n\nLa funzione backend `addPrinter` valida la presenza di `brand` e `model` prima di salvare, imposta `active=true` e timestamp server-side. Lato frontend, `MyPrinters.tsx` mostra l'elenco delle stampanti e permette di aggiungerne di nuove.\n\nI dati delle stampanti vengono aggregati da `listVolunteerAdminData` e normalizzati in `volunteerAdminHelpers.ts` per la vista admin, che espone filtri per brand, model, volume minimo di stampa e capacità (flessibile, multi-materiale, direct drive).\n\n## Boundaries\n\n- Solo utenti con `role=volunteer` possono chiamare `addPrinter` (gli admin usano il proprio profilo da volontario se necessario).\n- Non esiste attualmente una funzione di modifica/eliminazione di una stampante esistente — `addPrinter` crea sempre un nuovo documento.\n- Il campo `active` sulla stampante è settato a `true` alla creazione ma non esiste un endpoint per disattivarla lato funzione — la `normalizeVolunteerForAdminRow` in helpers distingue tra stampanti attive e tutte le stampanti per il calcolo delle capacità.\n\n## Key entry points\n\n- Cloud Function `addPrinter` → `functions/backend/src/volunteer/addPrinter.ts`\n- UI: `enable-device/src/pages/volunteer/MyPrinters.tsx`\n- Data normalization: `enable-device/src/pages/admin/volunteers/volunteerAdminHelpers.ts`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["volunteer", "3d-printing", "equipment"],
+    "relates_to": [
+      { "id": "volunteer-management/dc-3d-printer", "type": "implements" },
+      { "id": "volunteer-management/cap-admin-volunteer-view", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/addPrinter.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/volunteer/MyPrinters.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/volunteerAdminHelpers.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/cap-consent-collection",
+    "type": "capability",
+    "name": "Raccolta Consensi Volontario",
+    "body": "## What it does\n\nRegistra l'accettazione formale, da parte del volontario, dell'**informativa privacy** e del **codice etico** della community e-Nable Italia. La funzione `acceptVolunteerConsents` scrive due nodi nel documento `users/{uid}` (merge) sotto la chiave `consents`:\n\n```\nconsents.privacy.accepted = true\nconsents.privacy.acceptedAt = serverTimestamp()\nconsents.privacy.version = \"2026-03\"\nconsents.codeOfConduct.accepted = true\nconsents.codeOfConduct.acceptedAt = serverTimestamp()\nconsents.codeOfConduct.version = \"2026-03\"\n```\n\nLa versione del consenso è hardcoded nel backend (`CURRENT_CONSENT_VERSION = \"2026-03\"`): quando il testo viene aggiornato si dovrà incrementare questa costante per forzare una nuova accettazione.\n\nLato frontend, `VolunteerConsentPage.tsx` mostra il testo dell'informativa privacy e del codice etico in pannelli con scroll, con due checkbox obbligatorie (entrambe devono essere spuntate per abilitare il pulsante). Dopo il submit, naviga su `/home`.\n\nLa vista admin `PendingVolunteers.tsx` mostra le colonne `Privacy` e `Cod. Etico` per verificare che il volontario abbia accettato prima di procedere all'attivazione.\n\n## Boundaries\n\n- Qualsiasi utente autenticato può chiamare `acceptVolunteerConsents` (non solo volunteer).\n- Non esiste un meccanismo di revoca del consenso lato frontend — la revoca richiederebbe una scrittura diretta o una nuova funzione.\n- Il gate post-consenso (navigazione a `/home`) è solo frontend; il backend non blocca le altre callable in assenza di consenso (il blocco era previsto ma non è implementato come middleware).\n\n## Key entry points\n\n- Cloud Function `acceptVolunteerConsents` → `functions/backend/src/volunteer/acceptVolunteerConsents.ts`\n- UI: `enable-device/src/pages/VolunteerConsentPage.tsx`\n- Route: `/volunteer-consent` (access: authenticated)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["consent", "privacy", "gdpr", "onboarding"],
+    "relates_to": [
+      { "id": "volunteer-management/uc-volunteer-onboarding", "type": "implements" },
+      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/acceptVolunteerConsents.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/VolunteerConsentPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/cap-volunteer-invitation",
+    "type": "capability",
+    "name": "Invito Contatti a Diventare Volontari",
+    "body": "## What it does\n\nConsente all'admin di inviare email di invito a una lista di contatti CRM e di aggiornarne lo stato. La funzione `inviteVolunteer` itera su un array di `contacts` passato dal chiamante; per ciascuno:\n\n1. Accoda un'email con template `inviteVolunteer` nella collection `mail`, passando firstName e lastName come dati di template.\n2. Aggiorna `contacts/{id}` impostando `status: \"invited\"` e `updatedAt: serverTimestamp()`.\n3. Ritorna un array `results` con l'esito per ogni contatto (success/failure).\n\nLa funzione è progettata per essere resiliente: un fallimento su un singolo contatto non interrompe l'elaborazione degli altri.\n\nLato frontend, `ContactsList.tsx` è una vista CRM che:\n- Legge la collection `contacts` da Firestore direttamente.\n- Supporta filtro testuale (nome/cognome/email) e per stato.\n- Permette selezione multipla e operazioni bulk: invita, elimina (soft delete con `deleted: true`), cambia stato.\n- Visualizza stati con Tag colorati (una decina di stati: `imported`, `invited`, `active`, `standby`, `lost`, ecc.).\n\n## Boundaries\n\n- Solo admin possono chiamare `inviteVolunteer`.\n- `ContactsList.tsx` legge e scrive su `contacts` direttamente via SDK client (non tramite callable) — non c'è validazione backend per le operazioni di cambio stato e soft delete.\n- L'eliminazione è un soft delete (`deleted: true`), ma il frontend filtra i contatti dalla UI senza ricaricarli: Firestore non filtra i documenti `deleted=true` automaticamente in questa query.\n\n## Key entry points\n\n- Cloud Function `inviteVolunteer` → `functions/backend/src/volunteer/invite.ts`\n- UI admin: `enable-device/src/pages/admin/volunteers/ContactsList.tsx`\n- Email template: `inviteVolunteer` (Firebase Trigger Email Extension)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "crm", "email", "invitation"],
+    "relates_to": [
+      { "id": "volunteer-management/dc-contact", "type": "implements" },
+      { "id": "volunteer-management/uc-volunteer-onboarding", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/invite.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/ContactsList.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/cap-admin-volunteer-view",
+    "type": "capability",
+    "name": "Vista Amministrativa Aggregata dei Volontari",
+    "body": "## What it does\n\nFornisce all'admin una view ricca e filtrabile di tutti i volontari della piattaforma, con dati aggregati da tutte le sub-collection del profilo. La callable `listVolunteerAdminData` recupera da Firestore, per ogni utente con ruolo `volunteer` o `admin`:\n\n- `users/{uid}` (core: active, email, role, createdAt)\n- `users/{uid}/private/profile` (privateProfile)\n- `users/{uid}/private/skills` (skills)\n- `users/{uid}/public/profile` (publicProfile)\n- `users/{uid}/printers` (lista stampanti)\n\ne restituisce un array di oggetti `VolunteerData` tipizzati. Le letture delle sub-collection sono in `Promise.all` per ogni utente (parallelizzate) ma il ciclo sugli utenti è sequenziale — potenzialmente lento su cluster grandi.\n\nLato frontend, `volunteerAdminHelpers.ts` normalizza i dati in `VolunteerAdminRow` estraendo: flag `hasActivePrinter`, array `printerBrands`/`printerModels`, capabilities delle stampanti (flessibile, multi-materiale, direct drive), volume massimo di stampa. La funzione `applyVolunteerAdminFilters` applica oltre 20 criteri di filtraggio combinabili.\n\n`AdminVolunteers.tsx` gestisce il caricamento con fallback sui dati legacy in caso di errore della callable, mostra un warning all'utente, e permette il cambio ruolo con dialog di conferma (chiama `setUserRole`).\n\n## Boundaries\n\n- Solo admin possono chiamare `listVolunteerAdminData`.\n- La callable carica **tutti** gli utenti senza paginazione — scala male oltre qualche centinaio di volontari.\n- Il fallback ai dati legacy (passati come prop `volunteers`) mostra dati ridotti senza stampanti né skills.\n- `VolunteerAdminFilters.tsx` espone filtri dinamici basati sui valori effettivamente presenti nell'elenco (brand/model/interests calcolati da `useMemo`).\n\n## Key entry points\n\n- Cloud Function `listVolunteerAdminData` → `functions/backend/src/volunteer/listVolunteerAdminData.ts`\n- UI admin: `enable-device/src/pages/admin/volunteers/AdminVolunteers.tsx`\n- Helpers: `enable-device/src/pages/admin/volunteers/volunteerAdminHelpers.ts`\n- Sub-components: `VolunteerAdminList.tsx`, `VolunteerAdminFilters.tsx`, `VolunteerAdminDetailDialog.tsx`, `VolunteerPrinterSummary.tsx`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "reporting", "firestore"],
+    "relates_to": [
+      { "id": "volunteer-management/cap-printer-registry", "type": "relates_to" },
+      { "id": "volunteer-management/cap-volunteer-activation", "type": "relates_to" },
+      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/listVolunteerAdminData.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/AdminVolunteers.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/volunteerAdminHelpers.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/uc-volunteer-onboarding",
+    "type": "use_case",
+    "name": "Onboarding Volontario: dal Consenso all'Attivazione",
+    "body": "## Scenario\n\nUn nuovo volontario, appena registrato (via flusso auth con `completeRegistration`, `active=false`), accede al portale e viene reindirizzato a `/volunteer-consent`. Qui:\n\n1. Legge informativa privacy e codice etico su `VolunteerConsentPage`.\n2. Spunta entrambe le checkbox e clicca «Accetta e continua» → viene chiamata `acceptVolunteerConsents` → `consents.privacy` e `consents.codeOfConduct` scritti su Firestore → navigazione a `/home`.\n3. `VolunteerLayout` verifica `active` su Firestore: se `false`, mostra solo profilo e disponibilità con un banner di attesa attivazione.\n4. Il volontario compila il profilo (`VolunteerProfile.tsx` → `updateVolunteerProfile`) e la disponibilità (`VolunteerAvailability.tsx` → `updateVolunteerProfile`).\n5. Registra le proprie stampanti 3D (`MyPrinters.tsx` → `addPrinter`).\n6. L'admin vede il volontario in `PendingVolunteers` con i flag Privacy/CodEtico, lo seleziona e clicca «Attiva» → `activateVolunteers` → `active=true` → email di benvenuto accodata.\n7. Il volontario aggiorna la pagina: `VolunteerLayout` rileva `active=true` e mostra il menu completo.\n\n## Depends on capabilities\n\n- `volunteer-management/cap-consent-collection`\n- `volunteer-management/cap-volunteer-profile-management`\n- `volunteer-management/cap-printer-registry`\n- `volunteer-management/cap-volunteer-activation`\n\n## Known gaps\n\n- La `VolunteerConsentPage` non verifica se i consensi siano già stati accettati: se l'utente torna su `/volunteer-consent` può riaccettare senza side effect.\n- Non c'è notifica push/real-time al volontario quando viene attivato: deve ricaricare manualmente la pagina o aspettare il refresh del listener `onAuthStateChanged`.\n- La route `/volunteer-consent` non è protetta da un guard che verifichi `active=false`: potrebbe essere raggiunta anche da utenti già attivi.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["onboarding", "consent", "activation"],
+    "relates_to": [
+      { "id": "volunteer-management/cap-consent-collection", "type": "depends_on" },
+      { "id": "volunteer-management/cap-volunteer-profile-management", "type": "depends_on" },
+      { "id": "volunteer-management/cap-volunteer-activation", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/VolunteerConsentPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/layout/VolunteerLayout.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/PendingVolunteers.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/uc-admin-activates-volunteer",
+    "type": "use_case",
+    "name": "Admin Attiva Volontari in Attesa",
+    "body": "## Scenario\n\nL'admin accede alla sezione `/admin/volunteers` (o alla tab «In attesa di attivazione»). La pagina `PendingVolunteers` mostra i volontari con `active=false` con colonne: nome, cognome, email, città, telefono, Telegram, data creazione, flag Privacy e CodEtico.\n\n1. L'admin filtra/ordina la lista e seleziona uno o più volontari con le checkbox.\n2. Clicca «Attiva» nella toolbar → `activateVolunteers({ ids: [...] })` viene chiamata.\n3. Per ogni ID: `users/{uid}.active = true` in batch Firestore + email di attivazione accodata (`attivazioneVolontario` template).\n4. Il toast di successo conferma l'operazione; la selezione viene resettata.\n\nParallelamente, `AdminVolunteers` (tab con tutti i volontari) consente all'admin di cambiare il ruolo di un volontario (promozione ad admin o retrocessione) tramite `setUserRole`, con dialog di conferma che mostra il cambio previsto.\n\n## Depends on capabilities\n\n- `volunteer-management/cap-volunteer-activation`\n- `volunteer-management/cap-admin-volunteer-view`\n\n## Known gaps\n\n- `PendingVolunteers` riceve `volunteers` come prop dal componente padre (probabilmente `AdminLayout` o analogue) — se i dati non vengono ricaricati dopo l'attivazione, la lista non si aggiorna automaticamente senza un `onRefresh`.\n- Non c'è controllo lato `PendingVolunteers` per escludere volontari che abbiano già `active=true`: il filtraggio è responsabilità del componente padre.\n- L'email di conferma ha un duplicato: in `volunteerState.ts` vengono accodate sia un'email HTML inline che una con template, per ogni attivazione.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "activation", "workflow"],
+    "relates_to": [
+      { "id": "volunteer-management/cap-volunteer-activation", "type": "depends_on" },
+      { "id": "volunteer-management/cap-admin-volunteer-view", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/PendingVolunteers.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/volunteerState.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/uc-volunteer-manages-workload",
+    "type": "use_case",
+    "name": "Volontario Gestisce il Proprio Carico di Lavoro",
+    "body": "## Scenario\n\nUn volontario attivo accede al portale. `VolunteerLayout` carica in real-time (via `onSnapshot`) le richieste assegnate con `where(\"assignedVolunteers\", \"array-contains\", user.uid)` e arricchisce i dati con `publicDeviceRequests` (deviceType, province, publicStatus) e `deviceRequests/{id}/private/data` (nome/cognome). Le richieste vengono ripartite in `productionRequests` (stato in fabbricazione, non ancora pronto per spedizione) e `shippingRequests` (pronto per spedizione o spedita).\n\n**Dashboard** (`VolunteerDashboard`): mostra messaggi globali/personali non letti, avvisi per sezioni del profilo mancanti, tabella «Richieste da gestire» (non ancora assegnate, in status da gestire), tabella «Le mie richieste» e tre pie chart (stato globale, tipo device, stato proprie richieste).\n\n**Richieste da gestire** (`ManageableRequestsPage`): lista di richieste non ancora assegnate a nessun volontario. Il volontario può prendere in carico una richiesta tramite `ManageableRequestDetail`.\n\n**Le mie richieste** (`VolunteerRequestDetail`, `MyRequests`, `Production`, `Shipping`, `Archive`): viste filtrate per stato delle richieste assegnate al volontario.\n\n## Depends on capabilities\n\n- `volunteer-management/cap-volunteer-profile-management` (profilo completo richiesto per operare efficacemente)\n\n## Known gaps\n\n- La `VolunteerDashboard` carica `publicDeviceRequests` con `getDocs` (snapshot singolo, non real-time) per le statistiche — i dati di stato globale possono essere non aggiornati.\n- La query «richieste da gestire» usa `where(\"assignedVolunteers\", \"==\", [])` che non funziona se il campo `assignedVolunteers` manca o è undefined nei documenti vecchi (la convenzione di backward compat prevede `assignedVolunteer` stringa per i documenti precedenti).\n- Non esiste un meccanismo di «rifiuto» di una richiesta assegnata da parte del volontario: solo l'admin può riassegnare.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["volunteer", "dashboard", "requests"],
+    "relates_to": [
+      { "id": "volunteer-management/cap-volunteer-profile-management", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/volunteer/VolunteerDashboard.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/layout/VolunteerLayout.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/volunteer/ManageableRequestsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/dc-volunteer",
+    "type": "domain_concept",
+    "name": "Volontario",
+    "body": "## Definition\n\nUn volontario è un utente della piattaforma con `role = \"volunteer\"` nel documento `users/{uid}`. Può trovarsi in due stati principali:\n\n- **Pendente** (`active = false`): ha completato la registrazione e i consensi ma non è ancora stato attivato da un admin. Ha accesso limitato al portale (solo profilo e disponibilità).\n- **Attivo** (`active = true`): può accedere a tutte le funzionalità del portale volontari — gestione richieste, stampanti, dashboard.\n\nI dati del volontario sono distribuiti su più documenti/sub-collection Firestore:\n\n- `users/{uid}` — core (email, role, active, consents, createdAt, mustSetPassword, authProvider)\n- `users/{uid}/private/profile` — dati anagrafici e preferenze (PII)\n- `users/{uid}/private/skills` — interessi e competenze\n- `users/{uid}/public/profile` — dati visibili pubblicamente\n- `users/{uid}/printers/{printerId}` — stampanti 3D registrate\n- `users/{uid}/messages/{messageId}` — messaggi personali\n- `users/{uid}/messageStatus/{msgId}` — stato lettura messaggi globali\n\nI volontari possono essere associati a richieste dispositivo tramite il campo `assignedVolunteers` (array di uid) in `deviceRequests`.\n\n## Also known as\n\n- Volunteer (nei tipi TypeScript e nei nomi delle Cloud Functions)\n- Utente volontario\n- `role: \"volunteer\"` (nel documento Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["core-entity", "user", "firestore"],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/listVolunteerAdminData.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/layout/VolunteerLayout.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/dc-3d-printer",
+    "type": "domain_concept",
+    "name": "Stampante 3D (Printer)",
+    "body": "## Definition\n\nUna stampante 3D è una risorsa registrata dal volontario nella sub-collection `users/{uid}/printers/{printerId}`. Rappresenta il parco macchine disponibile per la fabbricazione di device prostetici.\n\nCampi chiave: `brand`, `model` (obbligatori), dimensioni del volume di stampa in mm (`buildVolumeX`, `buildVolumeY`, `buildVolumeZ`), flag di capacità tecnica (`multiMaterial`, `flexibleSupported`, `directDrive`), `notes`, `active`.\n\nLa vista admin aggrega le stampanti per filtrare i volontari idonei a richieste specifiche (es. stampa con filamento flessibile, volume minimo richiesto). La normalizzazione distingue stampanti attive (usate per il calcolo delle capabilities) da quelle inattive.\n\n## Also known as\n\n- `VolunteerPrinter` (tipo TypeScript in `listVolunteerAdminData.ts` e `volunteerAdminHelpers.ts`)\n- Stampante del volontario\n- `printers` (nome della sub-collection Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["equipment", "3d-printing", "firestore"],
+    "relates_to": [
+      { "id": "volunteer-management/cap-printer-registry", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/addPrinter.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/volunteerAdminHelpers.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "volunteer-management/dc-contact",
+    "type": "domain_concept",
+    "name": "Contatto (Contact)",
+    "body": "## Definition\n\nUn contatto è una persona potenzialmente interessata a diventare volontario, gestita in una collection CRM separata (`contacts/{contactId}`). Non è ancora un utente della piattaforma.\n\nCampi: `firstName`, `lastName`, `email`, `phone`, `status`, `receivedAt`, `interest`, `description`. Il campo `status` segue un ciclo di vita informale con molti stati possibili: `imported`, `import`, `invited`, `active`, `standby`, `TBV`, `lost`, `pending`, `archived`, `rejected`, `completed`, `disabled`.\n\nL'invio dell'invito (via `inviteVolunteer`) porta il contatto in stato `invited`. Le operazioni successive (cambio stato, soft delete) sono eseguite direttamente dal frontend via SDK client senza passare per Cloud Functions.\n\nI contatti non hanno corrispondenza diretta con i documenti `users` — il collegamento avviene solo quando il contatto si registra tramite il flusso auth standard.\n\n## Also known as\n\n- Contact (nella UI `ContactsList.tsx`)\n- Contatto CRM\n- `contacts` (nome della collection Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["crm", "invitation-pipeline", "firestore"],
+    "relates_to": [
+      { "id": "volunteer-management/cap-volunteer-invitation", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/volunteers/ContactsList.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/volunteer/invite.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  }
+]
