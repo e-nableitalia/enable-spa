@@ -30,5 +30,6 @@ export { deleteChecklist } from "./organizer/deleteChecklist";
 export { addChecklistItem } from "./organizer/addChecklistItem";
 export { updateChecklistItem } from "./organizer/updateChecklistItem";
 export { removeChecklistItem } from "./organizer/removeChecklistItem";
+export { getChecklistCompleteness } from "./organizer/getChecklistCompleteness";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
