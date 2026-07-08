@@ -1,0 +1,269 @@
+[
+  {
+    "id": "security/cap-rate-limiting",
+    "type": "capability",
+    "name": "Rate Limiting per Email e IP",
+    "body": "## What it does\n\nControlla la frequenza delle richieste provenienti da uno stesso indirizzo email o IP prima che raggiungano la business logic. Implementato in `functions/backend/src/security/rateLimit.ts`, è un modulo di supporto (non una Cloud Function autonoma) invocato dagli handler `register` e `createDeviceRequest`.\n\nDue canali distinti:\n- **Email rate limit** (`checkEmailRateLimit`): un solo tentativo per email ogni 5 minuti. Chiave Firestore `rateLimits/email_{email}`. Legge il campo `lastRequest` e, se la differenza con `Date.now()` è inferiore a 300 000 ms, lancia `HttpsError(\"resource-exhausted\")`; altrimenti sovrascrive con il timestamp corrente.\n- **IP rate limit** (`checkIpRateLimit`): massimo 3 richieste per IP nell'arco di un'ora. L'indirizzo IP viene hashed SHA-256 prima di essere usato come chiave (`rateLimits/ip_{sha256(ip)}`). Il documento conserva `windowStart` e `count`; se la finestra è ancora aperta e `count >= 3` scatta il blocco; se la finestra è scaduta viene azzerata. Se il documento non esiste viene creato con `windowStart = now, count = 1`.\n\nEntrambe le funzioni lanciano `HttpsError(\"resource-exhausted\")` in caso di violazione, codice HTTP 429.\n\n## Boundaries\n\n- Agisce solo lato backend Cloud Functions; il frontend non ha logica di rate limiting propria.\n- Non usa Redis, Memcached o tabelle in-memory: la finestra temporale è persistita su Firestore, il che implica una latenza minima di lettura/scrittura ad ogni invocazione.\n- Non esiste attualmente un meccanismo di cleanup dei documenti `rateLimits` scaduti (nessun TTL Firestore, nessuna scheduled function): i documenti rimangono indefinitamente ma non hanno effetti dopo la scadenza della finestra.\n- Il rate limit per IP non persiste lo stato tra reset della Cloud Function perché la logica è interamente su Firestore.\n\n## Key entry points\n\n- `checkEmailRateLimit(email: string): Promise<void>` — in `functions/backend/src/security/rateLimit.ts`\n- `checkIpRateLimit(ip: string): Promise<void>` — in `functions/backend/src/security/rateLimit.ts`\n- Chiamanti diretti: handler `register` (auth) e `createDeviceRequest` (device)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["anti-abuse", "rate-limiting", "firestore"],
+    "relates_to": [
+      { "id": "security/cap-recaptcha-verification", "type": "relates_to" },
+      { "id": "security/cap-security-audit-logging", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/rateLimit.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/cap-recaptcha-verification",
+    "type": "capability",
+    "name": "Verifica reCAPTCHA Enterprise",
+    "body": "## What it does\n\nPrevenzione degli attacchi bot sui form pubblici tramite Google reCAPTCHA Enterprise. La capability si articola in due layer cooperanti:\n\n**Layer frontend** (`enable-device/src/services/security/recaptcha.ts`):\n- `loadRecaptcha(siteKey)`: carica lo script `recaptcha/enterprise.js` in modo lazy (singleton promise) aggiungendolo al DOM la prima volta; invocazioni successive restituiscono la promise già risolta.\n- `getRecaptchaToken(action)`: carica lo script se necessario, invoca `window.grecaptcha.enterprise.execute(SITE_KEY, { action })` e restituisce il token. Dopo l'esecuzione chiama `unloadRecaptcha()` per rimuovere lo script dal DOM e cancellare `window.grecaptcha`, evitando che il badge reCAPTCHA rimanga visibile su pagine dove non è necessario.\n- Il site key (`6Lfr8G4sAAAAAO81frUGstTO2ED9cJc9t3XO3gm0`) è hardcoded nel file frontend.\n\n**Wrapper chiamate sicure** (`enable-device/src/services/security/secureCallable.ts`):\n- `secureCallable(functionName, data, action)`: ottiene il token reCAPTCHA per l'`action` specificata e chiama la Cloud Function Firebase aggiungendo automaticamente `recaptchaToken` al payload. È il punto di ingresso unico per tutte le callable che richiedono verifica anti-bot.\n\n**Layer backend** (`functions/backend/src/security/recaptcha.ts`):\n- `verifyRecaptcha(token, expectedAction, siteKey, apiKey)`: chiama la REST API di reCAPTCHA Enterprise (`POST /v1/projects/{projectId}/assessments?key={apiKey}`). Esegue tre controlli in sequenza:\n  1. HTTP 200 dalla REST API (altrimenti `HttpsError(\"internal\")`).\n  2. `tokenProperties.valid === true` (altrimenti `HttpsError(\"permission-denied\", \"Invalid reCAPTCHA token\")`).\n  3. `tokenProperties.action === expectedAction` (altrimenti `HttpsError(\"permission-denied\", \"Action mismatch\")`).\n- Restituisce `{ score, reasons }`. Il confronto con la soglia minima (0.6) è delegato all'handler chiamante (non è implementato dentro `verifyRecaptcha` stessa).\n- Dipende dai secret `RECAPTCHA_API_KEY` e `RECAPTCHA_SITE_KEY` passati dall'handler.\n\n## Boundaries\n\n- `verifyRecaptcha` non blocca autonomamente in base allo score: ritorna score e reasons, è l'handler a decidere se bloccare (soglia 0.6 definita negli handler `register` e `createDeviceRequest`).\n- La verifica non si applica alle Cloud Functions che richiedono autenticazione Firebase (`auth_required: true`) — è usata solo per i flussi pubblici (`register`, `createDeviceRequest`).\n- Il site key frontend è hardcoded (non iniettato da env): un cambio di chiave richiede una ricompilazione del frontend.\n\n## Key entry points\n\n- `getRecaptchaToken(action: string): Promise<string>` — `enable-device/src/services/security/recaptcha.ts`\n- `secureCallable(functionName, data, action): Promise<HttpsCallableResult>` — `enable-device/src/services/security/secureCallable.ts`\n- `verifyRecaptcha(token, expectedAction, siteKey, apiKey): Promise<{ score, reasons }>` — `functions/backend/src/security/recaptcha.ts`\n- Azioni reCAPTCHA note: `register_email`, `create_device_request`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["anti-bot", "recaptcha", "enterprise", "frontend", "backend"],
+    "relates_to": [
+      { "id": "security/cap-rate-limiting", "type": "relates_to" },
+      { "id": "security/cap-security-audit-logging", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/recaptcha.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/services/security/recaptcha.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/services/security/secureCallable.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/cap-security-audit-logging",
+    "type": "capability",
+    "name": "Audit Log di Sicurezza",
+    "body": "## What it does\n\nRegistra su Firestore ogni evento rilevante prodotto dalle Cloud Functions, costituendo un audit trail consultabile dagli admin. Implementato in `functions/backend/src/security/securityLog.ts`.\n\n**Funzione core**: `logSecurityEvent(event: SecurityEvent)` scrive un documento nella collection `securityLogs` con i seguenti campi normalizzati (tutti i campi opzionali ricevono un default esplicito prima della scrittura):\n- `type`: `\"security\"` | `\"auth\"` | `\"form\"` | `\"system\"` (default: `\"security\"`)\n- `action`: stringa libera che descrive l'azione (es. `\"register\"`, `\"login\"`, `\"createDeviceRequest\"`).\n- `outcome`: `\"success\"` | `\"failure\"` | `\"blocked\"` (default: `\"success\"`).\n- `severity`: `\"low\"` | `\"medium\"` | `\"high\"` | `\"critical\"` (default: `\"low\"`).\n- `actor`: oggetto con `uid`, `email`, `ip`, `provider` (tutti nullable se non disponibili).\n- `context`: oggetto con `function` (nome Cloud Function), `requestId` (nullable), `metadata` (nullable, dizionario libero per dati extra).\n- `createdAt`: `FieldValue.serverTimestamp()` (garantisce UTC server-side).\n\nLa convenzione di progetto (`conventions.security_logging` nel discover-context) prescrive che ogni Cloud Function loggi inizio, fine ed errori tramite questa funzione.\n\n## Boundaries\n\n- Non è un sistema di log strutturato esterno (es. Google Cloud Logging, Datadog): i log sono documenti Firestore, soggetti alle stesse quote e latenze.\n- La collection `securityLogs` non ha TTL né politica di retention automatica: i documenti si accumulano indefinitamente.\n- Il campo `invokeId` (menzionato nelle convenzioni come correlatore per i log) non è presente nello schema TypeScript attuale di `SecurityEvent` — risulta assente nella definizione di `context` in `securityLog.ts` (presente solo `requestId`). Potenziale gap rispetto alle convenzioni documentate.\n- Non esiste attualmente un meccanismo di alerting automatico su eventi `severity: \"critical\"` o `outcome: \"blocked\"`.\n\n## Key entry points\n\n- `logSecurityEvent(event: SecurityEvent): Promise<void>` — `functions/backend/src/security/securityLog.ts`\n- Collection Firestore target: `securityLogs/{auto-id}`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["audit", "logging", "firestore", "compliance"],
+    "relates_to": [
+      { "id": "security/cap-admin-security-log-console", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/securityLog.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/cap-admin-security-log-console",
+    "type": "capability",
+    "name": "Console Admin dei Log di Sicurezza",
+    "body": "## What it does\n\nVista frontend riservata agli amministratori per consultare i log di sicurezza registrati nella collection Firestore `securityLogs`. Implementata in `enable-device/src/pages/admin/AdminSecurityLogsPage.tsx`.\n\n**Recupero dati**: al mount esegue una query Firestore diretta (`getDocs`) con `orderBy(\"createdAt\", \"desc\")` e `limit(50)`. Non usa una Cloud Function: l'accesso è diretto tramite SDK Firestore (presuppone che le Firestore Security Rules consentano la lettura di `securityLogs` solo agli admin autenticati).\n\n**Filtri client-side** (applicati in memoria dopo il fetch iniziale):\n- **Severity**: dropdown con valori `low`, `medium`, `high`.\n- **Outcome**: dropdown con valori `success`, `failure`.\n- **Azione**: text input con ricerca substring case-insensitive su `action`.\n- **Email actor**: text input con ricerca substring case-insensitive su `actor.email`.\n\n**Tabella** (PrimeReact `DataTable`):\n- Colonne: data/ora formattata, azione (monospace), email actor, UID actor (troncato a 8 char con tooltip), severity (Tag colorato), outcome (Tag colorato), funzione Cloud (da `context.function`).\n- Paginazione: 20 righe per pagina.\n- Sorting: di default per `createdAt` decrescente; sortable su data, azione, severity, outcome.\n\n**Dialog di dettaglio**: cliccando \"Dettagli\" su una riga si apre un `Dialog` con tutti i campi del log incluso `context.metadata` renderizzato come JSON prettificato in un `<pre>` con scroll.\n\n## Boundaries\n\n- Il fetch è limitato agli ultimi 50 documenti: non è possibile navigare log più vecchi senza cambiare il codice (nessun meccanismo di paginazione server-side o cursor).\n- I filtri operano sul sottoinsieme di 50 record già caricati, non sull'intera collection.\n- Non è presente un meccanismo di refresh automatico: i log vengono caricati una sola volta al mount del componente.\n- Il livello `\"critical\"` di severity non ha un colore distinto nel helper `getSeverityColor` (tutti i valori non esplicitamente mappati cadono in `\"secondary\"`, uguale al fallback per `undefined`).\n\n## Key entry points\n\n- Componente React: `AdminSecurityLogsPage` — `enable-device/src/pages/admin/AdminSecurityLogsPage.tsx`\n- Rotta: `/admin/security-logs` (inferita dalla struttura delle rotte admin descritta nel discover-context)\n- Collection Firestore letta: `securityLogs`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "frontend", "audit", "monitoring"],
+    "relates_to": [
+      { "id": "security/cap-security-audit-logging", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminSecurityLogsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/uc-antispam-public-forms",
+    "type": "use_case",
+    "name": "Protezione anti-abuso sui form pubblici",
+    "body": "## Scenario\n\nUn utente (o un bot) compila un form pubblico — registrazione volontario (`/register`) o richiesta dispositivo (`/request-device`) — e invia la richiesta:\n\n1. Il frontend chiama `secureCallable(functionName, data, action)` passando l'azione reCAPTCHA appropriata (`register_email` o `create_device_request`).\n2. `secureCallable` invoca `getRecaptchaToken(action)`, che carica il JS di reCAPTCHA Enterprise (lazy), esegue `enterprise.execute()` e ottiene un token firmato da Google.\n3. Il token viene iniettato nel payload della callable (`recaptchaToken`) e la richiesta arriva al backend.\n4. L'handler backend (es. `register` in `functions/backend/src/auth/`) chiama `verifyRecaptcha(token, expectedAction, siteKey, apiKey)`:\n   - Se il token non è valido o l'action non corrisponde: `HttpsError(\"permission-denied\")`.\n   - Se lo score è < 0.6: l'handler blocca con `HttpsError(\"permission-denied\")` e registra `outcome: \"blocked\"` su `securityLogs`.\n5. Superato reCAPTCHA, l'handler chiama `checkEmailRateLimit(email)` e `checkIpRateLimit(ip)`:\n   - Se l'email ha già inviato una richiesta negli ultimi 5 minuti: `HttpsError(\"resource-exhausted\")`.\n   - Se l'IP ha già inviato 3 richieste nell'ultima ora: `HttpsError(\"resource-exhausted\")`.\n6. Solo se tutti i controlli passano, la business logic prosegue (creazione pendingRegistration o deviceRequest).\n\n## Depends on capabilities\n\n- `security/cap-recaptcha-verification` — generazione token frontend e verifica backend\n- `security/cap-rate-limiting` — controllo frequenza per email e IP\n- `security/cap-security-audit-logging` — registrazione degli esiti (`blocked`, `success`) su `securityLogs`\n\n## Known gaps\n\n- Lo score threshold (0.6) è duplicato nei due handler (`register`, `createDeviceRequest`) invece di essere definito in una costante condivisa nel modulo security.\n- `verifyRecaptcha` non logga autonomamente gli esiti: è responsabilità di ogni handler chiamante loggare i blocchi, con rischio di omissioni se si aggiungono nuovi handler in futuro.\n- Nessun meccanismo di cleanup automatico dei documenti `rateLimits` scaduti (potenziale crescita illimitata della collection).",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["anti-spam", "public-form", "recaptcha", "rate-limiting"],
+    "relates_to": [
+      { "id": "security/cap-recaptcha-verification", "type": "depends_on" },
+      { "id": "security/cap-rate-limiting", "type": "depends_on" },
+      { "id": "security/cap-security-audit-logging", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/rateLimit.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/recaptcha.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/services/security/secureCallable.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/uc-audit-trail-consulta",
+    "type": "use_case",
+    "name": "Consultazione audit trail da parte dell'amministratore",
+    "body": "## Scenario\n\nUn amministratore vuole verificare attività sospette o ricostruire la cronologia di un evento di sicurezza:\n\n1. Naviga su `/admin/security-logs` (voce di menu nella sezione admin).\n2. `AdminSecurityLogsPage` si monta e carica gli ultimi 50 log da Firestore (`securityLogs`, orderBy `createdAt` desc).\n3. La tabella mostra data, azione, email actor, UID troncato, severity (badge colorato), outcome (badge colorato) e funzione Cloud.\n4. L'admin filtra client-side per severity, outcome, testo nell'azione o email dell'actor per restringere la lista.\n5. Clicca \"Dettagli\" su una riga sospetta: si apre un dialog con tutti i campi del documento — incluso `context.metadata` come JSON formattato — per leggere informazioni aggiuntive (es. IP, provider auth, requestId).\n\n## Depends on capabilities\n\n- `security/cap-security-audit-logging` — produce i documenti letti dalla console\n- `security/cap-admin-security-log-console` — implementa la vista di lettura\n\n## Known gaps\n\n- Il fetch si limita a 50 documenti recenti: log più vecchi non sono accessibili dalla UI senza intervento diretto su Firestore.\n- Non esiste un meccanismo di export (CSV, JSON) dei log filtrati dalla console admin.\n- Il colore del tag `severity: \"critical\"` è identico al fallback generico (`secondary`), rendendo gli eventi critici visivamente indistinguibili dagli eventi con severity sconosciuta.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "audit", "monitoring", "compliance"],
+    "relates_to": [
+      { "id": "security/cap-security-audit-logging", "type": "depends_on" },
+      { "id": "security/cap-admin-security-log-console", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminSecurityLogsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/securityLog.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/dc-security-log",
+    "type": "domain_concept",
+    "name": "SecurityLog",
+    "body": "## Definition\n\nDocumento Firestore nella collection `securityLogs/{auto-id}` che registra un evento di sicurezza prodotto da una Cloud Function. Schema dei campi (tutti normalizzati con default lato backend prima della scrittura):\n\n- `type` (`string`): categoria dell'evento — `\"security\"` | `\"auth\"` | `\"form\"` | `\"system\"`.\n- `action` (`string`): nome descrittivo dell'azione (es. `\"register\"`, `\"login\"`, `\"createDeviceRequest\"`, `\"changeStatus\"`).\n- `outcome` (`string`): esito — `\"success\"` | `\"failure\"` | `\"blocked\"`.\n- `severity` (`string`): importanza — `\"low\"` | `\"medium\"` | `\"high\"` | `\"critical\"`.\n- `actor` (`object`): chi ha originato l'evento:\n  - `uid` (nullable): Firebase Auth UID dell'utente autenticato.\n  - `email` (nullable): email dell'actor.\n  - `ip` (nullable): IP del chiamante (estratto dall'header della callable).\n  - `provider` (nullable): provider di autenticazione (es. `\"google.com\"`, `\"password\"`).\n- `context` (`object`): dove è avvenuto l'evento:\n  - `function` (`string`): nome della Cloud Function (default `\"unknown\"` se non fornito).\n  - `requestId` (nullable): ID correlazione opzionale.\n  - `metadata` (nullable): dizionario libero per dati aggiuntivi specifici dell'evento.\n- `createdAt` (`Timestamp`): timestamp server Firestore.\n\n## Also known as\n\n- **Security event** (nei commenti del codice)\n- **Audit entry** (nel contesto della compliance)\n- `securityLogs` (nome della Firestore collection)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["firestore", "audit", "data-model"],
+    "relates_to": [
+      { "id": "security/cap-security-audit-logging", "type": "implements" },
+      { "id": "security/cap-admin-security-log-console", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/securityLog.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/dc-rate-limit-entry",
+    "type": "domain_concept",
+    "name": "RateLimitEntry",
+    "body": "## Definition\n\nDocumento Firestore nella collection `rateLimits/{key}` che traccia la frequenza delle richieste da un'identità (email o IP) per prevenire abusi sui form pubblici.\n\nDue pattern di chiave:\n- **Email**: `email_{indirizzo-email-in-chiaro}` — campo: `lastRequest` (timestamp Unix ms dell'ultima richiesta).\n- **IP**: `ip_{sha256-hex-dell-ip}` — campi: `windowStart` (timestamp Unix ms di apertura finestra) e `count` (numero richieste nella finestra).\n\nL'IP è hashed SHA-256 prima dell'uso come chiave per evitare di esporre indirizzi IP in chiaro nel database.\n\nNon esiste un meccanismo di scadenza (Firestore TTL o scheduled cleanup): i documenti rimangono nella collection indefinitamente, ma non hanno effetti una volta scaduta la rispettiva finestra temporale.\n\n## Also known as\n\n- `rateLimits` (nome della Firestore collection)\n- **Rate limit window** (nei commenti del codice)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["firestore", "rate-limiting", "data-model", "anti-abuse"],
+    "relates_to": [
+      { "id": "security/cap-rate-limiting", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/rateLimit.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "security/dc-recaptcha-assessment",
+    "type": "domain_concept",
+    "name": "reCAPTCHA Assessment",
+    "body": "## Definition\n\nRisultato della valutazione di un token reCAPTCHA Enterprise prodotto dall'API REST (`POST /v1/projects/{projectId}/assessments`). Rappresenta il giudizio di Google sulla probabilità che l'azione in corso sia compiuta da un essere umano.\n\nCampi rilevanti nella risposta:\n- `tokenProperties.valid` (`boolean`): il token è strutturalmente valido e non scaduto.\n- `tokenProperties.action` (`string`): l'azione dichiarata nel token — deve coincidere con l'`expectedAction` verificato lato backend.\n- `tokenProperties.invalidReason` (`string | undefined`): motivo dell'invalidità se `valid === false`.\n- `riskAnalysis.score` (`number`, 0.0–1.0): punteggio di rischio; 1.0 = quasi certamente umano, 0.0 = quasi certamente bot. Soglia minima applicata: **0.6**.\n- `riskAnalysis.reasons` (`string[]`): fattori che hanno influenzato il punteggio.\n\nIl site key frontend (`6Lfr8G4sAAAAAO81frUGstTO2ED9cJc9t3XO3gm0`) e l'API key backend (`RECAPTCHA_API_KEY`) sono credenziali distinte: la site key è pubblica (inclusa nel JS del frontend), l'API key è privata (secret Cloud Functions).\n\n## Also known as\n\n- **reCAPTCHA token** (lato frontend, prima della valutazione)\n- **reCAPTCHA score** (risultato numerico)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["recaptcha", "anti-bot", "google", "data-model"],
+    "relates_to": [
+      { "id": "security/cap-recaptcha-verification", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/security/recaptcha.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/services/security/recaptcha.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T00:00:00Z"
+      }
+    ]
+  }
+]
