@@ -21,6 +21,7 @@ export { updateChecklist } from "./organizer/updateChecklist";
 export { getChecklist } from "./organizer/getChecklist";
 export { createChecklist } from "./organizer/createChecklist";
 export { createTemplate } from "./organizer/createTemplate";
+export { listTemplates } from "./organizer/listTemplates";
 export { deleteChecklist } from "./organizer/deleteChecklist";
 export { addChecklistItem } from "./organizer/addChecklistItem";
 export { updateChecklistItem } from "./organizer/updateChecklistItem";
