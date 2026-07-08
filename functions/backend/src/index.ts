@@ -20,6 +20,7 @@ export { saveGlobalMessage } from "./device/saveGlobalMessage";
 export { updateChecklist } from "./organizer/updateChecklist";
 export { getChecklist } from "./organizer/getChecklist";
 export { createChecklist } from "./organizer/createChecklist";
+export { createChecklistFromTemplate } from "./organizer/createChecklistFromTemplate";
 export { createTemplate } from "./organizer/createTemplate";
 export { updateTemplate } from "./organizer/updateTemplate";
 export { listTemplates } from "./organizer/listTemplates";
