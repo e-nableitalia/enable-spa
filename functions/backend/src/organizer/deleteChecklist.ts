@@ -14,8 +14,9 @@ export const deleteChecklist = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const {checklistId} = request.data as {checklistId?: string};
-      if (!checklistId) {
+      const { checklistId } = request.data as { checklistId?: string };
+
+      if (!checklistId || typeof checklistId !== "string") {
         throw new HttpsError("invalid-argument", "Missing checklistId");
       }
 
