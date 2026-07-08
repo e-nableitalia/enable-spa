@@ -18,5 +18,6 @@ export { listVolunteerAdminData } from "./volunteer/listVolunteerAdminData";
 export { createShipmentRequest, approveShipmentRequest, deleteShipmentRequest } from "./shipments/shipmentRequests";
 export { saveGlobalMessage } from "./device/saveGlobalMessage";
 export { createChecklist } from "./organizer/createChecklist";
+export { deleteChecklist } from "./organizer/deleteChecklist";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
