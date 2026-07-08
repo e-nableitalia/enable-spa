@@ -14,7 +14,8 @@
       ],
       "summary": "Flusso di login e registrazione volontari via email link (oobCode) o Google OAuth, fino a impostazione password. Deriva dal gruppo di Cloud Functions 'auth'.",
       "status": "approved",
-      "depth": "standard"
+      "depth": "standard",
+      "origin": "discovered"
     },
     {
       "id": "device-requests",
@@ -32,7 +33,8 @@
       ],
       "summary": "Ciclo di vita completo delle richieste di dispositivi prostetici: creazione dal form pubblico, validazione, assegnazione volontari, avanzamento stato fino a spedizione/completamento. Include la messaggistica globale (saveGlobalMessage), sorgente nello stesso modulo backend 'device'. Deriva dal gruppo di Cloud Functions 'device'.",
       "status": "approved",
-      "depth": "deep"
+      "depth": "deep",
+      "origin": "discovered"
     },
     {
       "id": "volunteer-management",
@@ -46,7 +48,8 @@
       ],
       "summary": "Attivazione/disattivazione volontari, profilo e stampanti, inviti a contatti, consensi privacy, e le viste amministrative sui volontari. Deriva dal gruppo di Cloud Functions 'volunteer'.",
       "status": "approved",
-      "depth": "standard"
+      "depth": "standard",
+      "origin": "discovered"
     },
     {
       "id": "shipments",
@@ -57,7 +60,8 @@
       ],
       "summary": "Richieste di spedizione pacchi (mittente, destinatario, dimensioni), entita' Firestore separata dal ciclo vita delle richieste dispositivo. Deriva dal gruppo di Cloud Functions 'shipments'.",
       "status": "approved",
-      "depth": "standard"
+      "depth": "standard",
+      "origin": "discovered"
     },
     {
       "id": "security",
@@ -69,7 +73,17 @@
       ],
       "summary": "Contenuto trasversale non legato a un singolo dominio funzionale: RBAC, rate limiting, reCAPTCHA e audit log di sicurezza, condivisi da auth/device/volunteer/shipments. Non e' un gruppo di Cloud Functions dedicato ma un modulo di supporto (functions/backend/src/security/) usato dagli altri.",
       "status": "approved",
-      "depth": "standard"
+      "depth": "standard",
+      "origin": "discovered"
+    },
+    {
+      "id": "process-organizer-core",
+      "name": "Organizer — motore checklist generico",
+      "paths": [],
+      "summary": "Modulo generico per checklist assegnabili con avanzamento e template, pensato per essere riusato oltre il caso device (es. organizzazione eventi/workshop in futuro).",
+      "status": "approved",
+      "depth": null,
+      "origin": "planned"
     }
   ]
 }
