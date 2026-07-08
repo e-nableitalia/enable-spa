@@ -1,0 +1,1071 @@
+[
+  {
+    "id": "device-requests/cap-public-request-submission",
+    "type": "capability",
+    "name": "Ricezione richiesta dispositivo da form pubblico",
+    "body": "## What it does\n\nPermette a chiunque (richiedenti, familiari, tutori) di inviare una richiesta di dispositivo prostetico tramite la pagina pubblica `/request-device`. La Cloud Function `createDeviceRequest` gestisce l'intero flusso server-side:\n\n- Verifica il token reCAPTCHA Enterprise (`create_device_request`, score minimo 0.6). Sotto soglia: blocked + log security event.\n- Applica rate limit per email (finestra 5 min) e per IP (max 3 richieste/ora, IP hashato SHA-256).\n- Valida i campi obbligatori: `email`, `firstName`, `lastName`, `phone`, `province`, `amputationType`, `consentPrivacy`.\n- Esegue una **Firestore transaction atomica** che scrive in un colpo solo:\n  - `deviceRequests/{id}` — documento principale con `status: 'inviata'`, `assignedVolunteers: []`, `seqId`, `requestNumber` (formato `REQ-XXXXXX`).\n  - `deviceRequests/{id}/private/data` — PII richiedente (email, nome, cognome, telefono, ecc.) **mai** nel documento principale.\n  - `deviceRequests/{id}/events/{eventId}` — primo evento `status_change` creato da `system`.\n  - `publicDeviceRequests/{id}` — proiezione pubblica con `province`, `publicStatus`, `devicetype`, `ageRange`.\n  - `counters/deviceRequests` — incremento atomico del contatore sequenziale.\n- Accoda email di conferma al richiedente (template `confermaRicezione`) nella collection `mail`.\n- Invia email HTML agli admin su `devices@e-nableitalia.it`.\n- Invia notifica Telegram al canale associazione.\n\n## Boundaries\n\n- Funzione pubblica (no auth Firebase richiesta).\n- Non crea shipment né assegna volontari: responsabilità di altre capability.\n- Il `publicStatus` iniziale è sempre `'da gestire'` (derivato via `mapToPublicStatus('inviata')`).\n- La funzione usa transazione Firestore per evitare race condition sul contatore.\n\n## Key entry points\n\n- **Backend**: `functions/backend/src/device/createDeviceRequest.ts` — Cloud Function `onCall`, region `europe-west1`, secrets: `RECAPTCHA_API_KEY`, `RECAPTCHA_SITE_KEY`, `MAIL_FROM_ADDRESS`, `TELEGRAM_API_URL`, `TELEGRAM_API_SECRET`.\n- **Frontend**: `enable-device/src/pages/RequestDevice.tsx` — form con sezioni Dati Richiedente, Dati Destinatario, Dettagli Richiesta, Consenso Privacy. Chiama `httpsCallable(functions, 'createDeviceRequest')` con token reCAPTCHA allegato.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["public-form", "anti-spam", "recaptcha", "firestore-transaction"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "relates_to" },
+      { "id": "device-requests/dc-device-request", "type": "implements" },
+      { "id": "device-requests/dc-request-number", "type": "implements" },
+      { "id": "device-requests/dc-private-data-separation", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/RequestDevice.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/cap-request-lifecycle-management",
+    "type": "capability",
+    "name": "Gestione ciclo di vita e avanzamento stato richiesta",
+    "body": "## What it does\n\nGestisce tutte le transizioni di stato di una `deviceRequest` (19 stati interni distinti) attraverso la Cloud Function `changeStatus`. Ogni invocazione:\n\n1. Verifica autenticazione e consensi volontario (`requireVolunteerConsents`).\n2. Controlla il ruolo dell'attore:\n   - **admin**: qualsiasi transizione.\n   - **volunteer**: solo se assegnato alla richiesta E solo per le 5 transizioni consentite (vedi `isAllowedVolunteerTransition`).\n3. Esegue una **Firestore transaction** che aggiorna:\n   - `deviceRequests/{id}` — `status`, `publicStatus` (via `mapToPublicStatus`), `updatedAt`.\n   - `deviceRequests/{id}/events/{eventId}` — evento `status_change` con `fromStatus`, `toStatus`, `createdBy`, `note`.\n   - `publicDeviceRequests/{id}` — merge del solo campo `publicStatus`.\n4. Gestisce notifiche **opzionali** post-transazione (`notifica: { admin?, volunteers?, telegram? }`):\n   - `notifica.admin`: email HTML a `devices@e-nableitalia.it`.\n   - `notifica.volunteers`: email a ciascun volontario assegnato.\n   - `notifica.telegram`: messaggio Telegram sul canale associazione.\n\nLa stessa funzione è usata come meccanismo di **event sourcing** per aggiungere note (chiamata con `newStatus === currentStatus`), aggiornare dati privati/pubblici, deviceType o shippingAddress — tutti questi casi usano `changeStatus` per registrare l'evento nella timeline.\n\n## Boundaries\n\n- Non gestisce la creazione della richiesta (vedi `cap-public-request-submission`).\n- Non gestisce l'assegnazione volontari (vedi `cap-volunteer-assignment`).\n- Le volunteer-allowed transitions sono hardcoded in `isAllowedVolunteerTransition`: `scelta device e dimensionamento → personalizzazione → attesa materiali → fabbricazione → pronta per spedizione → spedita`.\n- Il mapping `status → publicStatus` è centralizzato in `utils/mapToPublicStatus.ts`.\n\n## Key entry points\n\n- **Backend**: `functions/backend/src/device/changeStatus.ts` — Cloud Function `onCall`, region `europe-west1`, secrets: `TELEGRAM_API_URL`, `TELEGRAM_API_SECRET`.\n- **Frontend**: `enable-device/src/pages/admin/requests/RequestDetail.tsx` — invocata da cambio stato, aggiunta nota, validazione, aggiornamento dati privati/pubblici, deviceType, shippingAddress, requiresAttention.\n- **Utility**: `functions/backend/src/utils/mapToPublicStatus.ts`.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["status-machine", "event-sourcing", "notifications", "rbac"],
+    "relates_to": [
+      { "id": "device-requests/cap-public-request-submission", "type": "relates_to" },
+      { "id": "device-requests/cap-volunteer-assignment", "type": "relates_to" },
+      { "id": "device-requests/dc-status-lifecycle", "type": "implements" },
+      { "id": "device-requests/dc-public-status", "type": "implements" },
+      { "id": "device-requests/dc-request-event", "type": "implements" },
+      { "id": "device-requests/dc-volunteer-transition", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/utils/mapToPublicStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/cap-request-validation",
+    "type": "capability",
+    "name": "Validazione e sanitizzazione richiesta in ingresso",
+    "body": "## What it does\n\nPermette all'amministratore di esaminare e validare una richiesta appena ricevuta (stato `inviata`), che non è ancora visibile ai volontari.\n\nIl flusso di validazione (implementato in `RequestDetail.tsx`, funzione `handleValidate`) esegue questi passi in sequenza:\n\n1. Salva i **campi operativi sanitizzati** in `deviceRequests/{id}`: `recipient`, `relation`, `descriptionPublic`, `preferencesPublic`, `validatedAt`, `validatedBy` (uid admin). I campi `descriptionPublic` e `preferencesPublic` devono essere versioni **prive di PII** — il form avvisa esplicitamente l'admin con pulsanti \"Copia\" affiancati al dato originale.\n2. Aggiorna i **dati privati correggibili** in `deviceRequests/{id}/private/data`: email, firstName, lastName, amputationType.\n3. Imposta `publicStatus: 'da gestire'` e `devicetype` in `publicDeviceRequests/{id}`, **rendendo la richiesta visibile ai volontari**.\n4. Chiama `changeStatus` con `newStatus: 'validata'` per avanzare lo stato e registrare l'evento.\n\nIl tipo device è selezionabile da una lista standard (`Kinetic Hand`, `Kinetic Arm`, `Bike Adapter`, `Guitar Pick`, `Kwawu Arm`, `Device Batteria`, `Kwawu Gripper`, `Phoenix Hand`) o libero (\"Altro\").\n\n## Boundaries\n\n- Solo l'admin può validare.\n- Il pannello di validazione in `RequestDetail` appare **solo se `status === 'inviata'`**.\n- La validazione non è reversibile automaticamente.\n\n## Key entry points\n\n- **Frontend**: `enable-device/src/pages/admin/requests/RequestDetail.tsx` — pannello `Richiesta da validare`, funzione `handleValidate`.\n- **Backend (indiretto)**: `functions/backend/src/device/changeStatus.ts` per lo step finale.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "pii-sanitization", "validation", "triage"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
+      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" },
+      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminValidate.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/cap-volunteer-assignment",
+    "type": "capability",
+    "name": "Assegnazione e gestione volontari su una richiesta",
+    "body": "## What it does\n\nPermette all'admin di gestire la lista completa dei volontari assegnati a una `deviceRequest`. L'architettura usa un approccio **replace-the-whole-list**: ogni chiamata ad `assignVolunteer` passa la lista completa desiderata.\n\nFlusso server-side (`assignVolunteer.ts` → `utils/volunteerAssignment.ts::setAssignedVolunteers`):\n\n1. Verifica auth e consensi (`requireVolunteerConsents`).\n2. Controlla che l'attore sia admin.\n3. Risolve i nomi completi dei volontari da `users/{uid}/private/profile` per la nota evento.\n4. Firestore transaction: `tx.update(requestRef, { assignedVolunteers: [...] })` + evento `set_volunteers`.\n5. Log security event su `securityLogs`.\n\nFlusso frontend (`RequestDetail.tsx`):\n- Dialog \"Gestisci volontari associati\": lista attuale (nomi risolti), dropdown filtrable per aggiungere (solo utenti `active: true`), selezione multipla per rimozione.\n- **Add**: costruisce la nuova lista `[...current, newVolunteer]` e chiama `assignVolunteer`.\n- **Remove**: costruisce la lista filtrata e chiama `assignVolunteer`.\n\n**Nota compatibilità backward**: il campo legacy `assignedVolunteer` (stringa singola) è stato migrato a `assignedVolunteers` (array). Il file `device/manageVolunteers.ts` è un placeholder vuoto che documenta il superseding.\n\n## Boundaries\n\n- Solo admin può invocare `assignVolunteer`.\n- Nessuna notifica automatica al volontario al momento dell'assegnazione.\n- La funzione accetta sia un singolo UID che un array.\n\n## Key entry points\n\n- **Backend**: `functions/backend/src/device/assignVolunteer.ts` + `functions/backend/src/utils/volunteerAssignment.ts`.\n- **Frontend**: `enable-device/src/pages/admin/requests/RequestDetail.tsx` — dialog \"Gestisci volontari associati\".",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "assignment", "replace-whole-list"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "relates_to" },
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/assignVolunteer.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/utils/volunteerAssignment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/manageVolunteers.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/cap-admin-request-views",
+    "type": "capability",
+    "name": "Viste amministrative delle richieste (liste, kanban, dettaglio)",
+    "body": "## What it does\n\nFornisce all'admin un insieme completo di viste per monitorare e gestire le richieste in ogni fase del ciclo di vita.\n\n**Kanban Dashboard** (`AdminDashboard`): board `@caldwell619/react-kanban` con colonne per i 5 `publicStatus`. Ogni card mostra richiedente, età, genere, stato interno + pubblico, volontari assegnati (nomi risolti da Firestore).\n\n**Liste filtrate** (tutte usano `AdminRequestTable`):\n- `AdminAll`, `AdminPending`, `AdminTriage`, `AdminValidate`, `AdminAttention`, `AdminProduction`, `AdminShipping`, `AdminCompleted`, `AdminCancelled`.\n\n**AdminRequestTable** (componente condiviso): DataTable PrimeReact con:\n- Colonne togglabili (persistite in `sessionStorage`).\n- Filtri multi-select per stato, publicStatus, deviceType, genere, tipoAmputazione; filtri data; filtri testo libero.\n- Ordinamento persistito in `sessionStorage`.\n- Selezione multipla + **Bulk Change** stato.\n- Delete singola con cascata su sub-collection `private/data`, `events`, e `publicDeviceRequests`.\n\n**RequestDetail** (`/admin/request/:id`): vista completa con pannelli per dati principali, dati privati, dati pubblici, shippingAddress, ultimo evento e timeline completa (`RequestTimeline`). Azioni: cambio stato (con notifiche opzionali), assegna volontario, aggiungi nota, segnala/rimuovi `requiresAttention`, modifica dati privati/pubblici, modifica deviceType, modifica shippingAddress.\n\n**AdminStats**: placeholder stub non ancora implementato.\n\n## Boundaries\n\n- Tutte le viste sono accessibili solo agli admin (route `/admin/*`).\n- `AdminStats` è una vista non ancora implementata.\n\n## Key entry points\n\n- `enable-device/src/pages/admin/AdminDashboard.tsx`\n- `enable-device/src/pages/admin/requests/*.tsx`\n- `enable-device/src/components/requests/AdminRequestTable.tsx`\n- `enable-device/src/components/requests/RequestTable.tsx` (variante volontario)\n- `enable-device/src/components/timeline/RequestTimeline.tsx`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "kanban", "datatable", "bulk-operations", "session-storage"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
+      { "id": "device-requests/cap-request-validation", "type": "depends_on" },
+      { "id": "device-requests/cap-volunteer-assignment", "type": "depends_on" },
+      { "id": "device-requests/dc-requires-attention", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminDashboard.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminStats.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminAll.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/AdminRequestTable.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/RequestTable.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/timeline/RequestTimeline.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/cap-internal-import",
+    "type": "capability",
+    "name": "Importazione richieste da sorgenti interne e legacy (CSV)",
+    "body": "## What it does\n\nPermette di creare richieste dispositivo da percorsi non-pubblici (flusso admin, import batch, dati storici).\n\n**Cloud Function `createDeviceRequestInternal`**:\n- Stessa struttura transazionale di `createDeviceRequest` ma senza reCAPTCHA né rate limiting.\n- Accetta un campo `source` (`'import'` | `'legacy-import'` | altri) scritto in `createdBy`.\n- Ritorna `{ requestId }` — utile per concatenare con `changeStatus` e `assignVolunteer`.\n\n**AdminMaintenanceRequests** (frontend, tool operativo):\n- Import batch da CSV tramite PapaParse, due modalità:\n  - **Standard** (`,`): colonne `Informazioni cronologiche`, `Nome`, `Cognome`, `Stato`, `Volontario`, ecc.\n  - **Legacy** (`;`): colonne `Richiedente`, `Destinatario`, `Device`, `Action Point`, `Scala`, `Note Interne`, ecc.\n- Flusso: `createDeviceRequestInternal` → `changeStatus` (uno o più) → `assignVolunteer` (se presente).\n- **Dry Run**: trasforma le righe senza scritture Firestore.\n- **Aggiorna date**: riallinea `createdAt`/`updatedAt` su richieste già importate matchando per email.\n- **Migra volontari**: migrazione idempotente `assignedVolunteer` (stringa legacy) → `assignedVolunteers` (array), batch Firestore da 499 operazioni, aggiunge anche `shippingAddress: null` se mancante.\n- **Delete All**: elimina tutte le richieste con sub-collection (con conferma testuale `'delete all'`).\n\n## Boundaries\n\n- Lo strumento di import è solo admin.\n- L'import legacy non ha reCAPTCHA né rate limiting per design.\n\n## Key entry points\n\n- **Backend**: `functions/backend/src/device/createDeviceRequestInternal.ts`.\n- **Frontend**: `enable-device/src/pages/admin/requests/AdminMaintenanceRequests.tsx`.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "import", "csv", "legacy", "migration", "batch"],
+    "relates_to": [
+      { "id": "device-requests/cap-public-request-submission", "type": "relates_to" },
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
+      { "id": "device-requests/cap-volunteer-assignment", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequestInternal.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminMaintenanceRequests.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/cap-global-messaging",
+    "type": "capability",
+    "name": "Messaggistica globale e personale verso volontari/admin",
+    "body": "## What it does\n\nPermette all'admin di inviare comunicazioni broadcast o individuali ai membri della piattaforma.\n\n**Messaggi globali** (Cloud Function `saveGlobalMessage` + Firestore `messages/{id}`):\n- Crea o aggiorna un messaggio con `title`, `body` (HTML), `target` (`all`|`volunteer`|`admin`), `active`, `expiresAt` (opzionale), `notifyTelegram`.\n- Notifica Telegram inviata **solo alla creazione** e solo se `notifyTelegram: true`.\n- Il body HTML viene convertito in testo Telegram tramite `htmlToTelegram()` (parser interno).\n- Toggle attivo/inattivo e delete tramite Firestore diretto dal frontend.\n\n**Messaggi personali** (`users/{uid}/messages/{id}`):\n- L'admin seleziona un utente, compila titolo e corpo, documento creato con `read: false`.\n- Scritto direttamente su Firestore client-side (senza Cloud Function).\n- Delete tramite `deleteDoc` dal frontend.\n\n## Boundaries\n\n- `saveGlobalMessage` richiede ruolo `admin`.\n- I messaggi personali sono scritti direttamente su Firestore client-side.\n- Il campo `expiresAt` non causa disattivazione automatica.\n- `messages` (globale) e `users/{uid}/messages` (personale) sono collection separate.\n\n## Key entry points\n\n- **Backend**: `functions/backend/src/device/saveGlobalMessage.ts`.\n- **Frontend**: `enable-device/src/pages/admin/AdminMessagesPage.tsx` — due tab: \"Messaggi globali\" e \"Messaggi personali\".",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "messaging", "telegram", "broadcast"],
+    "relates_to": [
+      { "id": "device-requests/dc-global-message", "type": "implements" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/saveGlobalMessage.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminMessagesPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/cap-email-log-monitoring",
+    "type": "capability",
+    "name": "Monitoraggio log email (coda Firebase Trigger Email)",
+    "body": "## What it does\n\nFornisce all'admin una vista in sola lettura sulla collection `mail` (coda Firebase Trigger Email Extension) per monitorare lo stato di consegna di tutte le email.\n\nIl componente `AdminEmailLogsPage` legge fino a 200 documenti dalla collection `mail`, li ordina per data e li mostra in una DataTable con colonne: data invio, destinatario, oggetto/template, stato (`SUCCESS`/`ERROR`/altro), tentativi, azioni.\n\nIl dialog di dettaglio mostra: destinatario, data, stato, tentativi, eventuale errore, contenuto template (nome + dati) o HTML raw, e delivery info (`messageId`, `response`). Gestisce sia email con template che email raw.\n\n## Boundaries\n\n- Vista in sola lettura: nessuna azione di retry o cancellazione.\n- Limite hardcoded a 200 documenti senza paginazione server-side.\n- Ordinamento avviene client-side dopo il fetch.\n\n## Key entry points\n\n- **Frontend**: `enable-device/src/pages/admin/AdminEmailLogsPage.tsx`.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "email", "monitoring", "firebase-trigger-email"],
+    "relates_to": [
+      { "id": "device-requests/cap-public-request-submission", "type": "relates_to" },
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminEmailLogsPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-citizen-requests-device",
+    "type": "use_case",
+    "name": "Richiedente invia richiesta dispositivo",
+    "body": "## Scenario\n\nUn genitore/tutore/paziente accede a `/request-device` (pagina pubblica, no login). Compila il form: Dati Richiedente (email*, nome*, cognome*, telefono*, provincia*), Dati Destinatario (relazione, età, sesso, terapia occupazionale), Dettagli Richiesta (tipo amputazione*, descrizione, preferenze), Consenso Privacy (GDPR, obbligatorio).\n\nAl submit:\n1. Frontend ottiene token reCAPTCHA per `create_device_request`.\n2. Chiama `createDeviceRequest`.\n3. Se OK: mostra schermata di conferma con contatti (`device@e-nableitalia.it`, `+39-329-1003302`).\n4. Il richiedente riceve email di conferma (template `confermaRicezione`).\n5. Gli admin ricevono notifica email + Telegram.\n\n**Casi di fallimento**: reCAPTCHA score < 0.6 (`permission-denied`), rate limit superato, campi obbligatori mancanti (`invalid-argument`).\n\n## Depends on capabilities\n\n- `device-requests/cap-public-request-submission`\n\n## Known gaps\n\n- Nessun portale per il richiedente dove seguire lo stato della propria richiesta.\n- Il campo `devicetype` non è esposto nel form pubblico: viene aggiunto dall'admin in validazione.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["public", "citizen-facing"],
+    "relates_to": [
+      { "id": "device-requests/cap-public-request-submission", "type": "depends_on" },
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/RequestDevice.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-validates-request",
+    "type": "use_case",
+    "name": "Admin valida e rende visibile una nuova richiesta",
+    "body": "## Scenario\n\nL'admin riceve notifica di una nuova richiesta (Telegram/email). Naviga su `AdminValidate` o `RequestDetail` (status `inviata`).\n\n1. Il pannello di validazione appare in cima con sfondo giallo ammonimento.\n2. L'admin compila i campi operativi sanitizzati (senza PII), con pulsanti \"Copia dal modulo\" per agevolare la sanitizzazione.\n3. Seleziona tipo device dalla lista standard o inserisce testo libero.\n4. Corregge eventuali errori nei dati privati (nome, cognome, email, amputationType).\n5. Clicca \"Valida richiesta\" → dialog di conferma.\n6. Su conferma: salva campi operativi + `validatedAt`/`validatedBy`, aggiorna dati privati correggibili, imposta `publicStatus: 'da gestire'` + `devicetype`, chiama `changeStatus` → `status: 'validata'`.\n7. La richiesta scompare da `AdminValidate` e appare in `AdminTriage`.\n\n## Depends on capabilities\n\n- `device-requests/cap-request-validation`\n- `device-requests/cap-request-lifecycle-management`\n\n## Known gaps\n\n- Nessuna email automatica al richiedente all'atto della validazione.\n- Il campo `devicetype` nella list-view `AdminValidate` non è valorizzato: l'admin deve aprire ogni richiesta singolarmente.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "triage", "validation"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-validation", "type": "depends_on" },
+      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminValidate.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-assigns-volunteer",
+    "type": "use_case",
+    "name": "Admin assegna uno o più volontari a una richiesta",
+    "body": "## Scenario\n\nDopo la validazione, l'admin naviga su `RequestDetail`. Clicca \"Associa volontario\".\n\n1. Dialog mostra la lista dei volontari già assegnati (nomi risolti).\n2. Per **aggiungere**: toggle \"Aggiungi\" → dropdown filtrable con tutti gli utenti `active: true` → seleziona → \"Aggiungi\". Costruisce lista `[...current, newVolunteer]` e chiama `assignVolunteer`.\n3. Per **rimuovere**: seleziona dalla ListBox → \"Rimuovi selezionati\". Costruisce lista filtrata e chiama `assignVolunteer`.\n4. Un evento `set_volunteers` viene aggiunto alla timeline con i nomi dei volontari.\n\n**Edge case**: se il volontario non ha profilo `private/profile`, il suo nome nel log rimane il raw `userId`.\n\n## Depends on capabilities\n\n- `device-requests/cap-volunteer-assignment`\n\n## Known gaps\n\n- Il volontario non riceve notifica all'assegnazione.\n- Nessun filtro per competenze o disponibilità nel dropdown.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "assignment"],
+    "relates_to": [
+      { "id": "device-requests/cap-volunteer-assignment", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/assignVolunteer.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-volunteer-advances-production",
+    "type": "use_case",
+    "name": "Volontario avanza la richiesta attraverso gli stati di produzione",
+    "body": "## Scenario\n\nUn volontario autenticato (con consensi accettati) naviga sulla propria area (`/volunteer/*`) e vede le richieste assegnate. Chiama `changeStatus` con il nuovo stato. Lato server:\n1. Verifica che il volontario sia in `assignedVolunteers`.\n2. Controlla `isAllowedVolunteerTransition` (5 transizioni ammesse).\n3. Se non consentita: `permission-denied` (\"Invalid status transition\").\n4. Se consentita: aggiorna Firestore + registra evento.\n\nIl volontario vede `RequestTable` (versione senza bulk/delete).\n\n## Depends on capabilities\n\n- `device-requests/cap-request-lifecycle-management`\n\n## Known gaps\n\n- Il volontario non può tornare a uno stato precedente (nessuna transizione backward).\n- Non esiste transizione dal volontario per `spedita → followup famiglia`: deve farlo l'admin.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["volunteer", "production", "status-transition"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
+      { "id": "device-requests/dc-volunteer-transition", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/RequestTable.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-marks-attention",
+    "type": "use_case",
+    "name": "Admin segnala una richiesta come 'richiede attenzione'",
+    "body": "## Scenario\n\nL'admin nota che una richiesta necessita di intervento urgente. Dal `RequestDetail`, clicca \"Segnala\".\n\n1. Dialog richiede obbligatoriamente una **nota di motivazione**.\n2. Opzioni notifica: Admin sempre attivo (checkbox disabilitata), Volontari assegnati (opzionale), Telegram (opzionale).\n3. Al confirm: `updateDoc` imposta `requiresAttention: true`, poi `changeStatus` con nota `\"⚠️ Richiede attenzione: <testo>\"`.\n\nPer **rimuovere il flag**: \"Rimuovi flag\" (nessun dialog) → `updateDoc(requiresAttention: false)` + `changeStatus` con nota.\n\nLa view `AdminAttention` filtra le richieste con `requiresAttention === true`.\n\n## Depends on capabilities\n\n- `device-requests/cap-request-lifecycle-management`\n- `device-requests/cap-admin-request-views`\n\n## Known gaps\n\n- Il flag non viene rimosso automaticamente al cambio di stato.\n- La vista `AdminAttention` riceve le richieste già filtrate dal componente padre.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "flag", "attention", "notification"],
+    "relates_to": [
+      { "id": "device-requests/dc-requires-attention", "type": "implements" },
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminAttention.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-adds-note",
+    "type": "use_case",
+    "name": "Admin/volontario aggiunge una nota alla cronologia senza cambiare stato",
+    "body": "## Scenario\n\nL'admin vuole registrare un aggiornamento (es. \"Contattato family, in attesa risposta\") senza avanzare lo stato.\n\nDal `RequestDetail`, click \"Aggiungi nota\" → dialog:\n1. Campo testo nota (obbligatorio).\n2. Opzioni notifica (Admin, Volontari assegnati, Telegram).\n3. Al confirm: `handleAddNote` chiama `changeStatus` passando `newStatus = request.status` (stesso stato). Il backend registra un evento con `fromStatus === toStatus` e la nota.\n\nNella `RequestTimeline`, questo evento è renderizzato come `\"Aggiornamento / Nota\"`.\n\n## Depends on capabilities\n\n- `device-requests/cap-request-lifecycle-management`\n\n## Known gaps\n\n- Non esiste un tipo evento separato per note pure: usa `changeStatus` con stato invariato, il che può generare confusione nella timeline.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "note", "timeline"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
+      { "id": "device-requests/dc-request-event", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/timeline/RequestTimeline.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-bulk-change-status",
+    "type": "use_case",
+    "name": "Admin applica cambio stato in bulk su più richieste",
+    "body": "## Scenario\n\nDa qualsiasi vista che usa `AdminRequestTable`:\n1. Seleziona più righe tramite checkbox.\n2. Clicca \"Bulk Change\" (abilitato solo se selezione > 0).\n3. Nel dialog: sceglie il nuovo stato.\n4. Al confirm: itera in sequenza su tutte le righe, chiama `changeStatus` per ciascuna con `note: 'Bulk change'`, accumula errori senza interrompere.\n5. Mostra il riepilogo: aggiornati N, errori M.\n\n## Depends on capabilities\n\n- `device-requests/cap-request-lifecycle-management`\n- `device-requests/cap-admin-request-views`\n\n## Known gaps\n\n- Il bulk change non offre opzioni di notifica (admin/volunteer/telegram).\n- Il loop è sequenziale (non parallelo) per evitare rate limiting Firestore.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "bulk", "batch-operation"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
+      { "id": "device-requests/cap-admin-request-views", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/AdminRequestTable.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-imports-legacy-data",
+    "type": "use_case",
+    "name": "Admin importa dati storici da CSV (standard o legacy)",
+    "body": "## Scenario\n\nDa `AdminMaintenanceRequests`:\n1. Seleziona il file CSV e la modalità (Standard / Legacy).\n2. Clicca \"Dry Run\" per verificare il parsing senza scrivere.\n3. Clicca \"Start Import\" per l'import reale: per ogni riga `createDeviceRequestInternal` → `changeStatus` → (se presente) `assignVolunteer`. Mostra ProgressBar.\n4. Errori per riga non bloccano le righe successive.\n5. (Opzionale) \"Aggiorna date\" per riallineare `createdAt` su richieste già importate.\n\n**Modalità Legacy**: CSV con `;`, colonne `Richiedente` (nome completo), `Destinatario`, `Device`, ecc. Volontario mappato per nome completo cercando in `users/{uid}/private/profile`.\n\n## Depends on capabilities\n\n- `device-requests/cap-internal-import`\n\n## Known gaps\n\n- Non è possibile riprendere un import interrotto.\n- Il campo `devicetype` in modalità standard è sempre `'unknown'`.\n- Ricerca del volontario per nome completo non tollera variazioni ortografiche.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "import", "csv", "legacy"],
+    "relates_to": [
+      { "id": "device-requests/cap-internal-import", "type": "depends_on" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminMaintenanceRequests.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-migrates-volunteer-field",
+    "type": "use_case",
+    "name": "Admin esegue migrazione idempotente assignedVolunteer → assignedVolunteers",
+    "body": "## Scenario\n\nI documenti `deviceRequests` creati in precedenza usano `assignedVolunteer` (stringa singola, con `/` per più volontari). I nuovi usano `assignedVolunteers` (array).\n\nDa `AdminMaintenanceRequests`, pulsante \"Migra volontari\":\n1. Divide documenti in \"da migrare\" (mancano `assignedVolunteers` o `shippingAddress`) e \"già migrati\".\n2. Per ogni documento: splitta `assignedVolunteer` su `/`, deduplicato; elimina il campo; inizializza `shippingAddress: null`.\n3. Scrive in batch Firestore da 499 operazioni.\n4. **Idempotente**: ripetibile senza duplicati.\n\n## Depends on capabilities\n\n- `device-requests/cap-internal-import`\n\n## Known gaps\n\n- I valori legacy in `assignedVolunteer` erano nomi, non UID: dopo la migrazione i valori nell'array possono essere nomi stringa, richiedendo riconciliazione manuale.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "migration", "idempotent", "backward-compat"],
+    "relates_to": [
+      { "id": "device-requests/cap-internal-import", "type": "depends_on" },
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminMaintenanceRequests.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-admin-sends-global-message",
+    "type": "use_case",
+    "name": "Admin crea un messaggio globale o personale verso i volontari",
+    "body": "## Scenario\n\nDa `AdminMessagesPage`, tab \"Messaggi globali\":\n1. Clicca \"Nuovo messaggio\".\n2. Compila titolo*, testo* (HTML), destinatari, scadenza (opzionale), attivo, notifica Telegram.\n3. Al salvataggio: chiama `saveGlobalMessage` → Firestore + (se `notifyTelegram: true` e nuovo) push Telegram.\n\nPer **messaggi personali** (tab \"Messaggi personali\"):\n1. Seleziona l'utente dalla dropdown.\n2. Compila titolo/testo → scrive su `users/{uid}/messages` con `read: false`.\n\n## Depends on capabilities\n\n- `device-requests/cap-global-messaging`\n\n## Known gaps\n\n- I messaggi personali sono scritti client-side: nessun audit log specifico.\n- `expiresAt` non causa disattivazione automatica.\n- Nessun meccanismo di \"letto da\" per i messaggi globali.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "messaging", "broadcast"],
+    "relates_to": [
+      { "id": "device-requests/cap-global-messaging", "type": "depends_on" },
+      { "id": "device-requests/dc-global-message", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminMessagesPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/saveGlobalMessage.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/uc-followup-failure",
+    "type": "use_case",
+    "name": "Admin chiude una richiesta come non completabile",
+    "body": "## Scenario\n\nLa richiesta non può essere portata a termine: famiglia non risponde, destinatario troppo piccolo, o annullamento esplicito.\n\nL'admin dal `RequestDetail` → \"Cambia Stato\" → seleziona uno degli stati terminali:\n- `followup famiglia ko` — famiglia non raggiungibile o rinuncia.\n- `followup famiglia troppo piccolo` — il destinatario non soddisfa i requisiti.\n- `annullata` — cancellazione esplicita.\n- `standby` — sospensione temporanea (reversibile manualmente).\n\nTutti mappano al `publicStatus: 'annullate / non completabili'`. L'admin può aggiungere nota e scegliere le notifiche.\n\n## Depends on capabilities\n\n- `device-requests/cap-request-lifecycle-management`\n\n## Known gaps\n\n- Non esiste una transizione automatica di riattivazione da `standby`.\n- Nessuna comunicazione automatica al richiedente originale in questi stati terminali.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["admin", "terminal-state", "followup"],
+    "relates_to": [
+      { "id": "device-requests/cap-request-lifecycle-management", "type": "depends_on" },
+      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-device-request",
+    "type": "domain_concept",
+    "name": "DeviceRequest",
+    "body": "## Definition\n\nEntità centrale della piattaforma. Rappresenta la richiesta di un dispositivo prostetico stampato in 3D per un beneficiario con limb difference.\n\nStruttura Firestore:\n- **`deviceRequests/{id}`** — documento principale: `age`, `gender`, `status`, `publicStatus`, `assignedVolunteers` (array di UID), `seqId`, `requestNumber`, `createdAt`, `updatedAt`, `createdBy`, `shippingAddress`, `recipient`, `relation`, `descriptionPublic`, `preferencesPublic`, `validatedAt`, `validatedBy`, `requiresAttention`, `deviceType`.\n- **`deviceRequests/{id}/private/data`** — PII: `email`, `firstName`, `lastName`, `phone`, `relation`, `province`, `therapy`, `amputationType`, `description`, `preferences`, `consentPrivacy`.\n- **`deviceRequests/{id}/events/{eventId}`** — log eventi (timeline).\n- **`publicDeviceRequests/{id}`** — proiezione pubblica: `province`, `publicStatus`, `createdAt`, `devicetype`, `requestNumber`, `ageRange`.\n\n**Compatibilità backward**: documenti precedenti possono avere `assignedVolunteer` (stringa) invece di `assignedVolunteers` (array). Entrambi devono essere letti finché la migrazione non è completata.\n\n## Also known as\n\n- \"Richiesta device\" (nel UI)\n- `deviceRequests` (collection Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["firestore", "core-entity"],
+    "relates_to": [
+      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" },
+      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" },
+      { "id": "device-requests/dc-request-number", "type": "relates_to" },
+      { "id": "device-requests/dc-public-status", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-status-lifecycle",
+    "type": "domain_concept",
+    "name": "Ciclo di vita degli stati interni",
+    "body": "## Definition\n\nLa `deviceRequest` attraversa 19 stati interni distinti:\n\n**Triage**: `inviata` → `validata` → `famiglia contattata` → `definizione richiesta` → `valutazione fattibilita` → `followup famiglia ko` | `followup famiglia troppo piccolo` | `attesa volontario`\n\n**Produzione** (assegnati al volontario): `scelta device e dimensionamento` → `personalizzazione` → `attesa materiali` → `fabbricazione` → `fitting` → `pronta per spedizione` → `spedita` → `followup famiglia`\n\n**Terminali**: `completata`, `annullata`, `followup famiglia ko`, `followup famiglia troppo piccolo`\n\n**Speciali**: `standby` (pausa reversibile)\n\nLe transizioni non seguono un grafo rigido lato backend per gli admin (qualsiasi → qualsiasi). Per i volontari esistono solo 5 transizioni consentite (vedi `dc-volunteer-transition`).\n\n## Also known as\n\n- `status` (campo Firestore)\n- stati interni (distinti dal `publicStatus`)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["state-machine", "lifecycle"],
+    "relates_to": [
+      { "id": "device-requests/dc-public-status", "type": "relates_to" },
+      { "id": "device-requests/dc-volunteer-transition", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/utils/mapToPublicStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-public-status",
+    "type": "domain_concept",
+    "name": "publicStatus e collection publicDeviceRequests",
+    "body": "## Definition\n\nIl `publicStatus` è un raggruppamento a **4 valori** derivato da `mapToPublicStatus(status)` (`utils/mapToPublicStatus.ts`):\n\n- **`da gestire`**: `inviata`, `famiglia contattata`, `definizione richiesta`, `valutazione fattibilità`, `attesa volontario`, e tutti gli stati non mappati (fallback).\n- **`fabbricazione in corso`**: `scelta device e dimensionamento`, `personalizzazione`, `attesa materiali`, `fabbricazione`, `fitting`, `pronta per spedizione`, `spedita`, `followup famiglia`.\n- **`completati`**: solo `completata`.\n- **`annullate / non completabili`**: `followup famiglia ko`, `followup famiglia troppo piccolo`, `annullata`, `standby`.\n\nLa collection `publicDeviceRequests/{id}` è una proiezione Firestore separata che contiene solo: `province`, `publicStatus`, `createdAt`, `devicetype`, `requestNumber`, `ageRange`. Viene sincronizzata atomicamente ad ogni cambio di stato. Serve per viste pubbliche senza esporre PII.\n\n**Bug noto**: `mapToPublicStatus.ts` usa `'valutazione fattibilità'` (con accento) mentre i dati possono contenere `'valutazione fattibilita'` (senza accento) — potenziale mismatch di mapping.\n\n## Also known as\n\n- `publicStatus` (campo nei documenti)\n- `publicDeviceRequests` (collection Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["firestore", "public-projection", "pii-free"],
+    "relates_to": [
+      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" },
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/utils/mapToPublicStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-request-event",
+    "type": "domain_concept",
+    "name": "RequestEvent (sub-collection events)",
+    "body": "## Definition\n\nOgni modifica rilevante a una `deviceRequest` genera un documento nella sub-collection `deviceRequests/{id}/events/{eventId}` — pattern di **event sourcing leggero**.\n\nStruttura:\n- `type`: `'status_change'` | `'set_volunteers'`.\n- `fromStatus`: stato precedente (o `null` per il primo evento).\n- `toStatus`: nuovo stato (uguale a `fromStatus` per le note pure).\n- `timestamp`: `FieldValue.serverTimestamp()`.\n- `createdBy`: UID utente o `'system'`/`'public-form'`/`'import'`.\n- `note`: testo libero opzionale.\n\nLa `RequestTimeline` distingue i tipi:\n- `type === 'assign_volunteer'` → `\"Assegnazione volontario\"` (ma il tipo scritto è `'set_volunteers'` — possibile inconsistenza nel rendering).\n- `fromStatus === toStatus` → `\"Aggiornamento / Nota\"`.\n- Altrimenti → `\"fromStatus → toStatus\"`.\n\n## Also known as\n\n- Cronologia / Timeline della richiesta\n- `events` (sub-collection Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["firestore", "event-sourcing", "timeline"],
+    "relates_to": [
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/timeline/RequestTimeline.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-private-data-separation",
+    "type": "domain_concept",
+    "name": "Separazione PII in sub-collection private/data",
+    "body": "## Definition\n\nI dati personali (PII) del richiedente non sono mai nel documento principale `deviceRequests/{id}` ma sono isolati nella sub-collection `deviceRequests/{id}/private/data` (documento fisso con id `'data'`).\n\nCampi PII: `email`, `firstName`, `lastName`, `phone`, `relation`, `province`, `therapy`, `amputationType`, `description`, `preferences`, `consentPrivacy`.\n\nQuesta separazione permette:\n- Firestore Security Rules più granulari.\n- Eliminazione selettiva dei PII senza perdere la storia.\n- I volontari possono accedere al documento principale senza vedere i dati privati.\n\nIn validazione, l'admin trasferisce manualmente una versione sanitizzata nei campi pubblici `descriptionPublic` e `preferencesPublic` del documento principale.\n\n## Also known as\n\n- `private/data` (path Firestore)\n- Dati privati del richiedente",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["privacy", "gdpr", "pii", "firestore"],
+    "relates_to": [
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-request-number",
+    "type": "domain_concept",
+    "name": "requestNumber (REQ-XXXXXX)",
+    "body": "## Definition\n\nIdentificatore leggibile di una richiesta dispositivo. Formato: `REQ-` + 6 cifre zero-padded (es. `REQ-000001`, `REQ-000042`).\n\nGenerato atomicamente alla creazione tramite il contatore `counters/deviceRequests.lastId` all'interno della stessa transazione Firestore che crea il documento.\n\nIl campo `seqId` (intero) e `requestNumber` (stringa) coesistono: `seqId` per ordinamento/filtro numerico, `requestNumber` per la label visibile.\n\n## Also known as\n\n- Numero richiesta\n- `requestNumber` (campo Firestore)\n- `seqId` (intero corrispondente)\n- `counters/deviceRequests` (counter Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["firestore", "sequential-id", "counter"],
+    "relates_to": [
+      { "id": "device-requests/dc-device-request", "type": "relates_to" },
+      { "id": "device-requests/dc-counter", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequestInternal.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-requires-attention",
+    "type": "domain_concept",
+    "name": "Flag requiresAttention",
+    "body": "## Definition\n\nFlag booleano su `deviceRequests/{id}` che segnala che la richiesta necessita di intervento urgente, indipendentemente dallo stato.\n\n`true`: appare in `AdminAttention` con icona `⚠️` rossa. L'impostazione richiede nota obbligatoria e notifica admin (+ opzionalmente volontari e Telegram).\n\n`false` (default): flag rimosso, scompare da `AdminAttention`.\n\nNon legato al ciclo di vita degli stati: può essere impostato in qualsiasi momento e non viene rimosso automaticamente al cambio di stato.\n\n## Also known as\n\n- `requiresAttention` (campo Firestore)\n- Flag attenzione",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["flag", "admin", "attention"],
+    "relates_to": [
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/AdminRequestTable.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-amputation-type",
+    "type": "domain_concept",
+    "name": "amputationType (tipo di amputazione)",
+    "body": "## Definition\n\nCategoria medica che descrive il tipo di differenza agli arti del beneficiario. Selezionato dal richiedente nel form pubblico, memorizzato in `private/data.amputationType`.\n\nValori standard:\n- `'Mano, polso funzionale con parte residua di palmo'`\n- `'Braccio sotto il gomito'`\n- `'Braccio sopra il gomito'`\n- `'Altro'`\n\nCorregibile dall'admin in validazione e tramite il dialog \"Modifica dati richiedente (privati)\".\n\n## Also known as\n\n- Tipo amputazione\n- `amputationType` (campo Firestore)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["medical", "private-data"],
+    "relates_to": [
+      { "id": "device-requests/dc-private-data-separation", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/RequestDevice.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-device-type",
+    "type": "domain_concept",
+    "name": "devicetype (tipo di dispositivo prostetico)",
+    "body": "## Definition\n\nIdentifica il modello open-source di dispositivo prostetico che verrà realizzato. Assegnato dall'admin in validazione (non dal richiedente).\n\nValori standard (`RequestDetail.tsx`):\n`Kinetic Hand`, `Kinetic Arm`, `Bike Adapter`, `Guitar Pick`, `Kwawu Arm`, `Device Batteria`, `Kwawu Gripper`, `Phoenix Hand`. Possibile anche testo libero (opzione \"Altro\").\n\nMemorizzato come `devicetype` (lowercase) in `publicDeviceRequests/{id}` e come `deviceType` (camelCase) nel documento principale e nelle viste React. Questa differenza di casing è una inconsistenza nel codice.\n\n## Also known as\n\n- Tipo device\n- `devicetype` (in `publicDeviceRequests`)\n- `deviceType` (documento principale e viste React)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["device-catalog", "admin"],
+    "relates_to": [
+      { "id": "device-requests/dc-public-status", "type": "relates_to" },
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-global-message",
+    "type": "domain_concept",
+    "name": "GlobalMessage (messaggio globale di sistema)",
+    "body": "## Definition\n\nComunicazione broadcast creata dagli admin, visibile in base al `target`. Memorizzata in `messages/{messageId}`.\n\nCampi: `title`, `body` (HTML), `target` (`'all'`|`'volunteer'`|`'admin'`), `active`, `expiresAt` (ISO string o null), `notifyTelegram`, `createdAt`, `createdBy`, `updatedAt`, `updatedBy`.\n\nDistinta dal **messaggio personale** (`users/{uid}/messages/{id}`) che ha solo `title`, `body`, `read`, `createdAt` e viene scritto direttamente dal frontend senza Cloud Function.\n\nIl targeting è un filtro inteso per il rendering frontend: il backend non filtra i messaggi in base al ruolo del richiedente.\n\n## Also known as\n\n- Messaggio globale\n- `messages` (collection Firestore)\n- Comunicazione di sistema",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["messaging", "broadcast", "firestore"],
+    "relates_to": [
+      { "id": "device-requests/cap-global-messaging", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/saveGlobalMessage.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminMessagesPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-volunteer-transition",
+    "type": "domain_concept",
+    "name": "Transizioni di stato consentite ai volontari",
+    "body": "## Definition\n\nSubset ristretto delle transizioni che un volontario (non admin) può effettuare su una richiesta a lui assegnata. Codificate in `isAllowedVolunteerTransition` in `changeStatus.ts`.\n\nTransizioni ammesse (5, solo in avanti):\n1. `scelta device e dimensionamento` → `personalizzazione`\n2. `personalizzazione` → `attesa materiali`\n3. `attesa materiali` → `fabbricazione`\n4. `fabbricazione` → `pronta per spedizione`\n5. `pronta per spedizione` → `spedita`\n\nCondizione aggiuntiva: il volontario deve essere nell'array `assignedVolunteers` della richiesta.\n\n## Also known as\n\n- Transizioni volontario\n- `isAllowedVolunteerTransition` (funzione backend)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["rbac", "volunteer", "state-machine"],
+    "relates_to": [
+      { "id": "device-requests/dc-status-lifecycle", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-age-range",
+    "type": "domain_concept",
+    "name": "ageRange (fascia d'età del beneficiario)",
+    "body": "## Definition\n\nCampo derivato calcolato alla creazione e salvato in `publicDeviceRequests/{id}.ageRange`. Trasforma il campo numerico `age` in una stringa a fascia per la privacy.\n\nLogica di mapping (`getAgeRange()` in `createDeviceRequest.ts` e `createDeviceRequestInternal.ts`):\n- `age <= 6` → `'0-6'`\n- `age <= 12` → `'7-12'`\n- `age <= 18` → `'13-18'`\n- `age > 18` → `'18+'`\n- `age` null/undefined → `null`\n\nConsente statistiche demografiche pubbliche senza rivelare l'età esatta.\n\n## Also known as\n\n- Fascia d'età\n- `ageRange` (campo in `publicDeviceRequests`)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["privacy", "derived-field", "statistics"],
+    "relates_to": [
+      { "id": "device-requests/dc-public-status", "type": "relates_to" },
+      { "id": "device-requests/dc-device-request", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequestInternal.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  },
+
+  {
+    "id": "device-requests/dc-counter",
+    "type": "domain_concept",
+    "name": "Counter Firestore per ID sequenziali",
+    "body": "## Definition\n\nDocumento Firestore `counters/deviceRequests` con campo `lastId` (intero). Letto e incrementato all'interno della stessa transazione Firestore che crea `deviceRequests/{id}`, garantendo atomicità e assenza di race condition.\n\nPattern:\n1. `tx.get(counterRef)` → legge `lastId` (o 0 se non esiste).\n2. `newSeqId = lastId + 1`.\n3. `tx.set(counterRef, { lastId: newSeqId })`.\n4. Usa `newSeqId` per `requestNumber = 'REQ-' + padStart(6, '0')`.\n\nAdatto per volumi bassi (< 1 richiesta/secondo): le transazioni Firestore su un documento condiviso hanno throughput limitata.\n\n## Also known as\n\n- Contatore richieste\n- `counters/deviceRequests` (path Firestore)\n- `lastId` (campo del documento)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": ["firestore", "counter", "sequential-id"],
+    "relates_to": [
+      { "id": "device-requests/dc-request-number", "type": "relates_to" }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/createDeviceRequestInternal.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-07-08T10:00:00Z"
+      }
+    ]
+  }
+]
