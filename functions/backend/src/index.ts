@@ -21,5 +21,6 @@ export { updateChecklist } from "./organizer/updateChecklist";
 export { getChecklist } from "./organizer/getChecklist";
 export { createChecklist } from "./organizer/createChecklist";
 export { deleteChecklist } from "./organizer/deleteChecklist";
+export { addChecklistItem } from "./organizer/addChecklistItem";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
