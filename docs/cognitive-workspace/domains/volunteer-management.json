@@ -7,13 +7,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "rbac", "volunteer-lifecycle"],
+    "tags": [
+      "admin",
+      "rbac",
+      "volunteer-lifecycle"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/uc-admin-activates-volunteer", "type": "implements" },
-      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+      {
+        "id": "volunteer-management/uc-admin-activates-volunteer",
+        "type": "implements"
+      },
+      {
+        "id": "volunteer-management/dc-volunteer",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2949121",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -51,13 +61,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["volunteer", "profile", "firestore"],
+    "tags": [
+      "volunteer",
+      "profile",
+      "firestore"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/uc-volunteer-onboarding", "type": "implements" },
-      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+      {
+        "id": "volunteer-management/uc-volunteer-onboarding",
+        "type": "implements"
+      },
+      {
+        "id": "volunteer-management/dc-volunteer",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2981909",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -89,13 +109,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["volunteer", "3d-printing", "equipment"],
+    "tags": [
+      "volunteer",
+      "3d-printing",
+      "equipment"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/dc-3d-printer", "type": "implements" },
-      { "id": "volunteer-management/cap-admin-volunteer-view", "type": "relates_to" }
+      {
+        "id": "volunteer-management/dc-3d-printer",
+        "type": "implements"
+      },
+      {
+        "id": "volunteer-management/cap-admin-volunteer-view",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "3014657",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -127,13 +157,24 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["consent", "privacy", "gdpr", "onboarding"],
+    "tags": [
+      "consent",
+      "privacy",
+      "gdpr",
+      "onboarding"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/uc-volunteer-onboarding", "type": "implements" },
-      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+      {
+        "id": "volunteer-management/uc-volunteer-onboarding",
+        "type": "implements"
+      },
+      {
+        "id": "volunteer-management/dc-volunteer",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2818056",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -159,13 +200,24 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "crm", "email", "invitation"],
+    "tags": [
+      "admin",
+      "crm",
+      "email",
+      "invitation"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/dc-contact", "type": "implements" },
-      { "id": "volunteer-management/uc-volunteer-onboarding", "type": "relates_to" }
+      {
+        "id": "volunteer-management/dc-contact",
+        "type": "implements"
+      },
+      {
+        "id": "volunteer-management/uc-volunteer-onboarding",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2752533",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -191,14 +243,27 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "reporting", "firestore"],
+    "tags": [
+      "admin",
+      "reporting",
+      "firestore"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/cap-printer-registry", "type": "relates_to" },
-      { "id": "volunteer-management/cap-volunteer-activation", "type": "relates_to" },
-      { "id": "volunteer-management/dc-volunteer", "type": "relates_to" }
+      {
+        "id": "volunteer-management/cap-printer-registry",
+        "type": "relates_to"
+      },
+      {
+        "id": "volunteer-management/cap-volunteer-activation",
+        "type": "relates_to"
+      },
+      {
+        "id": "volunteer-management/dc-volunteer",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2949161",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -230,14 +295,27 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["onboarding", "consent", "activation"],
+    "tags": [
+      "onboarding",
+      "consent",
+      "activation"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/cap-consent-collection", "type": "depends_on" },
-      { "id": "volunteer-management/cap-volunteer-profile-management", "type": "depends_on" },
-      { "id": "volunteer-management/cap-volunteer-activation", "type": "depends_on" }
+      {
+        "id": "volunteer-management/cap-consent-collection",
+        "type": "depends_on"
+      },
+      {
+        "id": "volunteer-management/cap-volunteer-profile-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "volunteer-management/cap-volunteer-activation",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2981889",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -269,13 +347,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "activation", "workflow"],
+    "tags": [
+      "admin",
+      "activation",
+      "workflow"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/cap-volunteer-activation", "type": "depends_on" },
-      { "id": "volunteer-management/cap-admin-volunteer-view", "type": "depends_on" }
+      {
+        "id": "volunteer-management/cap-volunteer-activation",
+        "type": "depends_on"
+      },
+      {
+        "id": "volunteer-management/cap-admin-volunteer-view",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2949141",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -301,12 +389,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["volunteer", "dashboard", "requests"],
+    "tags": [
+      "volunteer",
+      "dashboard",
+      "requests"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/cap-volunteer-profile-management", "type": "relates_to" }
+      {
+        "id": "volunteer-management/cap-volunteer-profile-management",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2719772",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -338,10 +433,14 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["core-entity", "user", "firestore"],
+    "tags": [
+      "core-entity",
+      "user",
+      "firestore"
+    ],
     "relates_to": [],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2752573",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -367,12 +466,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["equipment", "3d-printing", "firestore"],
+    "tags": [
+      "equipment",
+      "3d-printing",
+      "firestore"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/cap-printer-registry", "type": "relates_to" }
+      {
+        "id": "volunteer-management/cap-printer-registry",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2818076",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -398,12 +504,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["crm", "invitation-pipeline", "firestore"],
+    "tags": [
+      "crm",
+      "invitation-pipeline",
+      "firestore"
+    ],
     "relates_to": [
-      { "id": "volunteer-management/cap-volunteer-invitation", "type": "relates_to" }
+      {
+        "id": "volunteer-management/cap-volunteer-invitation",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2752553",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [

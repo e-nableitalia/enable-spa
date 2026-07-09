@@ -7,10 +7,14 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["shipments", "firestore", "cloud-functions"],
+    "tags": [
+      "shipments",
+      "firestore",
+      "cloud-functions"
+    ],
     "relates_to": [],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2818096",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -36,12 +40,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["shipments", "ux", "address-book"],
+    "tags": [
+      "shipments",
+      "ux",
+      "address-book"
+    ],
     "relates_to": [
-      { "id": "shipments/cap-shipment-request-lifecycle", "type": "relates_to" }
+      {
+        "id": "shipments/cap-shipment-request-lifecycle",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "3080193",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -61,12 +72,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["shipments", "volunteer", "admin"],
+    "tags": [
+      "shipments",
+      "volunteer",
+      "admin"
+    ],
     "relates_to": [
-      { "id": "shipments/cap-shipment-request-lifecycle", "type": "implements" }
+      {
+        "id": "shipments/cap-shipment-request-lifecycle",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2949201",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -92,12 +110,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["shipments", "admin", "email-notification"],
+    "tags": [
+      "shipments",
+      "admin",
+      "email-notification"
+    ],
     "relates_to": [
-      { "id": "shipments/cap-shipment-request-lifecycle", "type": "implements" }
+      {
+        "id": "shipments/cap-shipment-request-lifecycle",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2752594",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -123,12 +148,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["shipments", "soft-delete", "rbac"],
+    "tags": [
+      "shipments",
+      "soft-delete",
+      "rbac"
+    ],
     "relates_to": [
-      { "id": "shipments/cap-shipment-request-lifecycle", "type": "implements" }
+      {
+        "id": "shipments/cap-shipment-request-lifecycle",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2916373",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -154,12 +186,19 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["shipments", "firestore", "entity"],
+    "tags": [
+      "shipments",
+      "firestore",
+      "entity"
+    ],
     "relates_to": [
-      { "id": "shipments/cap-shipment-request-lifecycle", "type": "relates_to" }
+      {
+        "id": "shipments/cap-shipment-request-lifecycle",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2981929",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [

@@ -7,13 +7,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["anti-abuse", "rate-limiting", "firestore"],
+    "tags": [
+      "anti-abuse",
+      "rate-limiting",
+      "firestore"
+    ],
     "relates_to": [
-      { "id": "security/cap-recaptcha-verification", "type": "relates_to" },
-      { "id": "security/cap-security-audit-logging", "type": "relates_to" }
+      {
+        "id": "security/cap-recaptcha-verification",
+        "type": "relates_to"
+      },
+      {
+        "id": "security/cap-security-audit-logging",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "3080213",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -33,13 +43,25 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["anti-bot", "recaptcha", "enterprise", "frontend", "backend"],
+    "tags": [
+      "anti-bot",
+      "recaptcha",
+      "enterprise",
+      "frontend",
+      "backend"
+    ],
     "relates_to": [
-      { "id": "security/cap-rate-limiting", "type": "relates_to" },
-      { "id": "security/cap-security-audit-logging", "type": "relates_to" }
+      {
+        "id": "security/cap-rate-limiting",
+        "type": "relates_to"
+      },
+      {
+        "id": "security/cap-security-audit-logging",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "3145729",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -71,12 +93,20 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["audit", "logging", "firestore", "compliance"],
+    "tags": [
+      "audit",
+      "logging",
+      "firestore",
+      "compliance"
+    ],
     "relates_to": [
-      { "id": "security/cap-admin-security-log-console", "type": "relates_to" }
+      {
+        "id": "security/cap-admin-security-log-console",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2818116",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -96,12 +126,20 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "frontend", "audit", "monitoring"],
+    "tags": [
+      "admin",
+      "frontend",
+      "audit",
+      "monitoring"
+    ],
     "relates_to": [
-      { "id": "security/cap-security-audit-logging", "type": "depends_on" }
+      {
+        "id": "security/cap-security-audit-logging",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2883605",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -121,14 +159,28 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["anti-spam", "public-form", "recaptcha", "rate-limiting"],
+    "tags": [
+      "anti-spam",
+      "public-form",
+      "recaptcha",
+      "rate-limiting"
+    ],
     "relates_to": [
-      { "id": "security/cap-recaptcha-verification", "type": "depends_on" },
-      { "id": "security/cap-rate-limiting", "type": "depends_on" },
-      { "id": "security/cap-security-audit-logging", "type": "depends_on" }
+      {
+        "id": "security/cap-recaptcha-verification",
+        "type": "depends_on"
+      },
+      {
+        "id": "security/cap-rate-limiting",
+        "type": "depends_on"
+      },
+      {
+        "id": "security/cap-security-audit-logging",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "3178497",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -160,13 +212,24 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["admin", "audit", "monitoring", "compliance"],
+    "tags": [
+      "admin",
+      "audit",
+      "monitoring",
+      "compliance"
+    ],
     "relates_to": [
-      { "id": "security/cap-security-audit-logging", "type": "depends_on" },
-      { "id": "security/cap-admin-security-log-console", "type": "depends_on" }
+      {
+        "id": "security/cap-security-audit-logging",
+        "type": "depends_on"
+      },
+      {
+        "id": "security/cap-admin-security-log-console",
+        "type": "depends_on"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2981949",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -192,13 +255,23 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["firestore", "audit", "data-model"],
+    "tags": [
+      "firestore",
+      "audit",
+      "data-model"
+    ],
     "relates_to": [
-      { "id": "security/cap-security-audit-logging", "type": "implements" },
-      { "id": "security/cap-admin-security-log-console", "type": "relates_to" }
+      {
+        "id": "security/cap-security-audit-logging",
+        "type": "implements"
+      },
+      {
+        "id": "security/cap-admin-security-log-console",
+        "type": "relates_to"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2981969",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -218,12 +291,20 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["firestore", "rate-limiting", "data-model", "anti-abuse"],
+    "tags": [
+      "firestore",
+      "rate-limiting",
+      "data-model",
+      "anti-abuse"
+    ],
     "relates_to": [
-      { "id": "security/cap-rate-limiting", "type": "implements" }
+      {
+        "id": "security/cap-rate-limiting",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "2719792",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
@@ -243,12 +324,20 @@
     "status": "live",
     "owner_team": "<da assegnare>",
     "source_epics": [],
-    "tags": ["recaptcha", "anti-bot", "google", "data-model"],
+    "tags": [
+      "recaptcha",
+      "anti-bot",
+      "google",
+      "data-model"
+    ],
     "relates_to": [
-      { "id": "security/cap-recaptcha-verification", "type": "implements" }
+      {
+        "id": "security/cap-recaptcha-verification",
+        "type": "implements"
+      }
     ],
     "last_reviewed": null,
-    "confluence_page_id": null,
+    "confluence_page_id": "3014677",
     "pending_review": false,
     "possible_duplicate_of": null,
     "sources": [
