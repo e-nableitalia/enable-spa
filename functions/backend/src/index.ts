@@ -18,7 +18,6 @@ export { listVolunteerAdminData } from "./volunteer/listVolunteerAdminData";
 export { createShipmentRequest, approveShipmentRequest, deleteShipmentRequest } from "./shipments/shipmentRequests";
 export { saveGlobalMessage } from "./device/saveGlobalMessage";
 export { updateChecklist } from "./organizer/updateChecklist";
-export { getChecklist } from "./organizer/getChecklist";
 export { createChecklist } from "./organizer/createChecklist";
 export { createChecklistFromTemplate } from "./organizer/createChecklistFromTemplate";
 export { cloneChecklist } from "./organizer/cloneChecklist";
@@ -28,9 +27,10 @@ export { updateDeviceChecklistTemplate } from "./device-requests/updateChecklist
 export { deleteDeviceChecklistTemplate } from "./device-requests/deleteChecklistTemplate";
 export { createDeviceRequestChecklist } from "./device-requests/createDeviceRequestChecklist";
 export { deleteChecklist } from "./organizer/deleteChecklist";
-export { addChecklistItem } from "./organizer/addChecklistItem";
-export { updateChecklistItem } from "./organizer/updateChecklistItem";
-export { removeChecklistItem } from "./organizer/removeChecklistItem";
-export { getChecklistCompleteness } from "./organizer/getChecklistCompleteness";
+export { getDeviceRequestChecklist } from "./device-requests/getDeviceRequestChecklist";
+export { getDeviceRequestChecklistCompleteness } from "./device-requests/getDeviceRequestChecklistCompleteness";
+export { addDeviceRequestChecklistItem } from "./device-requests/addDeviceRequestChecklistItem";
+export { updateDeviceRequestChecklistItem } from "./device-requests/updateDeviceRequestChecklistItem";
+export { removeDeviceRequestChecklistItem } from "./device-requests/removeDeviceRequestChecklistItem";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
