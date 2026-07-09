@@ -10,6 +10,7 @@ import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
 import { ListBox } from "primereact/listbox";
 import RequestTimeline from "../../../components/timeline/RequestTimeline";
+import ChecklistPanel from "../../../components/checklist/ChecklistPanel";
 import { Toast } from "primereact/toast";
 import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
@@ -95,8 +96,6 @@ export default function RequestDetail() {
   const [attentionNotificaTelegram, setAttentionNotificaTelegram] = useState(false);
 
   // ── Checklist di fabbricazione (Organizer) ────────────────────────────────
-  const [checklistInfo, setChecklistInfo] = useState<{ title?: string; category?: string; itemsCount: number } | null>(null);
-  const [loadingChecklistInfo, setLoadingChecklistInfo] = useState(false);
   const [creatingChecklist, setCreatingChecklist] = useState(false);
 
   const toast = useRef<any>(null);
@@ -250,41 +249,6 @@ export default function RequestDetail() {
     ).then(setAssignedVolunteersList);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAssignVolunteerDialog]);
-
-  useEffect(() => {
-    const checklistId = request?.checklistId;
-    if (!checklistId) {
-      setChecklistInfo(null);
-      return;
-    }
-    let cancelled = false;
-    setLoadingChecklistInfo(true);
-    const fn = httpsCallable<
-      { checklistId: string },
-      { title?: string; category?: string; items?: unknown[] }
-    >(functions, "getChecklist");
-    fn({ checklistId })
-      .then((result) => {
-        if (cancelled) return;
-        const data = result.data ?? {};
-        setChecklistInfo({
-          title: data.title,
-          category: data.category,
-          itemsCount: Array.isArray(data.items) ? data.items.length : 0,
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error("[RequestDetail] Failed to load checklist info", err);
-        setChecklistInfo(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingChecklistInfo(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [request?.checklistId]);
 
   const handleCreateChecklist = async () => {
     if (!id) return;
@@ -1224,29 +1188,7 @@ export default function RequestDetail() {
               <div style={{ marginBottom: 10 }}>
                 <strong>Stato:</strong> <Badge value="Collegata" severity="success" />
               </div>
-              {loadingChecklistInfo ? (
-                <div style={{ color: "#888" }}>Caricamento dettagli checklist...</div>
-              ) : checklistInfo ? (
-                <>
-                  <div style={{ marginBottom: 8 }}>
-                    <strong>Titolo:</strong> {checklistInfo.title || "-"}
-                  </div>
-                  <div style={{ marginBottom: 8 }}>
-                    <strong>Categoria:</strong> {checklistInfo.category || "-"}
-                  </div>
-                  <div style={{ marginBottom: 8 }}>
-                    <strong>Item:</strong> {checklistInfo.itemsCount}
-                  </div>
-                </>
-              ) : (
-                <div style={{ color: "#888" }}>Impossibile caricare i dettagli della checklist.</div>
-              )}
-              <div style={{ color: "#888", marginTop: 8 }}>
-                <small>
-                  ID checklist: <code>{request.checklistId}</code>. La gestione operativa degli item è disponibile
-                  nell&apos;area dedicata alla checklist.
-                </small>
-              </div>
+              <ChecklistPanel requestId={id as string} checklistId={request.checklistId} />
             </div>
           ) : (
             <div>

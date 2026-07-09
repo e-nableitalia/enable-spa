@@ -12,6 +12,7 @@ import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
 import RequestTimeline from "../../components/timeline/RequestTimeline";
+import ChecklistPanel from "../../components/checklist/ChecklistPanel";
 import { REQUEST_STATUSES } from "../../helpers/requestStatus";
 
 export default function VolunteerRequestDetail() {
@@ -228,6 +229,16 @@ export default function VolunteerRequestDetail() {
                 {request.shippingAddress.notes && <div style={{ marginBottom: 8 }}><strong>Note:</strong> {request.shippingAddress.notes}</div>}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checklist di fabbricazione (Organizer) */}
+      {request.checklistId && (
+        <div className="p-panel p-component" style={{ marginBottom: 24 }}>
+          <div className="p-panel-header"><span>Checklist di fabbricazione</span></div>
+          <div className="p-panel-content">
+            <ChecklistPanel requestId={id as string} checklistId={request.checklistId} />
           </div>
         </div>
       )}
