@@ -26,6 +26,7 @@ export { listTemplates } from "./organizer/listTemplates";
 export { createDeviceChecklistTemplate } from "./device-requests/createChecklistTemplate";
 export { updateDeviceChecklistTemplate } from "./device-requests/updateChecklistTemplate";
 export { deleteDeviceChecklistTemplate } from "./device-requests/deleteChecklistTemplate";
+export { createDeviceRequestChecklist } from "./device-requests/createDeviceRequestChecklist";
 export { deleteChecklist } from "./organizer/deleteChecklist";
 export { addChecklistItem } from "./organizer/addChecklistItem";
 export { updateChecklistItem } from "./organizer/updateChecklistItem";
