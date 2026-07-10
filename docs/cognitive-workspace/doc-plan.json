@@ -1,5 +1,5 @@
 {
-  "status": "draft",
+  "status": "approved",
   "generated_at": "2026-07-09T00:00:00Z",
   "entries": [
     {
@@ -13,7 +13,8 @@
         "domain:volunteer-management",
         "domain:shipments",
         "domain:security"
-      ]
+      ],
+      "confluence_page_id": "2949223"
     },
     {
       "page_key": "domain:auth",
@@ -31,7 +32,8 @@
         "node:auth/dc-oob-code",
         "node:auth/dc-pending-registration",
         "node:auth/dc-must-set-password"
-      ]
+      ],
+      "confluence_page_id": "2719812"
     },
     {
       "page_key": "domain:device-requests",
@@ -42,7 +44,8 @@
         "group:device-requests:lifecycle",
         "group:device-requests:admin-ops",
         "group:device-requests:messaging"
-      ]
+      ],
+      "confluence_page_id": "3211265"
     },
     {
       "page_key": "group:device-requests:lifecycle",
@@ -70,7 +73,8 @@
         "node:device-requests/dc-request-number",
         "node:device-requests/dc-requires-attention",
         "node:device-requests/dc-counter"
-      ]
+      ],
+      "confluence_page_id": "3145754"
     },
     {
       "page_key": "group:device-requests:admin-ops",
@@ -86,7 +90,8 @@
         "node:device-requests/dc-amputation-type",
         "node:device-requests/dc-device-type",
         "node:device-requests/dc-age-range"
-      ]
+      ],
+      "confluence_page_id": "3244033"
     },
     {
       "page_key": "group:device-requests:messaging",
@@ -98,7 +103,8 @@
         "node:device-requests/cap-email-log-monitoring",
         "node:device-requests/uc-admin-sends-global-message",
         "node:device-requests/dc-global-message"
-      ]
+      ],
+      "confluence_page_id": "3276801"
     },
     {
       "page_key": "domain:volunteer-management",
@@ -109,7 +115,8 @@
         "group:volunteer-management:onboarding",
         "group:volunteer-management:profile",
         "node:volunteer-management/cap-admin-volunteer-view"
-      ]
+      ],
+      "confluence_page_id": "3244053"
     },
     {
       "page_key": "group:volunteer-management:onboarding",
@@ -123,7 +130,8 @@
         "node:volunteer-management/uc-volunteer-onboarding",
         "node:volunteer-management/uc-admin-activates-volunteer",
         "node:volunteer-management/dc-contact"
-      ]
+      ],
+      "confluence_page_id": "2818136"
     },
     {
       "page_key": "group:volunteer-management:profile",
@@ -136,7 +144,8 @@
         "node:volunteer-management/uc-volunteer-manages-workload",
         "node:volunteer-management/dc-volunteer",
         "node:volunteer-management/dc-3d-printer"
-      ]
+      ],
+      "confluence_page_id": "2687058"
     },
     {
       "page_key": "domain:shipments",
@@ -150,7 +159,8 @@
         "node:shipments/uc-approve-shipment-request",
         "node:shipments/uc-delete-shipment-request",
         "node:shipments/dc-shipment-request"
-      ]
+      ],
+      "confluence_page_id": "3309569"
     },
     {
       "page_key": "domain:security",
@@ -167,352 +177,422 @@
         "node:security/dc-security-log",
         "node:security/dc-rate-limit-entry",
         "node:security/dc-recaptcha-assessment"
-      ]
+      ],
+      "confluence_page_id": "3112981"
     },
     {
       "page_key": "node:auth/cap-email-link-registration",
       "type": "node",
-      "source_ref": "auth/cap-email-link-registration"
+      "source_ref": "auth/cap-email-link-registration",
+      "confluence_page_id": "1212417"
     },
     {
       "page_key": "node:auth/cap-google-oauth-registration",
       "type": "node",
-      "source_ref": "auth/cap-google-oauth-registration"
+      "source_ref": "auth/cap-google-oauth-registration",
+      "confluence_page_id": "1245185"
     },
     {
       "page_key": "node:auth/cap-password-login",
       "type": "node",
-      "source_ref": "auth/cap-password-login"
+      "source_ref": "auth/cap-password-login",
+      "confluence_page_id": "1277953"
     },
     {
       "page_key": "node:auth/cap-set-password",
       "type": "node",
-      "source_ref": "auth/cap-set-password"
+      "source_ref": "auth/cap-set-password",
+      "confluence_page_id": "1310721"
     },
     {
       "page_key": "node:auth/dc-must-set-password",
       "type": "node",
-      "source_ref": "auth/dc-must-set-password"
+      "source_ref": "auth/dc-must-set-password",
+      "confluence_page_id": "1474561"
     },
     {
       "page_key": "node:auth/dc-oob-code",
       "type": "node",
-      "source_ref": "auth/dc-oob-code"
+      "source_ref": "auth/dc-oob-code",
+      "confluence_page_id": "1048587"
     },
     {
       "page_key": "node:auth/dc-pending-registration",
       "type": "node",
-      "source_ref": "auth/dc-pending-registration"
+      "source_ref": "auth/dc-pending-registration",
+      "confluence_page_id": "1441793"
     },
     {
       "page_key": "node:auth/uc-google-oauth-login",
       "type": "node",
-      "source_ref": "auth/uc-google-oauth-login"
+      "source_ref": "auth/uc-google-oauth-login",
+      "confluence_page_id": "1376257"
     },
     {
       "page_key": "node:auth/uc-post-registration-password-setup",
       "type": "node",
-      "source_ref": "auth/uc-post-registration-password-setup"
+      "source_ref": "auth/uc-post-registration-password-setup",
+      "confluence_page_id": "1409025"
     },
     {
       "page_key": "node:auth/uc-volunteer-email-registration",
       "type": "node",
-      "source_ref": "auth/uc-volunteer-email-registration"
+      "source_ref": "auth/uc-volunteer-email-registration",
+      "confluence_page_id": "1343489"
     },
     {
       "page_key": "node:device-requests/cap-admin-request-views",
       "type": "node",
-      "source_ref": "device-requests/cap-admin-request-views"
+      "source_ref": "device-requests/cap-admin-request-views",
+      "confluence_page_id": "1835009"
     },
     {
       "page_key": "node:device-requests/cap-email-log-monitoring",
       "type": "node",
-      "source_ref": "device-requests/cap-email-log-monitoring"
+      "source_ref": "device-requests/cap-email-log-monitoring",
+      "confluence_page_id": "1900545"
     },
     {
       "page_key": "node:device-requests/cap-global-messaging",
       "type": "node",
-      "source_ref": "device-requests/cap-global-messaging"
+      "source_ref": "device-requests/cap-global-messaging",
+      "confluence_page_id": "1867777"
     },
     {
       "page_key": "node:device-requests/cap-internal-import",
       "type": "node",
-      "source_ref": "device-requests/cap-internal-import"
+      "source_ref": "device-requests/cap-internal-import",
+      "confluence_page_id": "1835029"
     },
     {
       "page_key": "node:device-requests/cap-public-request-submission",
       "type": "node",
-      "source_ref": "device-requests/cap-public-request-submission"
+      "source_ref": "device-requests/cap-public-request-submission",
+      "confluence_page_id": "1736705"
     },
     {
       "page_key": "node:device-requests/cap-request-lifecycle-management",
       "type": "node",
-      "source_ref": "device-requests/cap-request-lifecycle-management"
+      "source_ref": "device-requests/cap-request-lifecycle-management",
+      "confluence_page_id": "1736725"
     },
     {
       "page_key": "node:device-requests/cap-request-validation",
       "type": "node",
-      "source_ref": "device-requests/cap-request-validation"
+      "source_ref": "device-requests/cap-request-validation",
+      "confluence_page_id": "1769473"
     },
     {
       "page_key": "node:device-requests/cap-volunteer-assignment",
       "type": "node",
-      "source_ref": "device-requests/cap-volunteer-assignment"
+      "source_ref": "device-requests/cap-volunteer-assignment",
+      "confluence_page_id": "1802241"
     },
     {
       "page_key": "node:device-requests/dc-age-range",
       "type": "node",
-      "source_ref": "device-requests/dc-age-range"
+      "source_ref": "device-requests/dc-age-range",
+      "confluence_page_id": "2064445"
     },
     {
       "page_key": "node:device-requests/dc-amputation-type",
       "type": "node",
-      "source_ref": "device-requests/dc-amputation-type"
+      "source_ref": "device-requests/dc-amputation-type",
+      "confluence_page_id": "2064425"
     },
     {
       "page_key": "node:device-requests/dc-counter",
       "type": "node",
-      "source_ref": "device-requests/dc-counter"
+      "source_ref": "device-requests/dc-counter",
+      "confluence_page_id": "2326529"
     },
     {
       "page_key": "node:device-requests/dc-device-request",
       "type": "node",
-      "source_ref": "device-requests/dc-device-request"
+      "source_ref": "device-requests/dc-device-request",
+      "confluence_page_id": "2162689"
     },
     {
       "page_key": "node:device-requests/dc-device-type",
       "type": "node",
-      "source_ref": "device-requests/dc-device-type"
+      "source_ref": "device-requests/dc-device-type",
+      "confluence_page_id": "2195477"
     },
     {
       "page_key": "node:device-requests/dc-global-message",
       "type": "node",
-      "source_ref": "device-requests/dc-global-message"
+      "source_ref": "device-requests/dc-global-message",
+      "confluence_page_id": "1998869"
     },
     {
       "page_key": "node:device-requests/dc-private-data-separation",
       "type": "node",
-      "source_ref": "device-requests/dc-private-data-separation"
+      "source_ref": "device-requests/dc-private-data-separation",
+      "confluence_page_id": "2064405"
     },
     {
       "page_key": "node:device-requests/dc-public-status",
       "type": "node",
-      "source_ref": "device-requests/dc-public-status"
+      "source_ref": "device-requests/dc-public-status",
+      "confluence_page_id": "2228225"
     },
     {
       "page_key": "node:device-requests/dc-request-event",
       "type": "node",
-      "source_ref": "device-requests/dc-request-event"
+      "source_ref": "device-requests/dc-request-event",
+      "confluence_page_id": "1933353"
     },
     {
       "page_key": "node:device-requests/dc-request-number",
       "type": "node",
-      "source_ref": "device-requests/dc-request-number"
+      "source_ref": "device-requests/dc-request-number",
+      "confluence_page_id": "2260993"
     },
     {
       "page_key": "node:device-requests/dc-requires-attention",
       "type": "node",
-      "source_ref": "device-requests/dc-requires-attention"
+      "source_ref": "device-requests/dc-requires-attention",
+      "confluence_page_id": "2293761"
     },
     {
       "page_key": "node:device-requests/dc-status-lifecycle",
       "type": "node",
-      "source_ref": "device-requests/dc-status-lifecycle"
+      "source_ref": "device-requests/dc-status-lifecycle",
+      "confluence_page_id": "2195457"
     },
     {
       "page_key": "node:device-requests/dc-volunteer-transition",
       "type": "node",
-      "source_ref": "device-requests/dc-volunteer-transition"
+      "source_ref": "device-requests/dc-volunteer-transition",
+      "confluence_page_id": "2293781"
     },
     {
       "page_key": "node:device-requests/uc-admin-adds-note",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-adds-note"
+      "source_ref": "device-requests/uc-admin-adds-note",
+      "confluence_page_id": "1998849"
     },
     {
       "page_key": "node:device-requests/uc-admin-assigns-volunteer",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-assigns-volunteer"
+      "source_ref": "device-requests/uc-admin-assigns-volunteer",
+      "confluence_page_id": "1966101"
     },
     {
       "page_key": "node:device-requests/uc-admin-bulk-change-status",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-bulk-change-status"
+      "source_ref": "device-requests/uc-admin-bulk-change-status",
+      "confluence_page_id": "1933333"
     },
     {
       "page_key": "node:device-requests/uc-admin-imports-legacy-data",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-imports-legacy-data"
+      "source_ref": "device-requests/uc-admin-imports-legacy-data",
+      "confluence_page_id": "2031617"
     },
     {
       "page_key": "node:device-requests/uc-admin-marks-attention",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-marks-attention"
+      "source_ref": "device-requests/uc-admin-marks-attention",
+      "confluence_page_id": "1703938"
     },
     {
       "page_key": "node:device-requests/uc-admin-migrates-volunteer-field",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-migrates-volunteer-field"
+      "source_ref": "device-requests/uc-admin-migrates-volunteer-field",
+      "confluence_page_id": "2064385"
     },
     {
       "page_key": "node:device-requests/uc-admin-sends-global-message",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-sends-global-message"
+      "source_ref": "device-requests/uc-admin-sends-global-message",
+      "confluence_page_id": "2097153"
     },
     {
       "page_key": "node:device-requests/uc-admin-validates-request",
       "type": "node",
-      "source_ref": "device-requests/uc-admin-validates-request"
+      "source_ref": "device-requests/uc-admin-validates-request",
+      "confluence_page_id": "1966081"
     },
     {
       "page_key": "node:device-requests/uc-citizen-requests-device",
       "type": "node",
-      "source_ref": "device-requests/uc-citizen-requests-device"
+      "source_ref": "device-requests/uc-citizen-requests-device",
+      "confluence_page_id": "1933313"
     },
     {
       "page_key": "node:device-requests/uc-followup-failure",
       "type": "node",
-      "source_ref": "device-requests/uc-followup-failure"
+      "source_ref": "device-requests/uc-followup-failure",
+      "confluence_page_id": "2129921"
     },
     {
       "page_key": "node:device-requests/uc-volunteer-advances-production",
       "type": "node",
-      "source_ref": "device-requests/uc-volunteer-advances-production"
+      "source_ref": "device-requests/uc-volunteer-advances-production",
+      "confluence_page_id": "1966121"
     },
     {
       "page_key": "node:security/cap-admin-security-log-console",
       "type": "node",
-      "source_ref": "security/cap-admin-security-log-console"
+      "source_ref": "security/cap-admin-security-log-console",
+      "confluence_page_id": "2883605"
     },
     {
       "page_key": "node:security/cap-rate-limiting",
       "type": "node",
-      "source_ref": "security/cap-rate-limiting"
+      "source_ref": "security/cap-rate-limiting",
+      "confluence_page_id": "3080213"
     },
     {
       "page_key": "node:security/cap-recaptcha-verification",
       "type": "node",
-      "source_ref": "security/cap-recaptcha-verification"
+      "source_ref": "security/cap-recaptcha-verification",
+      "confluence_page_id": "3145729"
     },
     {
       "page_key": "node:security/cap-security-audit-logging",
       "type": "node",
-      "source_ref": "security/cap-security-audit-logging"
+      "source_ref": "security/cap-security-audit-logging",
+      "confluence_page_id": "2818116"
     },
     {
       "page_key": "node:security/dc-rate-limit-entry",
       "type": "node",
-      "source_ref": "security/dc-rate-limit-entry"
+      "source_ref": "security/dc-rate-limit-entry",
+      "confluence_page_id": "2719792"
     },
     {
       "page_key": "node:security/dc-recaptcha-assessment",
       "type": "node",
-      "source_ref": "security/dc-recaptcha-assessment"
+      "source_ref": "security/dc-recaptcha-assessment",
+      "confluence_page_id": "3014677"
     },
     {
       "page_key": "node:security/dc-security-log",
       "type": "node",
-      "source_ref": "security/dc-security-log"
+      "source_ref": "security/dc-security-log",
+      "confluence_page_id": "2981969"
     },
     {
       "page_key": "node:security/uc-antispam-public-forms",
       "type": "node",
-      "source_ref": "security/uc-antispam-public-forms"
+      "source_ref": "security/uc-antispam-public-forms",
+      "confluence_page_id": "3178497"
     },
     {
       "page_key": "node:security/uc-audit-trail-consulta",
       "type": "node",
-      "source_ref": "security/uc-audit-trail-consulta"
+      "source_ref": "security/uc-audit-trail-consulta",
+      "confluence_page_id": "2981949"
     },
     {
       "page_key": "node:shipments/cap-known-address-suggestion",
       "type": "node",
-      "source_ref": "shipments/cap-known-address-suggestion"
+      "source_ref": "shipments/cap-known-address-suggestion",
+      "confluence_page_id": "3080193"
     },
     {
       "page_key": "node:shipments/cap-shipment-request-lifecycle",
       "type": "node",
-      "source_ref": "shipments/cap-shipment-request-lifecycle"
+      "source_ref": "shipments/cap-shipment-request-lifecycle",
+      "confluence_page_id": "2818096"
     },
     {
       "page_key": "node:shipments/dc-shipment-request",
       "type": "node",
-      "source_ref": "shipments/dc-shipment-request"
+      "source_ref": "shipments/dc-shipment-request",
+      "confluence_page_id": "2981929"
     },
     {
       "page_key": "node:shipments/uc-approve-shipment-request",
       "type": "node",
-      "source_ref": "shipments/uc-approve-shipment-request"
+      "source_ref": "shipments/uc-approve-shipment-request",
+      "confluence_page_id": "2752594"
     },
     {
       "page_key": "node:shipments/uc-create-shipment-request",
       "type": "node",
-      "source_ref": "shipments/uc-create-shipment-request"
+      "source_ref": "shipments/uc-create-shipment-request",
+      "confluence_page_id": "2949201"
     },
     {
       "page_key": "node:shipments/uc-delete-shipment-request",
       "type": "node",
-      "source_ref": "shipments/uc-delete-shipment-request"
+      "source_ref": "shipments/uc-delete-shipment-request",
+      "confluence_page_id": "2916373"
     },
     {
       "page_key": "node:volunteer-management/cap-admin-volunteer-view",
       "type": "node",
-      "source_ref": "volunteer-management/cap-admin-volunteer-view"
+      "source_ref": "volunteer-management/cap-admin-volunteer-view",
+      "confluence_page_id": "2949161"
     },
     {
       "page_key": "node:volunteer-management/cap-consent-collection",
       "type": "node",
-      "source_ref": "volunteer-management/cap-consent-collection"
+      "source_ref": "volunteer-management/cap-consent-collection",
+      "confluence_page_id": "2818056"
     },
     {
       "page_key": "node:volunteer-management/cap-printer-registry",
       "type": "node",
-      "source_ref": "volunteer-management/cap-printer-registry"
+      "source_ref": "volunteer-management/cap-printer-registry",
+      "confluence_page_id": "3014657"
     },
     {
       "page_key": "node:volunteer-management/cap-volunteer-activation",
       "type": "node",
-      "source_ref": "volunteer-management/cap-volunteer-activation"
+      "source_ref": "volunteer-management/cap-volunteer-activation",
+      "confluence_page_id": "2949121"
     },
     {
       "page_key": "node:volunteer-management/cap-volunteer-invitation",
       "type": "node",
-      "source_ref": "volunteer-management/cap-volunteer-invitation"
+      "source_ref": "volunteer-management/cap-volunteer-invitation",
+      "confluence_page_id": "2752533"
     },
     {
       "page_key": "node:volunteer-management/cap-volunteer-profile-management",
       "type": "node",
-      "source_ref": "volunteer-management/cap-volunteer-profile-management"
+      "source_ref": "volunteer-management/cap-volunteer-profile-management",
+      "confluence_page_id": "2981909"
     },
     {
       "page_key": "node:volunteer-management/dc-3d-printer",
       "type": "node",
-      "source_ref": "volunteer-management/dc-3d-printer"
+      "source_ref": "volunteer-management/dc-3d-printer",
+      "confluence_page_id": "2818076"
     },
     {
       "page_key": "node:volunteer-management/dc-contact",
       "type": "node",
-      "source_ref": "volunteer-management/dc-contact"
+      "source_ref": "volunteer-management/dc-contact",
+      "confluence_page_id": "2752553"
     },
     {
       "page_key": "node:volunteer-management/dc-volunteer",
       "type": "node",
-      "source_ref": "volunteer-management/dc-volunteer"
+      "source_ref": "volunteer-management/dc-volunteer",
+      "confluence_page_id": "2752573"
     },
     {
       "page_key": "node:volunteer-management/uc-admin-activates-volunteer",
       "type": "node",
-      "source_ref": "volunteer-management/uc-admin-activates-volunteer"
+      "source_ref": "volunteer-management/uc-admin-activates-volunteer",
+      "confluence_page_id": "2949141"
     },
     {
       "page_key": "node:volunteer-management/uc-volunteer-manages-workload",
       "type": "node",
-      "source_ref": "volunteer-management/uc-volunteer-manages-workload"
+      "source_ref": "volunteer-management/uc-volunteer-manages-workload",
+      "confluence_page_id": "2719772"
     },
     {
       "page_key": "node:volunteer-management/uc-volunteer-onboarding",
       "type": "node",
-      "source_ref": "volunteer-management/uc-volunteer-onboarding"
+      "source_ref": "volunteer-management/uc-volunteer-onboarding",
+      "confluence_page_id": "2981889"
     }
   ]
 }
