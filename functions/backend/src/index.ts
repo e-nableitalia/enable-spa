@@ -26,6 +26,7 @@ export { createDeviceChecklistTemplate } from "./device-requests/createChecklist
 export { updateDeviceChecklistTemplate } from "./device-requests/updateChecklistTemplate";
 export { deleteDeviceChecklistTemplate } from "./device-requests/deleteChecklistTemplate";
 export { createDeviceRequestChecklist } from "./device-requests/createDeviceRequestChecklist";
+export { cloneDeviceRequestChecklist } from "./device-requests/cloneDeviceRequestChecklist";
 export { deleteChecklist } from "./organizer/deleteChecklist";
 export { getDeviceRequestChecklist } from "./device-requests/getDeviceRequestChecklist";
 export { getDeviceRequestChecklistCompleteness } from "./device-requests/getDeviceRequestChecklistCompleteness";
