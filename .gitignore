@@ -2,7 +2,6 @@ node_modules/
 .firebase/
 dist/
 .firebaserc
-package-lock.json
 .vscode/chrome/
 data/
 .vscode/
