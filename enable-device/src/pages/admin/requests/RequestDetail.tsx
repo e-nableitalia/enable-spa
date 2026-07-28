@@ -97,6 +97,12 @@ export default function RequestDetail() {
 
   // ── Checklist di fabbricazione (Organizer) ────────────────────────────────
   const [creatingChecklist, setCreatingChecklist] = useState(false);
+  const [showCloneChecklistDialog, setShowCloneChecklistDialog] = useState(false);
+  const [cloningChecklist, setCloningChecklist] = useState(false);
+  const [loadingCloneSources, setLoadingCloneSources] = useState(false);
+  const [cloneSources, setCloneSources] = useState<{ id: string; requestNumber?: string; deviceType?: string }[]>([]);
+  const [cloneSameTypeOnly, setCloneSameTypeOnly] = useState(true);
+  const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
 
   const toast = useRef<any>(null);
 
@@ -275,6 +281,77 @@ export default function RequestDetail() {
       });
     }
     setCreatingChecklist(false);
+  };
+
+  /**
+   * Recupera le deviceRequest candidate come sorgente di clonazione: tutte
+   * le richieste diverse da quella corrente che hanno già un `checklistId`
+   * valorizzato. Il `deviceType` mostrato nell'elenco segue la stessa
+   * risoluzione (documento principale, fallback `publicDeviceRequests`)
+   * usata da `cloneDeviceRequestChecklist` lato backend.
+   */
+  const fetchCloneSources = useCallback(async () => {
+    setLoadingCloneSources(true);
+    try {
+      const snapshot = await getDocs(collection(db, "deviceRequests"));
+      const candidates = await Promise.all(
+        snapshot.docs
+          .filter((d) => d.id !== id && d.data().checklistId)
+          .map(async (d) => {
+            const data = d.data();
+            let candidateDeviceType: string | undefined = data.deviceType;
+            if (!candidateDeviceType) {
+              const publicSnap = await getDoc(doc(db, "publicDeviceRequests", d.id));
+              candidateDeviceType = publicSnap.exists() ? publicSnap.data().devicetype : undefined;
+            }
+            return { id: d.id, requestNumber: data.requestNumber, deviceType: candidateDeviceType };
+          })
+      );
+      setCloneSources(candidates);
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Impossibile recuperare le richieste da cui clonare.",
+        life: 4000,
+      });
+    }
+    setLoadingCloneSources(false);
+  }, [id]);
+
+  const openCloneChecklistDialog = () => {
+    setCloneSourceId(null);
+    setCloneSameTypeOnly(true);
+    setShowCloneChecklistDialog(true);
+    fetchCloneSources();
+  };
+
+  const handleCloneChecklist = async () => {
+    if (!id || !cloneSourceId) return;
+    setCloningChecklist(true);
+    try {
+      const fn = httpsCallable<{ requestId: string; sourceRequestId: string }, { checklistId: string }>(
+        functions,
+        "cloneDeviceRequestChecklist"
+      );
+      await fn({ requestId: id, sourceRequestId: cloneSourceId });
+      toast.current?.show({
+        severity: "success",
+        summary: "Checklist clonata",
+        detail: "La checklist è stata clonata dalla richiesta selezionata.",
+        life: 4000,
+      });
+      setShowCloneChecklistDialog(false);
+      await loadData();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante la clonazione della checklist.",
+        life: 5000,
+      });
+    }
+    setCloningChecklist(false);
   };
 
   const handleChangeStatus = async () => {
@@ -1195,16 +1272,90 @@ export default function RequestDetail() {
               <div style={{ color: "#888", marginBottom: 12 }}>
                 Nessuna checklist di fabbricazione collegata a questa richiesta.
               </div>
-              <Button
-                label="Crea checklist di fabbricazione"
-                icon="pi pi-plus"
-                onClick={handleCreateChecklist}
-                loading={creatingChecklist}
-              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button
+                  label="Crea checklist di fabbricazione"
+                  icon="pi pi-plus"
+                  onClick={handleCreateChecklist}
+                  loading={creatingChecklist}
+                />
+                <Button
+                  label="Clona da device simile"
+                  icon="pi pi-copy"
+                  className="p-button-outlined"
+                  onClick={openCloneChecklistDialog}
+                />
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Dialog clonazione checklist da device simile */}
+      <Dialog
+        header="Clona checklist da un'altra richiesta"
+        visible={showCloneChecklistDialog}
+        style={{ width: "520px" }}
+        modal
+        onHide={() => setShowCloneChecklistDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setShowCloneChecklistDialog(false)}
+              disabled={cloningChecklist}
+            />
+            <Button
+              label="Clona"
+              icon="pi pi-copy"
+              onClick={handleCloneChecklist}
+              loading={cloningChecklist}
+              disabled={!cloneSourceId}
+            />
+          </div>
+        }
+      >
+        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <Checkbox
+            inputId="cloneSameTypeOnly"
+            checked={cloneSameTypeOnly}
+            onChange={(e) => {
+              setCloneSameTypeOnly(e.checked ?? false);
+              setCloneSourceId(null);
+            }}
+            disabled={!request?.deviceType}
+          />
+          <label htmlFor="cloneSameTypeOnly" style={{ cursor: "pointer" }}>
+            Mostra solo richieste dello stesso devicetype ({request?.deviceType || "-"})
+          </label>
+        </div>
+        <div>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 6 }}>
+            Richiesta sorgente
+          </label>
+          <Dropdown
+            value={cloneSourceId}
+            options={cloneSources
+              .filter((s) => !(cloneSameTypeOnly && request?.deviceType) || s.deviceType === request.deviceType)
+              .map((s) => ({
+                label: `${s.requestNumber || s.id}${s.deviceType ? ` — ${s.deviceType}` : ""}`,
+                value: s.id,
+              }))}
+            onChange={(e) => setCloneSourceId(e.value)}
+            placeholder={loadingCloneSources ? "Caricamento..." : "Seleziona richiesta sorgente"}
+            disabled={loadingCloneSources}
+            filter
+            style={{ width: "100%" }}
+            emptyMessage="Nessuna richiesta con checklist trovata"
+          />
+        </div>
+        <p style={{ color: "#888", marginTop: 12, marginBottom: 0 }}>
+          Vengono copiati titolo e quantità degli item della checklist sorgente; stato, assegnatario
+          e completamento ripartono da zero. La richiesta sorgente resta un riferimento storico e può
+          essere modificata o eliminata in seguito senza impatto su questa checklist.
+        </p>
+      </Dialog>
 
       {/* Ultimo stato come panel con bottone e dialog */}
       <Panel
