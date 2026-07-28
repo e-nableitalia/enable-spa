@@ -1,0 +1,239 @@
+[
+  {
+    "id": "process-organizer-core/cap-checklist-instance-lifecycle",
+    "type": "capability",
+    "name": "Ciclo di vita istanza checklist",
+    "body": "## What it does\n\n- `createChecklist`: crea un'istanza vuota o con item iniziali (ogni item puo' essere una stringa = titolo, oppure un oggetto `{title, quantity?, notes?}`). Gli item nascono sempre non assegnati: `assignee=null`, `status='Assegnare'`, `completed=false`, `quantity=null` se non fornita.\n- `getChecklist`: legge `category`, `title`, `items`, `createdAt`, `updatedAt` per id.\n- `updateChecklist`: aggiorna **solo** il titolo (non tocca `items`), imposta `updatedAt`.\n- `deleteChecklist`: elimina il documento e tutte le sue subcollection via `db.recursiveDelete`. RBAC: consentito se `role === 'admin'` oppure se `data.createdBy === uid`.\n\n## Boundaries\n\n- Il core non conosce alcun consumer: `category` e' un valore opaco (es. per i device sara' il `devicetype`).\n- Nessun controllo RBAC oltre \"autenticato\" tranne `deleteChecklist`.\n- **Nota (finding F-1, vedi docs/FINDINGS.md)**: nessuna delle funzioni di creazione di questo dominio (`createChecklist`, `createChecklistFromTemplate`, `cloneChecklist`) scrive mai il campo `createdBy` sul documento `checklists/{id}`. Di conseguenza il ramo \"il creatore puo' eliminare la propria checklist\" in `deleteChecklist` non si attiva mai in produzione: `data.createdBy` e' sempre `undefined` e non potra' mai coincidere con un `uid` valido, quindi solo un admin puo' effettivamente eliminare una checklist.\n- Non esiste un listing/paginazione delle checklist per categoria (solo lettura puntuale per id via `getChecklist`).\n\n## Key entry points\n\n- functions/backend/src/organizer/createChecklist.ts\n- functions/backend/src/organizer/getChecklist.ts\n- functions/backend/src/organizer/updateChecklist.ts\n- functions/backend/src/organizer/deleteChecklist.ts",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "checklist", "firestore"],
+    "relates_to": [
+      {"id": "process-organizer-core/concept-opaque-category", "type": "relates_to"},
+      {"id": "process-organizer-core/concept-historical-template-reference", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/createChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/getChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/updateChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/deleteChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/cap-checklist-item-management",
+    "type": "capability",
+    "name": "Gestione item di una checklist",
+    "body": "## What it does\n\n- `addChecklistItem`: aggiunge un item con `id` generato (`crypto.randomUUID()`), stato iniziale `'Assegnare'`, `completed=false`; usa `FieldValue.arrayUnion` sull'array `items`.\n- `updateChecklistItem`: aggiornamento **parziale** — modifica solo i campi esplicitamente presenti nella richiesta (`title`/`status`/`assignee`/`quantity`/`notes`), lasciando invariati gli altri (incluso `completed`, che nessuna Cloud Function del core espone in scrittura). `status`, se fornito, deve essere uno dei 4 valori di `CHECKLIST_ITEM_STATUSES`.\n- `removeChecklistItem`: rimuove un item per `itemId` filtrando l'array.\n- Tutte e tre richiedono solo autenticazione (nessun controllo di ownership/ruolo aggiuntivo a livello core) e registrano l'esito (successo/fallimento) in `securityLogs` via `logSecurityEvent`.\n\n## Boundaries\n\n- Nessun RBAC per-consumer: chi puo' modificare quale checklist e' deciso dal layer consumer (es. `device-requests/deviceRequestChecklistAccess.ts`), non dal core.\n- Lo stato item e' vincolato ai 4 valori previsti dal modello v1, ma il loro significato applicativo e' deciso interamente dal consumer.\n- Nessuna Cloud Function del core permette di scrivere `completed` direttamente: il flag esiste nel modello dati ma non e' mai aggiornato da nessuna funzione in questo scope.\n\n## Key entry points\n\n- functions/backend/src/organizer/addChecklistItem.ts\n- functions/backend/src/organizer/updateChecklistItem.ts\n- functions/backend/src/organizer/removeChecklistItem.ts",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "checklist", "item"],
+    "relates_to": [
+      {"id": "process-organizer-core/concept-checklist-item-status", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/addChecklistItem.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/updateChecklistItem.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/removeChecklistItem.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/cap-checklist-template-catalog",
+    "type": "capability",
+    "name": "Catalogo template di checklist",
+    "body": "## What it does\n\n- `createTemplate` / `updateTemplate` / `deleteTemplate` / `listTemplates`: CRUD sul catalogo dei template, filtrabile per `category` (opaca per il core).\n- Un item di template ha solo `title` + `quantity` — nessuno stato, assegnatario o flag di completamento, essendo un catalogo di riferimento e non un'istanza operativa.\n- `deleteTemplate` **non** tocca le istanze checklist che lo referenziano tramite `fromTemplate`: il riferimento resta un dato storico, mai ricalcolato ne' rimosso.\n\n## Boundaries\n\n- Nessun controllo di ownership sui template a livello core (solo autenticazione): l'enforcement \"solo admin\" osservato nel layer `device-requests` (`createDeviceChecklistTemplate` ecc., Epic EA-108) e' responsabilita' del consumer.\n- `listTemplates` richiede `category` obbligatoria: non esiste un endpoint per elencare tutti i template indipendentemente dalla categoria.\n\n## Key entry points\n\n- functions/backend/src/organizer/createTemplate.ts\n- functions/backend/src/organizer/updateTemplate.ts\n- functions/backend/src/organizer/deleteTemplate.ts\n- functions/backend/src/organizer/listTemplates.ts",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "template", "catalog"],
+    "relates_to": [
+      {"id": "process-organizer-core/concept-opaque-category", "type": "relates_to"},
+      {"id": "process-organizer-core/concept-historical-template-reference", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/createTemplate.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/updateTemplate.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/deleteTemplate.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/listTemplates.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/cap-completeness-gate",
+    "type": "capability",
+    "name": "Gate di completezza checklist",
+    "body": "## What it does\n\n- `checklistCompleteness.ts` (`isChecklistItemComplete`/`isChecklistComplete`): utility TypeScript pura, senza dipendenze da Firestore o Cloud Functions.\n- Un item e' completo se: `assignee` valorizzato (non null/vuoto/whitespace) **AND** `quantity` valorizzata se la chiave e' presente sull'item (se la chiave e' presente anche con valore `null` deve essere valorizzata; se la chiave e' del tutto assente il controllo e' ignorato per quell'item) **AND** `status !== 'Assegnare'` (stato iniziale del modello v1).\n- Una checklist senza item e' considerata vacuamente completa.\n- `getChecklistCompleteness`: Cloud Function che legge la checklist e restituisce `{checklistId, complete}` applicando il gate — non esegue azioni, non blocca transizioni, non modifica il documento.\n\n## Boundaries\n\n- Il core non blocca autonomamente nessuna transizione di stato: si limita a rispondere \"e' completa?\"; il consumer decide cosa fare dell'esito (es. sbloccare un avanzamento su una `deviceRequest`).\n- Nessuna cache: il risultato viene ricalcolato leggendo il documento corrente ad ogni chiamata.\n- La risposta e' un booleano aggregato: non distingue quali item specifici sono incompleti.\n\n## Key entry points\n\n- functions/backend/src/organizer/checklistCompleteness.ts\n- functions/backend/src/organizer/getChecklistCompleteness.ts",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "checklist", "gate", "completeness"],
+    "relates_to": [
+      {"id": "process-organizer-core/concept-checklist-item-status", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/checklistCompleteness.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/getChecklistCompleteness.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/uc-instantiate-checklist-from-template",
+    "type": "use_case",
+    "name": "Istanziare una checklist da un template del catalogo",
+    "body": "## Scenario\n\nUn consumer (es. il layer di integrazione `device-requests`) vuole creare una nuova checklist operativa partendo da un template esistente, invece di ricreare gli item da zero. Chiama `createChecklistFromTemplate` con `templateId`, `title` e opzionalmente `category` (altrimenti ereditata dal template). Il core legge `templates/{templateId}`, clona titolo e quantita' di ogni item azzerando `status -> 'Assegnare'`, `assignee -> null`, `completed -> false`, salva `fromTemplate: templateId` come riferimento storico (non vivo: il template puo' essere modificato o eliminato in seguito senza impatto sull'istanza gia' creata) e restituisce il nuovo `checklistId`.\n\n## Depends on capabilities\n\n- process-organizer-core/cap-checklist-template-catalog (lettura del template sorgente)\n- process-organizer-core/cap-checklist-instance-lifecycle (creazione del documento istanza)\n\n## Known gaps\n\n- Se `templateId` non esiste: `not-found`.\n- Nessuna validazione che la `category` fornita coincida con quella del template: puo' essere sovrascritta liberamente dal consumer.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "template", "instantiation"],
+    "relates_to": [
+      {"id": "process-organizer-core/cap-checklist-template-catalog", "type": "depends_on"},
+      {"id": "process-organizer-core/cap-checklist-instance-lifecycle", "type": "depends_on"},
+      {"id": "process-organizer-core/concept-historical-template-reference", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/createChecklistFromTemplate.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/uc-clone-checklist-instance",
+    "type": "use_case",
+    "name": "Clonare un'istanza checklist esistente",
+    "body": "## Scenario\n\nUn consumer vuole \"ripetere\" una checklist gia' esistente (in qualsiasi stato di avanzamento, anche completata) per una nuova occasione, ripartendo pero' da zero (riferimento mockup `useWorkshopAsTemplate`, Epic EA-3). Chiama `cloneChecklist` con `sourceChecklistId` e `title`; il core legge l'istanza sorgente (non un template), clona titolo e quantita' di ogni item azzerando stato/assegnatario/completamento indipendentemente da cosa avessero nella sorgente, salva `clonedFrom: sourceChecklistId` come riferimento storico e crea una nuova istanza.\n\n## Depends on capabilities\n\n- process-organizer-core/cap-checklist-instance-lifecycle\n\n## Known gaps\n\n- Nessun limite alla profondita' di clonazione a catena: clonare un clone e' implicitamente supportato, ma `clonedFrom` punta sempre alla sorgente diretta, non alla radice originale della catena.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "checklist", "cloning"],
+    "relates_to": [
+      {"id": "process-organizer-core/cap-checklist-instance-lifecycle", "type": "depends_on"},
+      {"id": "process-organizer-core/concept-historical-template-reference", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/cloneChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/uc-verify-checklist-completeness",
+    "type": "use_case",
+    "name": "Verificare la completezza di una checklist prima di una decisione esterna",
+    "body": "## Scenario\n\nUn consumer deve decidere se una checklist e' \"pronta\" (es. per sbloccare una transizione di stato su una `deviceRequest`) senza che il core Organizer conosca quella logica applicativa. Chiama `getChecklistCompleteness(checklistId)`; il core applica il gate `isChecklistComplete` a tutti gli item e restituisce solo `{checklistId, complete}`. Nessuna azione viene eseguita: e' il consumer (es. una futura integrazione ancora in Backlog secondo il grounding di discover-agent, Epic EA-108 Story EA-112/113) a decidere come usare l'esito.\n\n## Depends on capabilities\n\n- process-organizer-core/cap-completeness-gate\n\n## Known gaps\n\n- Il gate non distingue \"checklist con tutti gli item incompleti\" da \"checklist con un solo item incompleto\": nessun dettaglio per-item nella risposta, solo il booleano aggregato.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "checklist", "completeness"],
+    "relates_to": [
+      {"id": "process-organizer-core/cap-completeness-gate", "type": "depends_on"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/getChecklistCompleteness.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/uc-manage-template-catalog",
+    "type": "use_case",
+    "name": "Catalogare template di checklist riusabili per categoria",
+    "body": "## Scenario\n\nUn admin (RBAC applicata dal layer consumer, non dal core Organizer) cataloga template di checklist riutilizzabili per categoria (es. per `devicetype` nel layer `device-requests`, Epic EA-108). Crea/aggiorna/elimina template via `createTemplate`/`updateTemplate`/`deleteTemplate` e li elenca per categoria via `listTemplates`. L'eliminazione di un template non tocca le istanze checklist gia' create da esso (`fromTemplate` resta un riferimento storico).\n\n## Depends on capabilities\n\n- process-organizer-core/cap-checklist-template-catalog\n\n## Known gaps\n\n- Nessun controllo di autorizzazione a livello core su chi puo' creare/modificare/eliminare template (solo autenticazione): l'enforcement \"solo admin\" e' interamente responsabilita' del consumer.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "template", "catalog"],
+    "relates_to": [
+      {"id": "process-organizer-core/cap-checklist-template-catalog", "type": "depends_on"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/createTemplate.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/listTemplates.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/concept-checklist-item-status",
+    "type": "domain_concept",
+    "name": "Stato item di checklist",
+    "body": "## Definition\n\nStato di avanzamento di un singolo item di checklist, uno dei quattro valori del modello v1: `'Assegnare'` (stato iniziale — assegnato sempre alla creazione di un item, sia in `createChecklist` che in `addChecklistItem` e in ogni clonazione/istanziazione da template), `'Da iniziare'`, `'In corso'`, `'Completata'`. Il core Organizer non attribuisce alcun significato applicativo a questi valori oltre a distinguere `'Assegnare'` come stato iniziale, usato dal gate di completezza per considerare un item ancora non completo.\n\n## Also known as\n\n- `CHECKLIST_ITEM_STATUSES` (costante nel codice, ripetuta identicamente in piu' file)\n- `INITIAL_STATUS` (per il valore `'Assegnare'`, in checklistCompleteness.ts)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "checklist", "status"],
+    "relates_to": [
+      {"id": "process-organizer-core/cap-completeness-gate", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/createChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/checklistCompleteness.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/concept-opaque-category",
+    "type": "domain_concept",
+    "name": "Categoria opaca",
+    "body": "## Definition\n\nIdentificatore di categoria libero (stringa) associato a checklist e template, usato per filtrare `listTemplates` e per collegare un template a un contesto applicativo (es. `devicetype` nel layer `device-requests`). Il core Organizer non ne conosce ne' valida il significato: e' interamente il consumer a decidere il proprio spazio di valori.\n\n## Also known as\n\n- `category`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "category"],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/createChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/listTemplates.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  },
+  {
+    "id": "process-organizer-core/concept-historical-template-reference",
+    "type": "domain_concept",
+    "name": "Riferimento storico a template/sorgente",
+    "body": "## Definition\n\nRiferimento salvato su una checklist istanza al momento della sua creazione da una sorgente: `fromTemplate` quando creata da un template del catalogo, `clonedFrom` quando clonata da un'altra istanza. E' un dato storico, non una dipendenza viva — se la sorgente (template o istanza) viene successivamente modificata o eliminata, l'istanza gia' creata non ne risente in alcun modo: nessuna funzione del core ricalcola o invalida questi riferimenti.\n\n## Also known as\n\n- `fromTemplate`\n- `clonedFrom`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": ["EA-3"],
+    "tags": ["organizer", "template", "checklist"],
+    "relates_to": [
+      {"id": "process-organizer-core/uc-instantiate-checklist-from-template", "type": "relates_to"},
+      {"id": "process-organizer-core/uc-clone-checklist-instance", "type": "relates_to"}
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {"type": "code", "ref": "functions/backend/src/organizer/createChecklistFromTemplate.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"},
+      {"type": "code", "ref": "functions/backend/src/organizer/cloneChecklist.ts", "agent": "deep-dive-agent", "added_at": "2026-07-28T14:00:00Z"}
+    ]
+  }
+]
