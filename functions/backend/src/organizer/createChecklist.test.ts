@@ -16,6 +16,11 @@ jest.mock("firebase-admin/firestore", () => ({
   },
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { logSecurityEvent } from "../security/securityLog";
 import { createChecklist } from "./createChecklist";
 
 function buildRequest(data: Record<string, unknown>): CallableRequest {
@@ -74,8 +79,18 @@ describe("createChecklist", () => {
           completed: false,
         },
       ],
+      createdBy: "user-1",
       createdAt: SERVER_TIMESTAMP_SENTINEL,
     });
+  });
+
+  it("writes createdBy with the authenticated caller's uid", async () => {
+    await createChecklist.run(
+      buildRequest({ category: "devicetype-mano", title: "Checklist mano", items: [] })
+    );
+
+    const [savedDocument] = setMock.mock.calls[0];
+    expect(savedDocument.createdBy).toBe("user-1");
   });
 
   it("returns the generated checklistId to the consumer", async () => {
@@ -107,5 +122,33 @@ describe("createChecklist", () => {
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid title"));
 
     expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a success security event when the checklist is created", async () => {
+    await createChecklist.run(
+      buildRequest({ category: "devicetype-mano", title: "Checklist mano", items: [] })
+    );
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "create_checklist",
+        outcome: "success",
+        context: expect.objectContaining({ function: "createChecklist" }),
+      })
+    );
+  });
+
+  it("logs a failure security event when checklist creation fails validation", async () => {
+    await expect(
+      createChecklist.run(buildRequest({ title: "Checklist senza categoria" }))
+    ).rejects.toBeInstanceOf(HttpsError);
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "create_checklist_failed",
+        outcome: "failure",
+        context: expect.objectContaining({ function: "createChecklist" }),
+      })
+    );
   });
 });

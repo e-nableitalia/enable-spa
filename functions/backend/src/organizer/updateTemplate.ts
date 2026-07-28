@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 
 const REGION = "europe-west1";
@@ -118,10 +119,27 @@ export const updateTemplate = onCall(
         updatedAt: FieldValue.serverTimestamp(),
       });
 
+      await logSecurityEvent({
+        type: "system",
+        action: "update_template",
+        outcome: "success",
+        severity: "low",
+        actor: { uid: request.auth.uid, email: request.auth.token?.email ?? undefined },
+        context: { function: "updateTemplate", invokeId, requestId: templateId },
+      });
+
       console.log(`[updateTemplate] OK: template ${templateId} updated`);
       return { templateId };
     } catch (error) {
       console.error("[updateTemplate] KO:", error);
+      await logSecurityEvent({
+        type: "system",
+        action: "update_template_failed",
+        outcome: "failure",
+        severity: "high",
+        actor: { uid: request.auth?.uid, email: request.auth?.token?.email ?? undefined },
+        context: { function: "updateTemplate", invokeId, requestId: request.data?.templateId },
+      });
 
       if (error instanceof HttpsError) {
         throw error;

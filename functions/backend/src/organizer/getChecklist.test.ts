@@ -13,6 +13,11 @@ jest.mock("firebase-admin/firestore", () => ({
   })),
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { logSecurityEvent } from "../security/securityLog";
 import { getChecklist } from "./getChecklist";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
@@ -95,5 +100,33 @@ describe("getChecklist", () => {
     );
 
     expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a success security event when the checklist is read", async () => {
+    await getChecklist.run(buildRequest({ checklistId: CHECKLIST_ID }));
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "get_checklist",
+        outcome: "success",
+        context: expect.objectContaining({ function: "getChecklist" }),
+      })
+    );
+  });
+
+  it("logs a failure security event when the checklist does not exist", async () => {
+    getMock.mockResolvedValue({ exists: false, data: () => undefined });
+
+    await expect(
+      getChecklist.run(buildRequest({ checklistId: "missing-id" }))
+    ).rejects.toBeInstanceOf(HttpsError);
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "get_checklist_failed",
+        outcome: "failure",
+        context: expect.objectContaining({ function: "getChecklist" }),
+      })
+    );
   });
 });

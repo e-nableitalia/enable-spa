@@ -17,6 +17,11 @@ jest.mock("firebase-admin/firestore", () => ({
   },
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { logSecurityEvent } from "../security/securityLog";
 import { updateTemplate } from "./updateTemplate";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
@@ -153,5 +158,33 @@ describe("updateTemplate", () => {
     );
 
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a success security event when the template is updated", async () => {
+    await updateTemplate.run(buildRequest({ templateId: TEMPLATE_ID, title: "Nuovo titolo" }));
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "update_template",
+        outcome: "success",
+        context: expect.objectContaining({ function: "updateTemplate" }),
+      })
+    );
+  });
+
+  it("logs a failure security event when the template does not exist", async () => {
+    getMock.mockResolvedValue({ exists: false });
+
+    await expect(
+      updateTemplate.run(buildRequest({ templateId: "missing-id", title: "Titolo" }))
+    ).rejects.toBeInstanceOf(HttpsError);
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "update_template_failed",
+        outcome: "failure",
+        context: expect.objectContaining({ function: "updateTemplate" }),
+      })
+    );
   });
 });

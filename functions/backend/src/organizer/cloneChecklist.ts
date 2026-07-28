@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 
 const REGION = "europe-west1";
@@ -91,6 +92,7 @@ export const cloneChecklist = onCall(
         console.log("[cloneChecklist] KO: Unauthenticated");
         throw new HttpsError("unauthenticated", "Authentication required");
       }
+      const uid = request.auth.uid;
 
       const data = request.data ?? {};
       const { sourceChecklistId, title, category } = data;
@@ -135,7 +137,17 @@ export const cloneChecklist = onCall(
         title,
         items: clonedItems,
         clonedFrom: sourceChecklistId,
+        createdBy: uid,
         createdAt: FieldValue.serverTimestamp(),
+      });
+
+      await logSecurityEvent({
+        type: "system",
+        action: "clone_checklist",
+        outcome: "success",
+        severity: "low",
+        actor: { uid, email: request.auth.token?.email ?? undefined },
+        context: { function: "cloneChecklist", invokeId, requestId: checklistRef.id },
       });
 
       console.log(
@@ -144,6 +156,14 @@ export const cloneChecklist = onCall(
       return { checklistId: checklistRef.id };
     } catch (error) {
       console.error("[cloneChecklist] KO:", error);
+      await logSecurityEvent({
+        type: "system",
+        action: "clone_checklist_failed",
+        outcome: "failure",
+        severity: "high",
+        actor: { uid: request.auth?.uid, email: request.auth?.token?.email ?? undefined },
+        context: { function: "cloneChecklist", invokeId },
+      });
 
       if (error instanceof HttpsError) {
         throw error;
