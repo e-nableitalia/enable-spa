@@ -6,10 +6,11 @@
 
   "jira": {
     "project": "EA",
+    "key": "EA-2",
     "issue_type": "Epic",
     "suggested_title": "Semplificazione macro-stato richieste dispositivo e separazione responsabilità da Organizer",
     "fields": {
-      "Pipeline Stage": "Pending Epic Approval",
+      "Pipeline Stage": "Approved",
       "Request Category": "refactoring",
       "Target Domains": ["device-requests"],
       "Related Capabilities": [

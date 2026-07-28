@@ -1,0 +1,21 @@
+{
+  "$schema": "https://cognitive-workspace.dev/schemas/epic-draft/v1.json",
+  "draft_version": "1.0",
+  "generated_at": "2026-07-28T00:00:00Z",
+  "drafted_by": "agent:supervisor",
+
+  "jira": {
+    "project": "EA",
+    "key": "EA-108",
+    "issue_type": "Epic",
+    "suggested_title": "Device-Organizer Integration — collegamento della checklist Organizer alla fabbricazione di una deviceRequest",
+    "fields": {
+      "Pipeline Stage": "Approved",
+      "Request Category": "new_feature",
+      "Target Domains": ["process-organizer-core", "device-requests"],
+      "Source Reference": "docs/requests/device-organizer-integration-newfeature.md"
+    }
+  },
+
+  "note": "Materializzazione fattuale sincronizzata da Jira (agent:supervisor, 2026-07-28). Registra il collegamento request -> Epic EA-108. NON contiene il blocco description completo di un draft plan-epic (obiettivo/invarianti/capability): per quello rigenerare con plan-epic. Stato esecuzione al sync: Epic Backlog, Story EA-109/110/111 Done, EA-112/113 Selected for Development con 6 Sub-task in Backlog."
+}

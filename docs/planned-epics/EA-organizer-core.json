@@ -1,0 +1,21 @@
+{
+  "$schema": "https://cognitive-workspace.dev/schemas/epic-draft/v1.json",
+  "draft_version": "1.0",
+  "generated_at": "2026-07-28T00:00:00Z",
+  "drafted_by": "agent:supervisor",
+
+  "jira": {
+    "project": "EA",
+    "key": "EA-3",
+    "issue_type": "Epic",
+    "suggested_title": "Organizer Core — motore generico per checklist assegnabili con template e clonazione",
+    "fields": {
+      "Pipeline Stage": "Approved",
+      "Request Category": "new_feature",
+      "Target Domains": ["process-organizer-core"],
+      "Source Reference": "docs/requests/process-organizer-core-newfeature.md"
+    }
+  },
+
+  "note": "Materializzazione fattuale sincronizzata da Jira (agent:supervisor, 2026-07-28). Registra il collegamento request -> Epic EA-3. NON contiene il blocco description completo di un draft plan-epic (obiettivo/invarianti/capability): per quello rigenerare con plan-epic. Stato esecuzione al sync: Epic Done, 6 Story Done, 20 Sub-task Done."
+}
