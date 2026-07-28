@@ -29,18 +29,15 @@
         "enable-device/src/pages/admin/AdminEmailLogsPage.tsx",
         "enable-device/src/pages/admin/requests/**",
         "enable-device/src/components/requests/**",
-        "enable-device/src/components/timeline/**"
+        "enable-device/src/components/timeline/**",
+        "functions/backend/src/device-requests/**",
+        "enable-device/src/components/checklist/**",
+        "enable-device/src/pages/admin/AdminChecklistTemplatesPage.tsx"
       ],
       "summary": "Ciclo di vita completo delle richieste di dispositivi prostetici: creazione dal form pubblico, validazione, assegnazione volontari, avanzamento stato fino a spedizione/completamento. Include la messaggistica globale (saveGlobalMessage), sorgente nello stesso modulo backend 'device'. Deriva dal gruppo di Cloud Functions 'device'.",
       "status": "approved",
       "depth": "deep",
-      "origin": "discovered",
-      "paths_review_suggested": true,
-      "paths_candidate": [
-        "functions/backend/src/device-requests/**",
-        "enable-device/src/components/checklist/**",
-        "enable-device/src/pages/admin/AdminChecklistTemplatesPage.tsx"
-      ]
+      "origin": "discovered"
     },
     {
       "id": "volunteer-management",
@@ -85,15 +82,13 @@
     {
       "id": "process-organizer-core",
       "name": "Organizer — motore checklist generico",
-      "paths": [],
+      "paths": [
+        "functions/backend/src/organizer/**"
+      ],
       "summary": "Modulo generico per checklist assegnabili con avanzamento e template, pensato per essere riusato oltre il caso device (es. organizzazione eventi/workshop in futuro).",
       "status": "approved",
-      "depth": null,
-      "origin": "planned",
-      "paths_review_suggested": true,
-      "paths_candidate": [
-        "functions/backend/src/organizer/**"
-      ]
+      "depth": "standard",
+      "origin": "discovered"
     }
   ]
 }
