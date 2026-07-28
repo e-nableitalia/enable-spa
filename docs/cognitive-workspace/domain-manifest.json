@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-08T00:00:00Z",
+  "generated_at": "2026-07-28T00:00:00Z",
   "repo_url": "https://github.com/e-nableitalia/enable-spa",
   "domains": [
     {
@@ -34,7 +34,13 @@
       "summary": "Ciclo di vita completo delle richieste di dispositivi prostetici: creazione dal form pubblico, validazione, assegnazione volontari, avanzamento stato fino a spedizione/completamento. Include la messaggistica globale (saveGlobalMessage), sorgente nello stesso modulo backend 'device'. Deriva dal gruppo di Cloud Functions 'device'.",
       "status": "approved",
       "depth": "deep",
-      "origin": "discovered"
+      "origin": "discovered",
+      "paths_review_suggested": true,
+      "paths_candidate": [
+        "functions/backend/src/device-requests/**",
+        "enable-device/src/components/checklist/**",
+        "enable-device/src/pages/admin/AdminChecklistTemplatesPage.tsx"
+      ]
     },
     {
       "id": "volunteer-management",
@@ -83,7 +89,11 @@
       "summary": "Modulo generico per checklist assegnabili con avanzamento e template, pensato per essere riusato oltre il caso device (es. organizzazione eventi/workshop in futuro).",
       "status": "approved",
       "depth": null,
-      "origin": "planned"
+      "origin": "planned",
+      "paths_review_suggested": true,
+      "paths_candidate": [
+        "functions/backend/src/organizer/**"
+      ]
     }
   ]
 }

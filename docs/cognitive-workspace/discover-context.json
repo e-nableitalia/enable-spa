@@ -1,7 +1,7 @@
 {
   "$schema": "https://cognitive-workspace.dev/schemas/domain-manifest/v1.json",
   "manifest_version": "1.0",
-  "generated_at": "2026-07-08T00:00:00Z",
+  "generated_at": "2026-07-28T00:00:00Z",
 
   "project": {
     "name": "enable-spa",
@@ -216,6 +216,51 @@
             "auth_required": true
           }
         ]
+      },
+      {
+        "group": "organizer",
+        "source": "functions/backend/src/organizer/",
+        "note": "Motore generico per checklist assegnabili con template e clonazione. Corrisponde al dominio manifest 'process-organizer-core' (origin: planned, paths: [] — nel manifest e' ancora dominio pianificato in attesa di review umana; qui e' documentato il codice reale gia' presente, cfr. Epic Jira EA-3 'Organizer Core', stato Done: 6 Story/20 Sub-task Done). Il core non conosce il concetto di deviceRequest ne' di alcun altro consumer: category, checklistId, templateId sono valori opachi per lui.",
+        "functions": [
+          {"name": "createChecklist", "description": "Crea una checklist vuota o con item iniziali (stringa=titolo, o oggetto title/quantity/notes). Item nascono sempre non assegnati, stato iniziale 'Assegnare', completed=false.", "auth_required": true},
+          {"name": "createChecklistFromTemplate", "description": "Istanzia una nuova checklist copiando gli item (titolo+quantita) da un template esistente; stato/assegnatario/completed sempre azzerati. Salva fromTemplate come riferimento storico non vivo.", "auth_required": true},
+          {"name": "cloneChecklist", "description": "Clona una checklist istanza esistente (non un template) in una nuova istanza, stesso azzeramento di stato/assegnatario/completed (riferimento mockup 'useWorkshopAsTemplate', Epic EA-3).", "auth_required": true},
+          {"name": "getChecklist", "description": "Legge una checklist per id.", "auth_required": true},
+          {"name": "updateChecklist", "description": "Aggiorna il titolo di una checklist.", "auth_required": true},
+          {"name": "deleteChecklist", "description": "Elimina una checklist.", "auth_required": true},
+          {"name": "addChecklistItem", "description": "Aggiunge un item a una checklist esistente.", "auth_required": true},
+          {"name": "updateChecklistItem", "description": "Aggiorna campi di un item (title/status/assignee/quantity/notes).", "auth_required": true},
+          {"name": "removeChecklistItem", "description": "Rimuove un item da una checklist.", "auth_required": true},
+          {"name": "getChecklistCompleteness", "description": "Espone lo stato di completezza (gate, vedi checklistCompleteness.ts) senza eseguire azioni o transizioni: il consumer decide cosa fare dell'esito.", "auth_required": true},
+          {"name": "listTemplates", "description": "Elenca i template filtrati per category (opaca per il core).", "auth_required": true},
+          {"name": "createTemplate", "description": "Crea un template di checklist (catalogo di riferimento, item senza stato/assegnatario/completed).", "auth_required": true},
+          {"name": "updateTemplate", "description": "Aggiorna titolo/items di un template esistente.", "auth_required": true},
+          {"name": "deleteTemplate", "description": "Elimina un template. Le istanze checklist che lo referenziano via fromTemplate non vengono toccate.", "auth_required": true}
+        ],
+        "completeness_gate_rules": "isChecklistItemComplete (checklistCompleteness.ts): assignee valorizzato (non null/vuoto/whitespace) AND (se la chiave quantity e' presente sull'item, anche a null, deve essere valorizzata; se la chiave e' del tutto assente il controllo e' ignorato) AND status !== 'Assegnare' (stato iniziale). Checklist senza item e' vacuamente completa.",
+        "checklist_item_statuses": ["Assegnare", "Da iniziare", "In corso", "Completata"],
+        "firestore_collections": {
+          "checklists": "checklists/{checklistId} — {category, title, items[], fromTemplate?, createdAt}",
+          "templates": "templates/{templateId} — {category, title, items[] (senza stato/assegnatario/completed), createdAt}"
+        }
+      },
+      {
+        "group": "device-requests (checklist integration layer)",
+        "source": "functions/backend/src/device-requests/",
+        "note": "Layer di integrazione che collega il core Organizer a una deviceRequest specifica: risolve requestId -> checklistId, applica RBAC (stesso perimetro di device/changeStatus.ts: admin su qualsiasi richiesta, volontario solo se in assignedVolunteers) e poi delega alle Cloud Function del core Organizer sottostante. NON e' un modulo di modello dati proprio: non ha una propria collection Firestore per le checklist, usa 'checklists' del core. Corrisponde a Epic Jira EA-108 'Device-Organizer Integration' (stato: Epic Backlog, Story EA-109/110/111 Done, EA-112/113 Selected for Development con 6 Sub-task in Backlog — quindi area ancora in evoluzione). Nel manifest questo folder non e' ancora incluso nei paths del dominio 'device-requests' (che punta solo a functions/backend/src/device/**): segnalato come paths_review_suggested/paths_candidate, promozione lasciata alla review umana.",
+        "functions": [
+          {"name": "createDeviceRequestChecklist", "description": "Crea la checklist collegata a deviceRequests/{requestId} e ne salva checklistId sul documento richiesta. Se esiste un template con category===devicetype della richiesta (devicetype letto da deviceRequests.deviceType, fallback publicDeviceRequests.devicetype) istanzia da template, altrimenti crea checklist vuota. Fallisce con already-exists se la richiesta ha gia' un checklistId.", "auth_required": true, "role_check": "admin | volunteer assegnato alla richiesta"},
+          {"name": "getDeviceRequestChecklist", "description": "Risolve requestId->checklistId con RBAC poi delega a organizer/getChecklist.", "auth_required": true},
+          {"name": "getDeviceRequestChecklistCompleteness", "description": "Come sopra, delega a organizer/getChecklistCompleteness.", "auth_required": true},
+          {"name": "addDeviceRequestChecklistItem", "description": "Come sopra, delega a organizer/addChecklistItem.", "auth_required": true},
+          {"name": "updateDeviceRequestChecklistItem", "description": "Come sopra, delega a organizer/updateChecklistItem.", "auth_required": true},
+          {"name": "removeDeviceRequestChecklistItem", "description": "Come sopra, delega a organizer/removeChecklistItem.", "auth_required": true},
+          {"name": "createDeviceChecklistTemplate", "description": "Solo admin (requireAdminRole). Delega a organizer/createTemplate.", "auth_required": true, "role_check": "admin"},
+          {"name": "updateDeviceChecklistTemplate", "description": "Solo admin. Delega a organizer/updateTemplate.", "auth_required": true, "role_check": "admin"},
+          {"name": "deleteDeviceChecklistTemplate", "description": "Solo admin. Delega a organizer/deleteTemplate.", "auth_required": true, "role_check": "admin"}
+        ],
+        "rbac_helper": "functions/backend/src/device-requests/deviceRequestChecklistAccess.ts — resolveDeviceRequestChecklistAccess(db, uid, requestId): legge deviceRequests/{requestId}, verifica ruolo (admin o volunteer in assignedVolunteers), restituisce checklistId o solleva not-found/permission-denied.",
+        "new_field_on_device_request": "deviceRequests/{requestId}.checklistId — introdotto da questo layer, assente dal modello device_entities.deviceRequest documentato in precedenza (vedi domain_entities.deviceRequest.key_fields.main, da integrare in eventuale prossimo deep-dive)."
       }
     ]
   },
@@ -384,7 +429,8 @@
         "list": "AdminVolunteers / VolunteerAdminList", "pending": "PendingVolunteers",
         "contacts": "ContactsList", "maintenance": "VolunteerMaintenance",
         "printer_summary": "VolunteerPrinterSummary", "detail_dialog": "VolunteerAdminDetailDialog"
-      }
+      },
+      "checklist_templates": "AdminChecklistTemplatesPage (enable-device/src/pages/admin/AdminChecklistTemplatesPage.tsx) — catalogo template di checklist per devicetype, CRUD admin-only lato UI sopra createDeviceChecklistTemplate/updateDeviceChecklistTemplate/deleteDeviceChecklistTemplate (Epic EA-108, Story EA-109). Non ancora referenziata nei paths del dominio manifest 'device-requests'."
     },
     "volunteer_sections": {
       "dashboard": "VolunteerDashboard (statistiche personali + messaggi)",
@@ -393,6 +439,9 @@
       "manageable_requests": "ManageableRequestsPage / ManageableRequestDetail",
       "production": "Production", "shipping": "Shipping", "archive": "Archive",
       "request_detail": "VolunteerRequestDetail", "shipments": "ShipmentRequestsPage"
+    },
+    "shared_components": {
+      "checklist_panel": "enable-device/src/components/checklist/ChecklistPanel.tsx — componente condiviso di visualizzazione/gestione checklist operativa, usato sia in RequestDetail.tsx (admin) sia in VolunteerRequestDetail.tsx (volontario assegnato), sopra le Cloud Function del layer device-requests/*ChecklistItem* e getDeviceRequestChecklist(Completeness). Non ancora referenziato nei paths del dominio manifest 'device-requests' (Epic EA-108, Story EA-111)."
     }
   },
 
@@ -474,6 +523,12 @@
       "completeRegistration: crea users/{uid} (role=volunteer, active=false)",
       "Utente va su /volunteer-consent → acceptVolunteerConsents",
       "Admin attiva l'account su PendingVolunteers → activateVolunteers"
+    ],
+    "device_request_checklist_lifecycle": [
+      "Admin cataloga template di checklist per devicetype su AdminChecklistTemplatesPage → createDeviceChecklistTemplate/updateDeviceChecklistTemplate/deleteDeviceChecklistTemplate (RBAC admin-only) → organizer/createTemplate|updateTemplate|deleteTemplate → templates/{templateId}",
+      "Admin o volontario assegnato apre RequestDetail/VolunteerRequestDetail → createDeviceRequestChecklist(requestId): risolve devicetype (deviceRequests.deviceType, fallback publicDeviceRequests.devicetype) → se esiste template con category===devicetype istanzia da template (organizer/createChecklistFromTemplate) altrimenti checklist vuota (organizer/createChecklist) → salva deviceRequests/{requestId}.checklistId",
+      "ChecklistPanel (componente condiviso admin/volontario) legge/aggiorna via getDeviceRequestChecklist, addDeviceRequestChecklistItem, updateDeviceRequestChecklistItem, removeDeviceRequestChecklistItem — ognuna risolve requestId→checklistId con RBAC (deviceRequestChecklistAccess.ts) poi delega al core organizer/*",
+      "getDeviceRequestChecklistCompleteness espone il gate di completezza (tutti gli item con assignee valorizzato, quantity valorizzata se rilevante, status oltre 'Assegnare'); il consumer (frontend o una futura Story EA-112/113, ancora in Backlog) decide come usarlo — il core non blocca nessuna transizione autonomamente"
     ]
   },
 
