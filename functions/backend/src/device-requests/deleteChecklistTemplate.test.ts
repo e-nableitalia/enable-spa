@@ -55,6 +55,10 @@ jest.mock("firebase-admin/firestore", () => ({
   })),
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { deleteDeviceChecklistTemplate } from "./deleteChecklistTemplate";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "admin-1"): CallableRequest {

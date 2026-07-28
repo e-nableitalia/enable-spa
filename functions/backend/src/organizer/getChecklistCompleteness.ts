@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
+import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import { isChecklistComplete, ChecklistItemLike } from "./checklistCompleteness";
 
@@ -20,29 +21,52 @@ export const getChecklistCompleteness = onCall(
     const invokeId = getInvokeId(request);
     console.log(`[getChecklistCompleteness] Invoke ID: ${invokeId} - Function called`);
 
-    const uid = request.auth?.uid;
-    if (!uid) {
-      throw new HttpsError("unauthenticated", "User must be authenticated");
+    try {
+      const uid = request.auth?.uid;
+      if (!uid) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+      }
+
+      const { checklistId } = request.data as { checklistId?: string };
+      if (!checklistId || typeof checklistId !== "string") {
+        throw new HttpsError("invalid-argument", "Missing parameter: checklistId");
+      }
+
+      const db = getFirestore();
+      const snap = await db.collection("checklists").doc(checklistId).get();
+
+      if (!snap.exists) {
+        throw new HttpsError("not-found", "Checklist not found");
+      }
+
+      const data = snap.data() ?? {};
+      const items: ChecklistItemLike[] = Array.isArray(data.items) ? data.items : [];
+
+      const complete = isChecklistComplete(items);
+
+      await logSecurityEvent({
+        type: "system",
+        action: "get_checklist_completeness",
+        outcome: "success",
+        severity: "low",
+        actor: { uid, email: request.auth?.token?.email ?? undefined },
+        context: { function: "getChecklistCompleteness", invokeId, requestId: checklistId },
+      });
+
+      console.log(`[getChecklistCompleteness] OK: checklist ${checklistId} complete=${complete}`);
+      return { checklistId, complete };
+    } catch (error) {
+      console.error("[getChecklistCompleteness] KO:", error);
+      await logSecurityEvent({
+        type: "system",
+        action: "get_checklist_completeness_failed",
+        outcome: "failure",
+        severity: "high",
+        actor: { uid: request.auth?.uid, email: request.auth?.token?.email ?? undefined },
+        context: { function: "getChecklistCompleteness", invokeId, requestId: request.data?.checklistId },
+      });
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "Internal Server Error");
     }
-
-    const { checklistId } = request.data as { checklistId?: string };
-    if (!checklistId || typeof checklistId !== "string") {
-      throw new HttpsError("invalid-argument", "Missing parameter: checklistId");
-    }
-
-    const db = getFirestore();
-    const snap = await db.collection("checklists").doc(checklistId).get();
-
-    if (!snap.exists) {
-      throw new HttpsError("not-found", "Checklist not found");
-    }
-
-    const data = snap.data() ?? {};
-    const items: ChecklistItemLike[] = Array.isArray(data.items) ? data.items : [];
-
-    const complete = isChecklistComplete(items);
-
-    console.log(`[getChecklistCompleteness] OK: checklist ${checklistId} complete=${complete}`);
-    return { checklistId, complete };
   }
 );

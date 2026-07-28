@@ -45,6 +45,11 @@ jest.mock("firebase-admin/firestore", () => ({
   },
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { logSecurityEvent } from "../security/securityLog";
 import { createChecklistFromTemplate } from "./createChecklistFromTemplate";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
@@ -151,6 +156,15 @@ describe("createChecklistFromTemplate", () => {
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
   });
 
+  it("writes createdBy with the authenticated caller's uid", async () => {
+    await createChecklistFromTemplate.run(
+      buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" }, "user-42")
+    );
+
+    const [savedDocument] = setMock.mock.calls[0];
+    expect(savedDocument.createdBy).toBe("user-42");
+  });
+
   it("creates an instance with no items when the template has none", async () => {
     templatesStore[TEMPLATE_ID] = {
       category: "devicetype-arto-superiore",
@@ -210,5 +224,35 @@ describe("createChecklistFromTemplate", () => {
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "category must be a string"));
 
     expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a success security event when the checklist is created from a template", async () => {
+    await createChecklistFromTemplate.run(
+      buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
+    );
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "create_checklist_from_template",
+        outcome: "success",
+        context: expect.objectContaining({ function: "createChecklistFromTemplate" }),
+      })
+    );
+  });
+
+  it("logs a failure security event when the source template does not exist", async () => {
+    await expect(
+      createChecklistFromTemplate.run(
+        buildRequest({ templateId: "missing-template", title: "Checklist evento" })
+      )
+    ).rejects.toBeInstanceOf(HttpsError);
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "create_checklist_from_template_failed",
+        outcome: "failure",
+        context: expect.objectContaining({ function: "createChecklistFromTemplate" }),
+      })
+    );
   });
 });

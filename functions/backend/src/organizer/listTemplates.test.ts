@@ -11,6 +11,11 @@ jest.mock("firebase-admin/firestore", () => ({
   })),
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { logSecurityEvent } from "../security/securityLog";
 import { listTemplates } from "./listTemplates";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
@@ -106,5 +111,29 @@ describe("listTemplates", () => {
     );
 
     expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a success security event when templates are listed", async () => {
+    await listTemplates.run(buildRequest({ category: CATEGORY }));
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "list_templates",
+        outcome: "success",
+        context: expect.objectContaining({ function: "listTemplates" }),
+      })
+    );
+  });
+
+  it("logs a failure security event when the category is missing", async () => {
+    await expect(listTemplates.run(buildRequest({}))).rejects.toBeInstanceOf(HttpsError);
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "list_templates_failed",
+        outcome: "failure",
+        context: expect.objectContaining({ function: "listTemplates" }),
+      })
+    );
   });
 });

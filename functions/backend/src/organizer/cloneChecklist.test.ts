@@ -47,6 +47,11 @@ jest.mock("firebase-admin/firestore", () => ({
   },
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { logSecurityEvent } from "../security/securityLog";
 import { cloneChecklist } from "./cloneChecklist";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
@@ -202,6 +207,18 @@ describe("cloneChecklist", () => {
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
   });
 
+  it("writes createdBy with the authenticated caller's uid", async () => {
+    await cloneChecklist.run(
+      buildRequest(
+        { sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" },
+        "user-42"
+      )
+    );
+
+    const [savedDocument] = setMock.mock.calls[0];
+    expect(savedDocument.createdBy).toBe("user-42");
+  });
+
   it("creates an instance with no items when the source checklist has none", async () => {
     checklistsStore[SOURCE_CHECKLIST_ID] = {
       category: "devicetype-arto-superiore",
@@ -265,5 +282,35 @@ describe("cloneChecklist", () => {
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "category must be a string"));
 
     expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a success security event when the checklist is cloned", async () => {
+    await cloneChecklist.run(
+      buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
+    );
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "clone_checklist",
+        outcome: "success",
+        context: expect.objectContaining({ function: "cloneChecklist" }),
+      })
+    );
+  });
+
+  it("logs a failure security event when the source checklist does not exist", async () => {
+    await expect(
+      cloneChecklist.run(
+        buildRequest({ sourceChecklistId: "missing-checklist", title: "Checklist nuova occasione" })
+      )
+    ).rejects.toBeInstanceOf(HttpsError);
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "clone_checklist_failed",
+        outcome: "failure",
+        context: expect.objectContaining({ function: "cloneChecklist" }),
+      })
+    );
   });
 });

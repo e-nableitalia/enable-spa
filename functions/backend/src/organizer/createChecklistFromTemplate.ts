@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 
 const REGION = "europe-west1";
@@ -82,6 +83,7 @@ export const createChecklistFromTemplate = onCall(
         console.log("[createChecklistFromTemplate] KO: Unauthenticated");
         throw new HttpsError("unauthenticated", "Authentication required");
       }
+      const uid = request.auth.uid;
 
       const data = request.data ?? {};
       const { templateId, title, category } = data;
@@ -126,7 +128,17 @@ export const createChecklistFromTemplate = onCall(
         title,
         items: clonedItems,
         fromTemplate: templateId,
+        createdBy: uid,
         createdAt: FieldValue.serverTimestamp(),
+      });
+
+      await logSecurityEvent({
+        type: "system",
+        action: "create_checklist_from_template",
+        outcome: "success",
+        severity: "low",
+        actor: { uid, email: request.auth.token?.email ?? undefined },
+        context: { function: "createChecklistFromTemplate", invokeId, requestId: checklistRef.id },
       });
 
       console.log(
@@ -135,6 +147,14 @@ export const createChecklistFromTemplate = onCall(
       return { checklistId: checklistRef.id };
     } catch (error) {
       console.error("[createChecklistFromTemplate] KO:", error);
+      await logSecurityEvent({
+        type: "system",
+        action: "create_checklist_from_template_failed",
+        outcome: "failure",
+        severity: "high",
+        actor: { uid: request.auth?.uid, email: request.auth?.token?.email ?? undefined },
+        context: { function: "createChecklistFromTemplate", invokeId },
+      });
 
       if (error instanceof HttpsError) {
         throw error;

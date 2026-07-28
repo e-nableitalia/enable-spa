@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
+import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 
 const REGION = "europe-west1";
@@ -45,10 +46,27 @@ export const deleteTemplate = onCall(
 
       await templateRef.delete();
 
+      await logSecurityEvent({
+        type: "system",
+        action: "delete_template",
+        outcome: "success",
+        severity: "low",
+        actor: { uid: request.auth.uid, email: request.auth.token?.email ?? undefined },
+        context: { function: "deleteTemplate", invokeId, requestId: templateId },
+      });
+
       console.log(`[deleteTemplate] OK: template ${templateId} deleted`);
       return { templateId };
     } catch (error) {
       console.error("[deleteTemplate] KO:", error);
+      await logSecurityEvent({
+        type: "system",
+        action: "delete_template_failed",
+        outcome: "failure",
+        severity: "high",
+        actor: { uid: request.auth?.uid, email: request.auth?.token?.email ?? undefined },
+        context: { function: "deleteTemplate", invokeId, requestId: request.data?.templateId },
+      });
 
       if (error instanceof HttpsError) {
         throw error;

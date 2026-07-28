@@ -1,33 +1,56 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 
+const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 const CHECKLIST_ID = "existing-checklist-id";
+const GENERATED_CHECKLIST_ID = "generated-checklist-id";
 
-let documentExists = true;
-let storedChecklist: Record<string, unknown> | undefined;
+/**
+ * Store in-memory condiviso tra createChecklist e deleteChecklist: serve a
+ * verificare che deleteChecklist legga davvero il campo `createdBy` scritto
+ * da createChecklist, invece di mascherare il comportamento impostandolo a
+ * mano sul mock (F-1).
+ */
+let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let userRole: string | undefined;
 
-const getMock = jest.fn(() =>
-  Promise.resolve({
-    exists: documentExists,
-    data: () => storedChecklist,
-  })
+const recursiveDeleteMock = jest.fn((ref: { id: string }) => {
+  delete checklistsStore[ref.id];
+  return Promise.resolve();
+});
+
+function buildChecklistDoc(id: string) {
+  return {
+    id,
+    get: jest.fn(() =>
+      Promise.resolve({
+        exists: checklistsStore[id] !== undefined,
+        data: () => checklistsStore[id],
+      })
+    ),
+    set: jest.fn((data: Record<string, unknown>) => {
+      checklistsStore[id] = data;
+      return Promise.resolve();
+    }),
+  };
+}
+
+const checklistsDocMock = jest.fn((id?: string) => buildChecklistDoc(id ?? GENERATED_CHECKLIST_ID));
+const userDocMock = jest.fn(() => ({
+  get: jest.fn(() => Promise.resolve({ exists: true, data: () => ({ role: userRole }) })),
+}));
+const collectionMock = jest.fn((name: string) =>
+  name === "users" ? { doc: userDocMock } : { doc: checklistsDocMock }
 );
-const deleteMock = jest.fn(() => {
-  documentExists = false;
-  storedChecklist = undefined;
-  return Promise.resolve();
-});
-const recursiveDeleteMock = jest.fn(() => {
-  documentExists = false;
-  storedChecklist = undefined;
-  return Promise.resolve();
-});
-const docMock = jest.fn((_id?: string) => ({ get: getMock, delete: deleteMock }));
-const userDocMock = jest.fn(() => ({ get: jest.fn(() => Promise.resolve({ exists: true, data: () => ({ role: "admin" }) })) }));
-const collectionMock = jest.fn();
 
 jest.mock("firebase-admin/firestore", () => ({
-  getFirestore: jest.fn(() => ({ collection: collectionMock, recursiveDelete: recursiveDeleteMock })),
+  getFirestore: jest.fn(() => ({
+    collection: (name: string) => collectionMock(name),
+    recursiveDelete: (ref: { id: string }) => recursiveDeleteMock(ref),
+  })),
+  FieldValue: {
+    serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
+  },
 }));
 
 jest.mock("../security/securityLog", () => ({
@@ -35,6 +58,7 @@ jest.mock("../security/securityLog", () => ({
 }));
 
 import { deleteChecklist } from "./deleteChecklist";
+import { createChecklist } from "./createChecklist";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
   return {
@@ -44,17 +68,8 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "user-
   } as CallableRequest;
 }
 
-/**
- * Riproduce, ai soli fini di questo test, il contratto di lettura previsto
- * per getChecklist (functions/backend/src/organizer/getChecklist.ts,
- * introdotto separatamente in EA-56 e non ancora presente in questa
- * codebase): restituisce i dati del documento se esiste, altrimenti
- * solleva un HttpsError "not-found". Serve a verificare che, dopo
- * l'eliminazione, una successiva lettura dello stesso checklistId non
- * trovi più il documento.
- */
 async function readChecklistOrThrowNotFound(checklistId: string) {
-  const snap = await docMock(checklistId).get();
+  const snap = await checklistsDocMock(checklistId).get();
   if (!snap.exists) {
     throw new HttpsError("not-found", "Checklist not found");
   }
@@ -64,11 +79,15 @@ async function readChecklistOrThrowNotFound(checklistId: string) {
 describe("deleteChecklist", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    documentExists = true;
-    storedChecklist = {
+    checklistsStore = {};
+    userRole = "admin";
+  });
+
+  it("deletes the checklists/{checklistId} document (with its items) from Firestore", async () => {
+    checklistsStore[CHECKLIST_ID] = {
       category: "devicetype-arto-superiore",
       title: "Checklist evento",
-      createdBy: "user-1",
+      createdBy: "some-other-uid",
       items: [
         {
           id: "item-1",
@@ -79,48 +98,27 @@ describe("deleteChecklist", () => {
           status: "Assegnare",
           completed: false,
         },
-        {
-          id: "item-2",
-          title: "Verifica materiale",
-          assignee: null,
-          quantity: null,
-          notes: "",
-          status: "Assegnare",
-          completed: false,
-        },
       ],
       createdAt: { seconds: 0, nanoseconds: 0 },
     };
 
-    getMock.mockImplementation(() =>
-      Promise.resolve({ exists: documentExists, data: () => storedChecklist })
-    );
-    deleteMock.mockImplementation(() => {
-      documentExists = false;
-      storedChecklist = undefined;
-      return Promise.resolve();
-    });
-    recursiveDeleteMock.mockImplementation(() => {
-      documentExists = false;
-      storedChecklist = undefined;
-      return Promise.resolve();
-    });
-    docMock.mockReturnValue({ get: getMock, delete: deleteMock });
-    collectionMock.mockImplementation((name: string) =>
-      name === "users" ? { doc: userDocMock } : { doc: docMock }
-    );
-  });
-
-  it("deletes the checklists/{checklistId} document (with its items) from Firestore", async () => {
     const result = await deleteChecklist.run(buildRequest({ checklistId: CHECKLIST_ID }));
 
     expect(collectionMock).toHaveBeenCalledWith("checklists");
-    expect(docMock).toHaveBeenCalledWith(CHECKLIST_ID);
+    expect(checklistsDocMock).toHaveBeenCalledWith(CHECKLIST_ID);
     expect(recursiveDeleteMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ success: true });
   });
 
   it("makes a subsequent getChecklist on the same checklistId return not-found", async () => {
+    checklistsStore[CHECKLIST_ID] = {
+      category: "devicetype-arto-superiore",
+      title: "Checklist evento",
+      createdBy: "some-other-uid",
+      items: [],
+      createdAt: { seconds: 0, nanoseconds: 0 },
+    };
+
     await deleteChecklist.run(buildRequest({ checklistId: CHECKLIST_ID }));
 
     await expect(readChecklistOrThrowNotFound(CHECKLIST_ID)).rejects.toMatchObject(
@@ -129,14 +127,11 @@ describe("deleteChecklist", () => {
   });
 
   it("throws not-found and does not call delete when the checklist does not exist", async () => {
-    documentExists = false;
-    storedChecklist = undefined;
-
     await expect(
       deleteChecklist.run(buildRequest({ checklistId: CHECKLIST_ID }))
     ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not found"));
 
-    expect(deleteMock).not.toHaveBeenCalled();
+    expect(recursiveDeleteMock).not.toHaveBeenCalled();
   });
 
   it("throws unauthenticated when there is no auth context", async () => {
@@ -144,7 +139,7 @@ describe("deleteChecklist", () => {
       deleteChecklist.run(buildRequest({ checklistId: CHECKLIST_ID }, null))
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
 
-    expect(deleteMock).not.toHaveBeenCalled();
+    expect(recursiveDeleteMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when checklistId is missing", async () => {
@@ -152,6 +147,43 @@ describe("deleteChecklist", () => {
       new HttpsError("invalid-argument", "Missing checklistId")
     );
 
-    expect(deleteMock).not.toHaveBeenCalled();
+    expect(recursiveDeleteMock).not.toHaveBeenCalled();
+  });
+
+  describe("creator authorization (F-1: createdBy is now written by the creation functions)", () => {
+    it("allows the creator of the checklist, as recorded by createChecklist, to delete it even without an admin role", async () => {
+      userRole = "volunteer";
+
+      const { checklistId } = await createChecklist.run(
+        buildRequest(
+          { category: "devicetype-mano", title: "Checklist evento", items: [] },
+          "creator-uid"
+        )
+      );
+      expect(checklistsStore[checklistId]?.createdBy).toBe("creator-uid");
+
+      const result = await deleteChecklist.run(buildRequest({ checklistId }, "creator-uid"));
+
+      expect(result).toEqual({ success: true });
+    });
+
+    it("throws permission-denied when a non-admin, non-creator user tries to delete another user's checklist", async () => {
+      userRole = "volunteer";
+
+      const { checklistId } = await createChecklist.run(
+        buildRequest(
+          { category: "devicetype-mano", title: "Checklist evento", items: [] },
+          "creator-uid"
+        )
+      );
+
+      await expect(
+        deleteChecklist.run(buildRequest({ checklistId }, "other-uid"))
+      ).rejects.toMatchObject(
+        new HttpsError("permission-denied", "Cannot delete another user's checklist")
+      );
+
+      expect(recursiveDeleteMock).not.toHaveBeenCalled();
+    });
   });
 });

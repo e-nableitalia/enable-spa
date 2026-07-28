@@ -48,6 +48,11 @@ jest.mock("firebase-admin/firestore", () => ({
   })),
 }));
 
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { logSecurityEvent } from "../security/securityLog";
 import { deleteTemplate } from "./deleteTemplate";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
@@ -130,5 +135,33 @@ describe("deleteTemplate", () => {
     );
 
     expect(templatesDeleteMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a success security event when the template is deleted", async () => {
+    await deleteTemplate.run(buildRequest({ templateId: TEMPLATE_ID }));
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "delete_template",
+        outcome: "success",
+        context: expect.objectContaining({ function: "deleteTemplate" }),
+      })
+    );
+  });
+
+  it("logs a failure security event when the template does not exist", async () => {
+    delete templatesStore[TEMPLATE_ID];
+
+    await expect(
+      deleteTemplate.run(buildRequest({ templateId: TEMPLATE_ID }))
+    ).rejects.toBeInstanceOf(HttpsError);
+
+    expect(logSecurityEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "delete_template_failed",
+        outcome: "failure",
+        context: expect.objectContaining({ function: "deleteTemplate" }),
+      })
+    );
   });
 });
