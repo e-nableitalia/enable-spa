@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "enableitalia"
+    "default": "enableitalia",
+    "staging": "enableitalia-staging"
   },
   "targets": {},
   "etags": {}
