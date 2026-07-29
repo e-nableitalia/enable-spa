@@ -1,0 +1,184 @@
+import { HttpsError } from "firebase-functions/v2/https";
+import type { CallableRequest } from "firebase-functions/v2/https";
+
+const CHECKLIST_ID = "checklist-1";
+const GENERATED_TOKEN = "generated-token-uuid";
+
+jest.mock("crypto", () => ({
+  ...jest.requireActual("crypto"),
+  randomUUID: jest.fn(() => GENERATED_TOKEN),
+}));
+
+/**
+ * Store in-memory minimale che simula le collection Firestore coinvolte:
+ * `users` (RBAC), `deviceRequests` (risoluzione `requestId` ->
+ * `checklistId` + `assignedVolunteers`) e `checklistShareLinks` (token
+ * persistiti lato server).
+ */
+let usersStore: Record<string, Record<string, unknown> | undefined>;
+let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
+let shareLinksStore: Record<string, Record<string, unknown> | undefined>;
+
+const shareLinkSetMock = jest.fn((token: string, doc: Record<string, unknown>) => {
+  shareLinksStore[token] = doc;
+  return Promise.resolve();
+});
+
+function buildCollection(name: string) {
+  if (name === "users") {
+    return {
+      doc: jest.fn((uid: string) => ({
+        get: jest.fn(() =>
+          Promise.resolve({
+            exists: usersStore[uid] !== undefined,
+            data: () => usersStore[uid],
+          })
+        ),
+      })),
+    };
+  }
+
+  if (name === "deviceRequests") {
+    return {
+      doc: jest.fn((id: string) => ({
+        get: jest.fn(() =>
+          Promise.resolve({
+            exists: deviceRequestsStore[id] !== undefined,
+            data: () => deviceRequestsStore[id],
+          })
+        ),
+      })),
+    };
+  }
+
+  if (name === "checklistShareLinks") {
+    return {
+      doc: jest.fn((token: string) => ({
+        set: jest.fn((doc: Record<string, unknown>) => shareLinkSetMock(token, doc)),
+      })),
+      where: jest.fn((field: string, _op: string, value: unknown) => ({
+        limit: jest.fn(() => ({
+          get: jest.fn(() => {
+            const matches = Object.entries(shareLinksStore).filter(
+              ([, data]) => data !== undefined && (data as Record<string, unknown>)[field] === value
+            );
+            return Promise.resolve({
+              empty: matches.length === 0,
+              docs: matches.map(([id, data]) => ({ id, data: () => data })),
+            });
+          }),
+        })),
+      })),
+    };
+  }
+
+  throw new Error(`Unexpected collection ${name}`);
+}
+
+const collectionMock = jest.fn((name: string) => buildCollection(name));
+
+jest.mock("firebase-admin/firestore", () => ({
+  getFirestore: jest.fn(() => ({
+    collection: (name: string) => collectionMock(name),
+  })),
+  FieldValue: { serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP") },
+}));
+
+jest.mock("../security/securityLog", () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { createChecklistShareLink } from "./createChecklistShareLink";
+
+function buildRequest(data: Record<string, unknown>, uid: string | null = "admin-1"): CallableRequest {
+  return {
+    auth: uid ? ({ uid } as CallableRequest["auth"]) : undefined,
+    data,
+    rawRequest: { headers: {} } as CallableRequest["rawRequest"],
+  } as CallableRequest;
+}
+
+describe("createChecklistShareLink", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    shareLinksStore = {};
+
+    usersStore = {
+      "admin-1": { role: "admin" },
+      "volunteer-1": { role: "volunteer" },
+      "volunteer-2": { role: "volunteer" },
+    };
+
+    deviceRequestsStore = {
+      "req-1": {
+        assignedVolunteers: ["volunteer-1"],
+        checklistId: CHECKLIST_ID,
+      },
+    };
+  });
+
+  // Scenario: Un utente con accesso alla richiesta genera il link di condivisione
+  it("creates a persisted token linked to the checklist and returns a URL usable without auth (admin)", async () => {
+    const result = await createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "admin-1"));
+
+    expect(result).toEqual({
+      token: GENERATED_TOKEN,
+      url: `https://app.e-nableitalia.it/checklist-share/${GENERATED_TOKEN}`,
+    });
+    expect(shareLinkSetMock).toHaveBeenCalledWith(
+      GENERATED_TOKEN,
+      expect.objectContaining({ checklistId: CHECKLIST_ID, requestId: "req-1", createdBy: "admin-1" })
+    );
+  });
+
+  it("allows a volunteer assigned to the request to generate the link", async () => {
+    const result = await createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "volunteer-1"));
+
+    expect(result.token).toBe(GENERATED_TOKEN);
+    expect(shareLinkSetMock).toHaveBeenCalled();
+  });
+
+  it("denies generation to a volunteer not assigned to the request", async () => {
+    await expect(
+      createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "volunteer-2"))
+    ).rejects.toMatchObject(
+      new HttpsError("permission-denied", "Only admin or assigned volunteers can access the checklist for this request")
+    );
+
+    expect(shareLinkSetMock).not.toHaveBeenCalled();
+  });
+
+  it("reuses the existing token instead of creating a new one when a link already exists for the checklist", async () => {
+    shareLinksStore = {
+      "existing-token": { checklistId: CHECKLIST_ID, requestId: "req-1" },
+    };
+
+    const result = await createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "admin-1"));
+
+    expect(result).toEqual({
+      token: "existing-token",
+      url: "https://app.e-nableitalia.it/checklist-share/existing-token",
+    });
+    expect(shareLinkSetMock).not.toHaveBeenCalled();
+  });
+
+  it("throws unauthenticated when there is no auth context", async () => {
+    await expect(
+      createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, null))
+    ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
+
+    expect(collectionMock).not.toHaveBeenCalled();
+  });
+
+  it("throws invalid-argument when requestId is missing", async () => {
+    await expect(
+      createChecklistShareLink.run(buildRequest({}, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: requestId"));
+  });
+
+  it("throws not-found when the device request does not exist", async () => {
+    await expect(
+      createChecklistShareLink.run(buildRequest({ requestId: "missing-request" }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("not-found", "Device request not found"));
+  });
+});

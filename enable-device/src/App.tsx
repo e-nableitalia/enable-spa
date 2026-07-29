@@ -10,6 +10,7 @@ const SetPassword         = lazy(() => import("./pages/SetPassword"));
 const Home                = lazy(() => import("./pages/Home"));
 const RequestDevice       = lazy(() => import("./pages/RequestDevice"));
 const VolunteerConsentPage = lazy(() => import("./pages/VolunteerConsentPage"));
+const ChecklistShareStatus = lazy(() => import("./pages/ChecklistShareStatus"));
 
 function PageLoader() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/home" element={<Home />} />
           <Route path="/volunteer-consent" element={<VolunteerConsentPage />} />
+          <Route path="/checklist-share/:token" element={<ChecklistShareStatus />} />
           <Route path="*" element={<Login />} />
         </Routes>
       </Suspense>
