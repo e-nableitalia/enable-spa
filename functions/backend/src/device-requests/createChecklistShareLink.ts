@@ -79,7 +79,7 @@ export const createChecklistShareLink = onCall(
       outcome: "success",
       severity: "low",
       actor: { uid, email: request.auth?.token?.email ?? undefined },
-      context: { function: "createChecklistShareLink", invokeId, requestId: checklistId },
+      context: { function: "createChecklistShareLink", invokeId, requestId },
     });
 
     return { token, url: `${SHARE_BASE_URL}/checklist-share/${token}` };
