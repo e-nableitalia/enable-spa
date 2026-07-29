@@ -6,3 +6,4 @@ dist/
 data/
 .vscode/
 .codeforge/
+priv/
