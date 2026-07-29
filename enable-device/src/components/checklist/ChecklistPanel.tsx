@@ -76,6 +76,8 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
   const [newItem, setNewItem] = useState<NewItemForm>(EMPTY_NEW_ITEM);
   const [addingItem, setAddingItem] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, Partial<ChecklistItem>>>({});
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [generatingShareLink, setGeneratingShareLink] = useState(false);
 
   const load = useCallback(async () => {
     if (!requestId || !checklistId) {
@@ -213,6 +215,37 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
     }
   };
 
+  const generateShareLink = async () => {
+    setGeneratingShareLink(true);
+    try {
+      const fn = httpsCallable<{ requestId: string }, { token: string; url: string }>(
+        functions,
+        "createChecklistShareLink"
+      );
+      const result = await fn({ requestId });
+      setShareUrl(result.data.url);
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante la generazione del link di condivisione.",
+        life: 4000,
+      });
+    } finally {
+      setGeneratingShareLink(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.current?.show({ severity: "success", summary: "Link copiato", life: 2000 });
+    } catch {
+      // Copia negli appunti non disponibile: il link resta comunque visibile e selezionabile a mano.
+    }
+  };
+
   if (!checklistId) {
     return null;
   }
@@ -249,6 +282,14 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
               size="small"
               className="p-button-text"
               onClick={() => setShowAddDialog(true)}
+            />
+            <Button
+              label="Genera link di condivisione"
+              icon="pi pi-share-alt"
+              size="small"
+              className="p-button-text"
+              loading={generatingShareLink}
+              onClick={generateShareLink}
             />
           </div>
 
@@ -410,6 +451,23 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
               style={{ width: "100%" }}
             />
           </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        header="Link di condivisione checklist"
+        visible={shareUrl !== null}
+        onHide={() => setShareUrl(null)}
+        style={{ width: 480 }}
+      >
+        <p>
+          Questo link mostra a chiunque lo apra, senza bisogno di accedere, solo la percentuale di
+          avanzamento della checklist (nessun nome assegnatario, nota o altro dettaglio interno). Il
+          link non scade e resta valido indefinitamente.
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <InputText value={shareUrl ?? ""} readOnly style={{ width: "100%" }} />
+          <Button icon="pi pi-copy" tooltip="Copia" onClick={copyShareLink} />
         </div>
       </Dialog>
     </div>
