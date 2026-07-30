@@ -1,0 +1,204 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function isVolunteer() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "volunteer";
+    }
+
+    function canAdminEdit() {
+      return isAdmin() && true; // cambia in false quando vuoi disabilitare
+    }
+
+    function isOwner(resourceData) {
+      return isAuthenticated() &&
+        resourceData.createdBy == request.auth.uid;
+    }
+
+    // ---- DEVICE REQUESTS ----
+    match /deviceRequests/{requestId} {
+
+      // Admin legge tutto
+      allow read: if isAdmin();
+
+      // Volunteer legge tutte le richieste
+      allow read: if isVolunteer();
+
+      // Update diretto bloccato (usiamo Cloud Functions)
+      allow update: if canAdminEdit();
+      allow write: if canAdminEdit();
+
+      allow create: if canAdminEdit();
+      allow delete: if canAdminEdit();
+
+      // ---- PRIVATE SUBCOLLECTION ONLY Admin ----
+      match /private/{docId} {
+        allow read: if isAdmin()
+          || (
+            isVolunteer() &&
+            request.auth.uid in
+              get(/databases/$(database)/documents/deviceRequests/$(requestId))
+                .data.assignedVolunteers
+          );
+
+        allow write: if canAdminEdit();
+      }
+
+      // ---- EVENTS ----
+      match /events/{eventId} {
+        allow read: if isAdmin();
+
+        // Volunteer può leggere eventi solo se richiesta assegnata
+        allow read: if isVolunteer() &&
+          get(/databases/$(database)/documents/deviceRequests/$(requestId))
+            .data.assignedVolunteers != null &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/deviceRequests/$(requestId))
+              .data.assignedVolunteers;
+
+        allow write: if canAdminEdit();
+      }
+    }
+
+      // ---- PRIVATE COLLECTION ----
+    match /contacts/{contactId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---- PUBLIC COLLECTION ----
+    match /publicDeviceRequests/{requestId} {
+      allow read: if true; // pubblica
+      allow write: if canAdminEdit();
+    }
+
+    // ---- USERS ----
+    match /users/{userId} {
+
+      // Documento root (active, email, role)
+      allow read: if isAdmin();
+      allow read: if isVolunteer() && request.auth.uid == userId;
+
+      allow write: if false;
+
+      // -------- PRIVATE SUBCOLLECTION --------
+      match /private/{docId} {
+
+        // Admin può leggere tutto
+        allow read: if isAdmin();
+
+        // Volunteer può leggere solo il proprio
+        allow read: if isVolunteer() && request.auth.uid == userId;
+
+        allow write: if false;
+      }
+
+      // -------- PRINTERS SUBCOLLECTION --------
+      match /printers/{printerId} {
+
+        allow read: if isAdmin();
+        allow read: if isVolunteer() && request.auth.uid == userId;
+
+        allow write: if false;
+      }
+
+      // -------- PUBLIC SUBCOLLECTION --------
+      match /public/{docId} {
+
+        // Public profile leggibile da tutti
+        allow read: if true;
+
+        allow write: if false;
+      }
+
+      // =========================================================
+      // 👤 USER MESSAGE STATUS
+      // =========================================================
+      match /messageStatus/{messageId} {
+
+        allow get, list: if isAuthenticated() && request.auth.uid == userId;
+
+        allow create, update: if request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(["read", "readAt"])
+          && request.resource.data.read == true;
+
+        allow delete: if false;
+      }
+
+
+      // =========================================================
+      // 👤 PERSONAL MESSAGES
+      // =========================================================
+      match /messages/{messageId} {
+
+        allow get, list: if isAuthenticated() && request.auth.uid == userId;
+
+        allow update: if request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(["read"])
+          && request.resource.data.read == true;
+
+        allow create, delete: if isAdmin();
+      }
+    }
+
+
+    // =========================================================
+    // 📢 GLOBAL MESSAGES
+    // =========================================================
+
+    match /messages/{messageId} {
+      // tutti gli utenti autenticati possono leggere
+      allow get, list: if isAuthenticated();
+
+      // solo admin può creare/modificare/cancellare
+      allow create, update, delete: if isAdmin();
+    }
+
+    // --------- PRIVATE COLLECTION ----------
+    match /pendingRegistrations/{docId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /shipmentRequests/{requestId} {
+
+      // 🔹 READ
+      allow read: if isAdmin() || isOwner(resource.data);
+
+      // 🔹 WRITE (ALL DISABLED FROM CLIENT)
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // =========================================================
+    // 📧 EMAIL LOGS
+    // =========================================================
+    match /mail/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // solo backend
+    }
+
+    // =========================================================
+    // 🔒 SECURITY LOGS
+    // =========================================================
+    match /securityLogs/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // solo backend
+    }
+  }
+}
