@@ -3,15 +3,9 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
+import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus } from "./checklistItemStatus";
 
 const REGION = "europe-west1";
-
-/**
- * Stato di un item di checklist. Vedi createChecklist.ts per la nota sul
- * significato (assente) che il core Organizer attribuisce a questi valori.
- */
-const CHECKLIST_ITEM_STATUSES = ["Assegnare", "Da iniziare", "In corso", "Completata"] as const;
-type ChecklistItemStatus = typeof CHECKLIST_ITEM_STATUSES[number];
 
 interface ChecklistItem {
   id: string;
