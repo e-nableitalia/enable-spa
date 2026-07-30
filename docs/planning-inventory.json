@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-30T07:02:38.017Z",
+  "generated_at": "2026-07-30T08:16:03.010Z",
   "items": [
     {
       "id": "ss-auth",
@@ -27,8 +27,21 @@
       "type": "solution_study",
       "source_path": "docs/solution-studies/ss-checklist-item-model.json",
       "created_at": "2026-07-30T07:02:38.017Z",
-      "updated_at": "2026-07-30T07:02:38.017Z",
+      "updated_at": "2026-07-30T08:16:03.007Z",
       "created_by": "cli:solution-study"
+    },
+    {
+      "id": "ss-checklist-item-model-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/ss-checklist-item-model-epic-draft.md",
+      "created_at": "2026-07-30T08:16:03.009Z",
+      "updated_at": "2026-07-30T08:16:03.009Z",
+      "created_by": "cli:solution-decide",
+      "status": "draft",
+      "domains": [
+        "process-organizer-core",
+        "device-requests"
+      ]
     }
   ]
 }

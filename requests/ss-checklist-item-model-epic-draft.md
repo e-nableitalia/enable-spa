@@ -1,0 +1,30 @@
+# Epic Draft da Solution Study ss-checklist-item-model
+
+## Problem Statement
+Il modello v1 di item di checklist del core Organizer (functions/backend/src/organizer/*) rappresenta ogni item con una forma unica e fissa (title, assignee testo libero, quantity, notes, status a 4 valori, completed inutilizzato), pensata originariamente in modo indifferenziato. In pratica in una stessa checklist convivono item di natura diversa - attivita' da svolgere, per cui una quantita' non ha senso, e materiale da procurare, per cui la quantita' e' rilevante - e il modello uniforme li tratta allo stesso modo. Questo produce tre problemi concreti confermati nel codice: (1) il campo quantity viene mostrato in ChecklistPanel.tsx per ogni item indipendentemente da cosa rappresenti; (2) l'assegnatario e' un campo di testo libero non risolvibile a un volontario reale della piattaforma; (3) il gate di completezza (checklistCompleteness.ts, hasProgressedPastInitialStatus) considera 'completo' qualunque stato diverso da 'Assegnare', quindi anche 'Da iniziare' e 'In corso' (esplicitamente non completati) superano il gate - un bug di correttezza confermato, che si propaga anche all'endpoint pubblico getChecklistShareStatus (Story EA-113). La richiesta propone gia' una direzione (discriminante `type` con varianti boolean/generic/numeric): questo studio la tratta come una delle strategie possibili per risolvere il problema di fondo - rappresentare item eterogenei in un modello dati unico - non come una decisione gia' presa, e la confronta con strategie alternative che spostano diversamente il confine tra core generico e consumer.
+
+## Opzione scelta
+- Id: opt-a-explicit-type-in-core
+- Nome: Discriminante `type` esplicito nel modello condiviso di process-organizer-core
+- Summary: Estendere lo schema ChecklistItem del core Organizer con un campo `type: 'boolean' | 'generic' | 'numeric'`, validato in tutte le funzioni che creano/modificano item (createChecklist, addChecklistItem, updateChecklistItem, cloneChecklist, createChecklistFromTemplate) e nei template (createTemplate/updateTemplate). Il gate di completezza distingue il calcolo per tipo (boolean: solo assignee+flag completed; generic: come oggi ma su status==='Completata'; numeric: come generic + quantity valorizzata). ChecklistPanel.tsx renderizza colonne condizionali in base al type. L'assegnatario resta una stringa opaca lato core (nessuna violazione del confine core/consumer); la sua promozione a riferimento reale a un volontario e' un cambio ortogonale nel layer device-requests (nuova capability di lookup scoped sugli assignedVolunteers della deviceRequest corrente), non nel core.
+
+## Vincoli
+- process-organizer-core e' dichiarato nel domain manifest come modulo generico 'pensato per essere riusato oltre il caso device (es. organizzazione eventi/workshop in futuro)': qualunque cambio di schema deve restare generico, non device-specific.
+- Confine architetturale consolidato (Epic EA-3): il core Organizer non conosce il consumer - category, checklistId, templateId sono valori opachi. Un'opzione che introduce logica device-specific dentro functions/backend/src/organizer/** violerebbe questo confine.
+- Le checklist e i template gia' esistenti (validati su staging enableitalia-staging) hanno tutti gli item privi di qualunque campo di tipo: ogni opzione deve dichiarare esplicitamente come tratta i dati storici, senza assumere un backfill implicito.
+- getChecklistShareStatus (Story EA-113, Cloud Function pubblica senza autenticazione) usa isChecklistItemComplete/isChecklistComplete di checklistCompleteness.ts per calcolare percentComplete: qualunque cambio al gate di completezza si propaga automaticamente a questo endpoint pubblico gia' in produzione.
+- Non esiste oggi nessuna Cloud Function volontario-facing per elencare i volontari della piattaforma (listVolunteerAdminData e' admin-only): promuovere l'assegnatario a un riferimento reale richiede o una nuova capability di lookup, o il riuso del campo assignedVolunteers gia' presente su deviceRequests.
+- I 4 valori di CHECKLIST_ITEM_STATUSES sono duplicati identicamente in almeno 5 file (createChecklist.ts, addChecklistItem.ts, updateChecklistItem.ts, cloneChecklist.ts, ChecklistPanel.tsx) senza una fonte condivisa unica.
+- Il core scrive oggi incondizionatamente la chiave quantity su ogni item prodotto (createChecklist, addChecklistItem, createChecklistFromTemplate, cloneChecklist): il ramo 'quantity irrilevante' del gate di completezza non e' mai esercitato in produzione (vedi finding F-5, docs/FINDINGS.md) - qualunque opzione che assuma item senza quantita' come stato gia' raggiungibile oggi e' scorretta.
+
+## Concern rilevanti
+- [high] Nessun default deciso per gli item esistenti privi del campo type - Mitigazione: Trattare esplicitamente l'assenza di type come 'generic' in isChecklistItemComplete e in ChecklistPanel, documentato come comportamento transitorio, finche' una migrazione batch non normalizza i dati storici.
+- [medium] CHECKLIST_ITEM_STATUSES e ora anche la logica type-aware duplicate su 5+ file senza fonte condivisa - Mitigazione: Centralizzare costante e funzioni di validazione in un modulo condiviso del core prima di replicare il branching per-type su ogni file.
+
+## Opzioni scartate
+- Discriminante type come metadato satellite del layer device-requests, core Organizer invariato (opt-b-type-as-consumer-metadata): Introduce una seconda fonte di verita' (item nel core + metadato type nel layer device-requests) da mantenere sincronizzata per itemId, con rischio concreto di metadati orfani se una delle due scritture fallisce a meta' (nessuna transazione cross-collection oggi).
+- Tipizzazione strutturale via campi opzionali gia' esistenti, nessun nuovo campo type (opt-c-structural-typing-existing-fields): La distinzione di tipo resta implicita, dedotta dalla presenza/assenza di chiavi, invece che dichiarata: piu' fragile da leggere e mantenere nel tempo rispetto a un campo esplicito.
+
+## Source
+- request_ref: requests/ss-checklist-item-model.md
+- solution_study: docs/solution-studies/ss-checklist-item-model.json
