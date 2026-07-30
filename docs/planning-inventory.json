@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-14T17:08:47.010Z",
+  "generated_at": "2026-07-30T00:49:17.600Z",
   "items": [
     {
       "id": "ss-auth",
@@ -8,6 +8,19 @@
       "created_at": "2026-07-14T17:08:47.010Z",
       "updated_at": "2026-07-14T17:08:47.010Z",
       "created_by": "cli:solution-study"
+    },
+    {
+      "id": "ir-multi-checklist-per-device-request",
+      "type": "implementation_request",
+      "source_path": "docs/implementation-requests/multi-checklist-per-device-request.md",
+      "created_at": "2026-07-30T00:49:17.594Z",
+      "updated_at": "2026-07-30T00:49:17.594Z",
+      "created_by": "agent:supervisor",
+      "status": "draft",
+      "domains": [
+        "device-requests",
+        "process-organizer-core"
+      ]
     }
   ]
 }
