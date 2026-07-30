@@ -1,9 +1,7 @@
 {
   "id": "ss-checklist-item-model",
-  "title": "Evoluzione del modello item della checklist Organizer",
   "status": "draft",
   "request_ref": "requests/ss-checklist-item-model.md",
-  "created_at": "2026-07-30T00:00:00Z",
 
   "problem_statement": "Il modello v1 di item di checklist del core Organizer (functions/backend/src/organizer/*) rappresenta ogni item con una forma unica e fissa (title, assignee testo libero, quantity, notes, status a 4 valori, completed inutilizzato), pensata originariamente in modo indifferenziato. In pratica in una stessa checklist convivono item di natura diversa - attivita' da svolgere, per cui una quantita' non ha senso, e materiale da procurare, per cui la quantita' e' rilevante - e il modello uniforme li tratta allo stesso modo. Questo produce tre problemi concreti confermati nel codice: (1) il campo quantity viene mostrato in ChecklistPanel.tsx per ogni item indipendentemente da cosa rappresenti; (2) l'assegnatario e' un campo di testo libero non risolvibile a un volontario reale della piattaforma; (3) il gate di completezza (checklistCompleteness.ts, hasProgressedPastInitialStatus) considera 'completo' qualunque stato diverso da 'Assegnare', quindi anche 'Da iniziare' e 'In corso' (esplicitamente non completati) superano il gate - un bug di correttezza confermato, che si propaga anche all'endpoint pubblico getChecklistShareStatus (Story EA-113). La richiesta propone gia' una direzione (discriminante `type` con varianti boolean/generic/numeric): questo studio la tratta come una delle strategie possibili per risolvere il problema di fondo - rappresentare item eterogenei in un modello dati unico - non come una decisione gia' presa, e la confronta con strategie alternative che spostano diversamente il confine tra core generico e consumer.",
 
@@ -101,6 +99,7 @@
       ],
       "spikes": [
         {
+          "id": "spike-item-metadata-composition-latency",
           "question": "Comporre item (core) + metadato type (layer device-requests) in getDeviceRequestChecklist introduce una latenza percepibile rispetto a oggi per una checklist tipica di 20 item?",
           "verification_approach": "Misurare il tempo di risposta di getDeviceRequestChecklist con la composizione item+metadato su un emulatore Firestore locale con 20 item, confronto prima/dopo la modifica.",
           "blocking": false,
@@ -146,13 +145,8 @@
   ],
 
   "recommendation": {
-    "recommended_option": "opt-a-explicit-type-in-core",
-    "rationale": "Il vincolo piu' rilevante emerso dal grounding e' che process-organizer-core e' esplicitamente dichiarato generico e riusabile oltre il caso device (workshop/eventi in futuro, domain manifest). Option B risolve il problema decorando solo il consumer device-requests: un consumer futuro dovrebbe reinventare la stessa soluzione, e nel frattempo introduce una doppia fonte di verita' (item nel core + metadato type nel layer) - pattern che il grounding di questo stesso repository mostra gia' rischioso (F-1: un campo previsto ma mai scritto coerentemente e' gia' costato un bug di sicurezza latente sul core Organizer). Option C e' l'opzione a minor sforzo e minor rischio di migrazione, ma fonda l'intero discriminante di tipo sulla distinzione chiave-assente/chiave-null che il grounding mostra gia' fragile e non rispettata oggi (F-5): e' una buona opzione di ripiego se il costo di Option A risultasse troppo alto, ma non la raccomando come prima scelta perche' non scala oltre i 3 casi noti. Option A costa di piu' in effort (L) e tocca codice stabile (Epic EA-3 Done), ma concentra il costo in un'unica migrazione controllata invece di pagarlo ricorrentemente ad ogni operazione CRUD o ad ogni nuovo consumer, ed e' l'unica delle tre che resta coerente con la vocazione dichiarata del core.",
-    "open_points_for_gate": [
-      "Default da assumere per gli item storici privi del campo type (Option A, critical_concern high) - non e' uno spike bloccante, ma una decisione di prodotto da prendere esplicitamente al gate.",
-      "Se e come promuovere l'assegnatario a un riferimento reale a un volontario (nuova capability di lookup scoped su assignedVolunteers): ortogonale alla scelta tra le tre opzioni, ma va decisa nello stesso gate perche' impatta comunque ChecklistPanel.tsx e il layer device-requests.",
-      "Il finding F-4 (dropdown di stato non risulta bloccato nel codice attuale, in contraddizione con la richiesta) andrebbe chiarito con chi ha validato lo staging prima di assumere che serva un fix dedicato oltre all'evoluzione del modello item."
-    ]
+    "option_id": "opt-a-explicit-type-in-core",
+    "rationale": "Il vincolo piu' rilevante emerso dal grounding e' che process-organizer-core e' esplicitamente dichiarato generico e riusabile oltre il caso device (workshop/eventi in futuro, domain manifest). Option B risolve il problema decorando solo il consumer device-requests: un consumer futuro dovrebbe reinventare la stessa soluzione, e nel frattempo introduce una doppia fonte di verita' (item nel core + metadato type nel layer) - pattern che il grounding di questo stesso repository mostra gia' rischioso (F-1: un campo previsto ma mai scritto coerentemente e' gia' costato un bug di sicurezza latente sul core Organizer). Option C e' l'opzione a minor sforzo e minor rischio di migrazione, ma fonda l'intero discriminante di tipo sulla distinzione chiave-assente/chiave-null che il grounding mostra gia' fragile e non rispettata oggi (F-5): e' una buona opzione di ripiego se il costo di Option A risultasse troppo alto, ma non la raccomando come prima scelta perche' non scala oltre i 3 casi noti. Option A costa di piu' in effort (L) e tocca codice stabile (Epic EA-3 Done), ma concentra il costo in un'unica migrazione controllata invece di pagarlo ricorrentemente ad ogni operazione CRUD o ad ogni nuovo consumer, ed e' l'unica delle tre che resta coerente con la vocazione dichiarata del core.\n\nPunti aperti da decidere esplicitamente al gate (non spike bloccanti): (1) default da assumere per gli item storici privi del campo type (Option A, critical_concern high); (2) se e come promuovere l'assegnatario a un riferimento reale a un volontario (nuova capability di lookup scoped su assignedVolunteers), ortogonale alla scelta tra le tre opzioni ma da decidere nello stesso gate perche' impatta comunque ChecklistPanel.tsx e il layer device-requests; (3) il finding F-4 (dropdown di stato non risulta bloccato nel codice attuale, in contraddizione con la richiesta) andrebbe chiarito con chi ha validato lo staging prima di assumere che serva un fix dedicato oltre all'evoluzione del modello item."
   },
 
   "decision": null
