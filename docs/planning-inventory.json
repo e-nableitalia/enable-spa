@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-30T00:49:17.600Z",
+  "generated_at": "2026-07-30T07:02:38.017Z",
   "items": [
     {
       "id": "ss-auth",
@@ -21,6 +21,14 @@
         "device-requests",
         "process-organizer-core"
       ]
+    },
+    {
+      "id": "ss-checklist-item-model",
+      "type": "solution_study",
+      "source_path": "docs/solution-studies/ss-checklist-item-model.json",
+      "created_at": "2026-07-30T07:02:38.017Z",
+      "updated_at": "2026-07-30T07:02:38.017Z",
+      "created_by": "cli:solution-study"
     }
   ]
 }
