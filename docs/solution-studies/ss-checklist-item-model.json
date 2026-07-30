@@ -1,0 +1,159 @@
+{
+  "id": "ss-checklist-item-model",
+  "title": "Evoluzione del modello item della checklist Organizer",
+  "status": "draft",
+  "request_ref": "requests/ss-checklist-item-model.md",
+  "created_at": "2026-07-30T00:00:00Z",
+
+  "problem_statement": "Il modello v1 di item di checklist del core Organizer (functions/backend/src/organizer/*) rappresenta ogni item con una forma unica e fissa (title, assignee testo libero, quantity, notes, status a 4 valori, completed inutilizzato), pensata originariamente in modo indifferenziato. In pratica in una stessa checklist convivono item di natura diversa - attivita' da svolgere, per cui una quantita' non ha senso, e materiale da procurare, per cui la quantita' e' rilevante - e il modello uniforme li tratta allo stesso modo. Questo produce tre problemi concreti confermati nel codice: (1) il campo quantity viene mostrato in ChecklistPanel.tsx per ogni item indipendentemente da cosa rappresenti; (2) l'assegnatario e' un campo di testo libero non risolvibile a un volontario reale della piattaforma; (3) il gate di completezza (checklistCompleteness.ts, hasProgressedPastInitialStatus) considera 'completo' qualunque stato diverso da 'Assegnare', quindi anche 'Da iniziare' e 'In corso' (esplicitamente non completati) superano il gate - un bug di correttezza confermato, che si propaga anche all'endpoint pubblico getChecklistShareStatus (Story EA-113). La richiesta propone gia' una direzione (discriminante `type` con varianti boolean/generic/numeric): questo studio la tratta come una delle strategie possibili per risolvere il problema di fondo - rappresentare item eterogenei in un modello dati unico - non come una decisione gia' presa, e la confronta con strategie alternative che spostano diversamente il confine tra core generico e consumer.",
+
+  "constraints": [
+    "process-organizer-core e' dichiarato nel domain manifest come modulo generico 'pensato per essere riusato oltre il caso device (es. organizzazione eventi/workshop in futuro)': qualunque cambio di schema deve restare generico, non device-specific.",
+    "Confine architetturale consolidato (Epic EA-3): il core Organizer non conosce il consumer - category, checklistId, templateId sono valori opachi. Un'opzione che introduce logica device-specific dentro functions/backend/src/organizer/** violerebbe questo confine.",
+    "Le checklist e i template gia' esistenti (validati su staging enableitalia-staging) hanno tutti gli item privi di qualunque campo di tipo: ogni opzione deve dichiarare esplicitamente come tratta i dati storici, senza assumere un backfill implicito.",
+    "getChecklistShareStatus (Story EA-113, Cloud Function pubblica senza autenticazione) usa isChecklistItemComplete/isChecklistComplete di checklistCompleteness.ts per calcolare percentComplete: qualunque cambio al gate di completezza si propaga automaticamente a questo endpoint pubblico gia' in produzione.",
+    "Non esiste oggi nessuna Cloud Function volontario-facing per elencare i volontari della piattaforma (listVolunteerAdminData e' admin-only): promuovere l'assegnatario a un riferimento reale richiede o una nuova capability di lookup, o il riuso del campo assignedVolunteers gia' presente su deviceRequests.",
+    "I 4 valori di CHECKLIST_ITEM_STATUSES sono duplicati identicamente in almeno 5 file (createChecklist.ts, addChecklistItem.ts, updateChecklistItem.ts, cloneChecklist.ts, ChecklistPanel.tsx) senza una fonte condivisa unica.",
+    "Il core scrive oggi incondizionatamente la chiave quantity su ogni item prodotto (createChecklist, addChecklistItem, createChecklistFromTemplate, cloneChecklist): il ramo 'quantity irrilevante' del gate di completezza non e' mai esercitato in produzione (vedi finding F-5, docs/FINDINGS.md) - qualunque opzione che assuma item senza quantita' come stato gia' raggiungibile oggi e' scorretta."
+  ],
+
+  "options": [
+    {
+      "id": "opt-a-explicit-type-in-core",
+      "name": "Discriminante `type` esplicito nel modello condiviso di process-organizer-core",
+      "summary": "Estendere lo schema ChecklistItem del core Organizer con un campo `type: 'boolean' | 'generic' | 'numeric'`, validato in tutte le funzioni che creano/modificano item (createChecklist, addChecklistItem, updateChecklistItem, cloneChecklist, createChecklistFromTemplate) e nei template (createTemplate/updateTemplate). Il gate di completezza distingue il calcolo per tipo (boolean: solo assignee+flag completed; generic: come oggi ma su status==='Completata'; numeric: come generic + quantity valorizzata). ChecklistPanel.tsx renderizza colonne condizionali in base al type. L'assegnatario resta una stringa opaca lato core (nessuna violazione del confine core/consumer); la sua promozione a riferimento reale a un volontario e' un cambio ortogonale nel layer device-requests (nuova capability di lookup scoped sugli assignedVolunteers della deviceRequest corrente), non nel core.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core", "device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Validazione type-aware sugli item in tutte le funzioni CRUD del core Organizer",
+          "Lookup volontari assegnabili per la deviceRequest corrente (nuova capability nel layer device-requests, scoped su assignedVolunteers)"
+        ]
+      },
+      "pros": [
+        "Il type diventa un dato di prima classe, scritto e letto in un unico posto, coerente su tutte le 14 funzioni del core e su ogni consumer futuro, non solo device-requests.",
+        "Risolve alla radice sia 'quantity mostrata sempre' sia 'stato a 4 valori su attivita' senza senso', in modo strutturale invece che con euristiche lato frontend.",
+        "Allineato alla vocazione generica dichiarata del core (riuso oltre device, es. workshop) nel domain manifest."
+      ],
+      "cons": [
+        "Superficie di modifica ampia: tocca le 14 Cloud Function del core Organizer, 2-3 funzioni del layer device-requests, ChecklistPanel.tsx e AdminChecklistTemplatesPage.tsx - rischio di regressione su un modulo con Epic EA-3 gia' Done e stabile.",
+        "Richiede una strategia di migrazione esplicita per ogni checklist/template gia' in produzione priva del campo type (nessun retrofit automatico senza assumere un default, es. 'tutti gli item esistenti sono generic').",
+        "Aggiunge branching di validazione a 3 varianti in funzioni oggi semplici e uniformi."
+      ],
+      "risks": [
+        "Un default sbagliato o una migrazione incompleta per gli item storici puo' alterare silenziosamente il risultato del gate di completezza gia' esposto pubblicamente via getChecklistShareStatus.",
+        "Rischio di asimmetria tra createTemplate/updateTemplate (che oggi non hanno stato/assignee) e le istanze checklist, se il type non viene propagato correttamente in createChecklistFromTemplate."
+      ],
+      "effort_class": "L",
+      "reversibility": "medium",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Nessun default deciso per gli item esistenti privi del campo type",
+          "mitigation": "Trattare esplicitamente l'assenza di type come 'generic' in isChecklistItemComplete e in ChecklistPanel, documentato come comportamento transitorio, finche' una migrazione batch non normalizza i dati storici."
+        },
+        {
+          "severity": "medium",
+          "description": "CHECKLIST_ITEM_STATUSES e ora anche la logica type-aware duplicate su 5+ file senza fonte condivisa",
+          "mitigation": "Centralizzare costante e funzioni di validazione in un modulo condiviso del core prima di replicare il branching per-type su ogni file."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-b-type-as-consumer-metadata",
+      "name": "Discriminante type come metadato satellite del layer device-requests, core Organizer invariato",
+      "summary": "Non toccare l'item shape del core Organizer, che resta title/assignee/quantity/notes/status/completed esattamente come oggi. Il layer device-requests introduce e possiede il concetto di type come metadato satellite, in un documento parallelo (es. deviceRequestChecklistItemMeta/{checklistId} con mappa itemId->type) mantenuto in sync ad ogni add/update/remove item dalle funzioni gia' esistenti del layer (addDeviceRequestChecklistItem, updateDeviceRequestChecklistItem, removeDeviceRequestChecklistItem), che compongono item+type prima di restituirli a ChecklistPanel.tsx. Il gate di completezza type-aware viene ricalcolato in una nuova versione di getDeviceRequestChecklistCompleteness, non nel gate condiviso del core.",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Metadato type per item di checklist, di proprieta' esclusiva del layer device-requests",
+          "Gate di completezza type-aware duplicato nel layer device-requests, separato da quello del core"
+        ]
+      },
+      "pros": [
+        "process-organizer-core resta esattamente com'e' oggi: zero rischio di regressione sulle 14 funzioni gia' stabili (Epic EA-3 Done), zero migrazione sui dati storici del core.",
+        "Rispetta alla lettera il confine 'core generico, consumer opaco': un futuro consumer diverso da device-requests (es. workshop) non eredita vincoli pensati solo per questo caso d'uso."
+      ],
+      "cons": [
+        "Introduce una seconda fonte di verita' (item nel core + metadato type nel layer device-requests) da mantenere sincronizzata per itemId, con rischio concreto di metadati orfani se una delle due scritture fallisce a meta' (nessuna transazione cross-collection oggi).",
+        "getChecklistShareStatus (pubblico, Story EA-113) usa oggi il gate del core direttamente sugli item grezzi: per restare coerente con un gate type-aware dovrebbe anch'esso spostarsi sul nuovo gate del layer device-requests, duplicando la logica di completezza in due posti con rischio di divergenza nel tempo.",
+        "L'assegnatario reale e la logica type-aware finiscono comunque reimplementate nel layer device-requests: un ipotetico secondo consumer del core (es. workshop) dovrebbe reinventare la stessa soluzione da zero invece di riusarla."
+      ],
+      "risks": [
+        "Nessun vincolo strutturale (Firestore non ha foreign key) garantisce la coerenza itemId tra core e metadato satellite: un bug futuro in una sola Cloud Function del layer puo' disallineare silenziosamente i due lati.",
+        "Duplicazione del gate di completezza (core vs device-requests) rende probabile una futura divergenza di comportamento tra getChecklistShareStatus (gate del core) e getDeviceRequestChecklistCompleteness (gate type-aware), se non tenute esplicitamente in sync."
+      ],
+      "effort_class": "M",
+      "reversibility": "high",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Doppia fonte di verita' item/type con rischio di disallineamento silenzioso",
+          "mitigation": "Wrappare ogni add/update/remove in un'unica Cloud Function transazionale del layer device-requests che scrive entrambi i lati, mai due chiamate separate dal frontend."
+        },
+        {
+          "severity": "medium",
+          "description": "Divergenza tra il gate di completezza pubblico (getChecklistShareStatus, sul core) e quello type-aware del layer device-requests",
+          "mitigation": "Decidere esplicitamente, prima di procedere, se il link di condivisione pubblico deve riflettere il gate type-aware o restare sul gate semplice del core, e documentarlo come vincolo di prodotto invece di lasciarlo implicito."
+        }
+      ],
+      "spikes": [
+        {
+          "question": "Comporre item (core) + metadato type (layer device-requests) in getDeviceRequestChecklist introduce una latenza percepibile rispetto a oggi per una checklist tipica di 20 item?",
+          "verification_approach": "Misurare il tempo di risposta di getDeviceRequestChecklist con la composizione item+metadato su un emulatore Firestore locale con 20 item, confronto prima/dopo la modifica.",
+          "blocking": false,
+          "outcome": null
+        }
+      ]
+    },
+    {
+      "id": "opt-c-structural-typing-existing-fields",
+      "name": "Tipizzazione strutturale via campi opzionali gia' esistenti, nessun nuovo campo type",
+      "summary": "Invece di aggiungere un campo type nominale, dedurre il tipo dell'item dalla presenza/assenza di chiavi gia' presenti nel modello: un item senza la chiave status e' un item 'boolean' (attivita', usa solo il flag completed, oggi scritto ma mai aggiornato da nessuna funzione del core); un item con status e' un item tracciato a 4 stati come oggi, e tra questi la presenza della chiave quantity distingue 'materiale' (numeric) da 'attivita' tracciata' (generic). Richiede: rendere davvero opzionale status in creazione/aggiornamento, attivare la scrittura di completed in updateChecklistItem, correggere il gate di completezza per usare status==='Completata' quando status e' presente o completed===true quando assente, e correggere le 4 funzioni di creazione/clonazione perche' omettano davvero quantity quando non fornita (vedi finding F-5).",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core", "device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Attivazione del flag completed, oggi scritto ma mai letto/aggiornato da nessuna funzione del core (vedi process-organizer-core/cap-checklist-item-management)",
+          "status reso davvero opzionale in creazione/aggiornamento item, invece che sempre valorizzato a 'Assegnare'"
+        ]
+      },
+      "pros": [
+        "Nessun nuovo campo nello schema: riusa campi gia' esistenti (status, quantity, completed) rendendoli effettivamente opzionali/attivi, minimizzando la migrazione - gli item storici, che hanno sempre sia status sia quantity valorizzati, restano automaticamente 'numeric' senza bisogno di backfill.",
+        "Effort piu' basso delle altre due opzioni: nessun nuovo enum ne' branching di validazione a 3 rami, solo attivazione di comportamento gia' previsto nel modello dati ma mai esercitato."
+      ],
+      "cons": [
+        "La distinzione di tipo resta implicita, dedotta dalla presenza/assenza di chiavi, invece che dichiarata: piu' fragile da leggere e mantenere nel tempo rispetto a un campo esplicito.",
+        "La differenza semantica chiave-assente vs chiave-null, gia' oggi delicata (vedi finding F-5), diventerebbe il fondamento dell'intero discriminante di tipo, aumentando la fragilita' esattamente nel punto piu' delicato del modello attuale.",
+        "Non scala a varianti future: un quarto tipo di item richiederebbe comunque, prima o poi, l'introduzione di un campo esplicito - questa opzione risolve solo i 3 casi noti oggi."
+      ],
+      "risks": [
+        "Un client (frontend o un futuro consumer) che scrive per errore quantity:null invece di omettere la chiave, o viceversa, cambia silenziosamente il tipo effettivo dell'item senza nessun errore di validazione esplicito."
+      ],
+      "effort_class": "S",
+      "reversibility": "high",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Il discriminante strutturale si fonda su una distinzione (chiave assente vs chiave null) che oggi nessuna funzione del core rispetta coerentemente (finding F-5)",
+          "mitigation": "Correggere prima le 4 funzioni di creazione/clonazione perche' omettano davvero la chiave quantity quando non fornita; senza questa correzione preliminare il discriminante strutturale non e' mai esercitabile in pratica."
+        }
+      ],
+      "spikes": []
+    }
+  ],
+
+  "recommendation": {
+    "recommended_option": "opt-a-explicit-type-in-core",
+    "rationale": "Il vincolo piu' rilevante emerso dal grounding e' che process-organizer-core e' esplicitamente dichiarato generico e riusabile oltre il caso device (workshop/eventi in futuro, domain manifest). Option B risolve il problema decorando solo il consumer device-requests: un consumer futuro dovrebbe reinventare la stessa soluzione, e nel frattempo introduce una doppia fonte di verita' (item nel core + metadato type nel layer) - pattern che il grounding di questo stesso repository mostra gia' rischioso (F-1: un campo previsto ma mai scritto coerentemente e' gia' costato un bug di sicurezza latente sul core Organizer). Option C e' l'opzione a minor sforzo e minor rischio di migrazione, ma fonda l'intero discriminante di tipo sulla distinzione chiave-assente/chiave-null che il grounding mostra gia' fragile e non rispettata oggi (F-5): e' una buona opzione di ripiego se il costo di Option A risultasse troppo alto, ma non la raccomando come prima scelta perche' non scala oltre i 3 casi noti. Option A costa di piu' in effort (L) e tocca codice stabile (Epic EA-3 Done), ma concentra il costo in un'unica migrazione controllata invece di pagarlo ricorrentemente ad ogni operazione CRUD o ad ogni nuovo consumer, ed e' l'unica delle tre che resta coerente con la vocazione dichiarata del core.",
+    "open_points_for_gate": [
+      "Default da assumere per gli item storici privi del campo type (Option A, critical_concern high) - non e' uno spike bloccante, ma una decisione di prodotto da prendere esplicitamente al gate.",
+      "Se e come promuovere l'assegnatario a un riferimento reale a un volontario (nuova capability di lookup scoped su assignedVolunteers): ortogonale alla scelta tra le tre opzioni, ma va decisa nello stesso gate perche' impatta comunque ChecklistPanel.tsx e il layer device-requests.",
+      "Il finding F-4 (dropdown di stato non risulta bloccato nel codice attuale, in contraddizione con la richiesta) andrebbe chiarito con chi ha validato lo staging prima di assumere che serva un fix dedicato oltre all'evoluzione del modello item."
+    ]
+  },
+
+  "decision": null
+}
