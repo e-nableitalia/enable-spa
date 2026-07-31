@@ -14,6 +14,7 @@ import { Toast } from "primereact/toast";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 
 const CHECKLIST_ITEM_STATUSES = ["Assegnare", "Da iniziare", "In corso", "Completata"];
+const CHECKLIST_ITEM_TYPES = ["boolean", "generic", "numeric"];
 
 interface ChecklistItem {
   id: string;
@@ -34,12 +35,13 @@ interface ChecklistData {
 
 interface NewItemForm {
   title: string;
+  type: string;
   assignee: string;
   quantity: number | null;
   notes: string;
 }
 
-const EMPTY_NEW_ITEM: NewItemForm = { title: "", assignee: "", quantity: null, notes: "" };
+const EMPTY_NEW_ITEM: NewItemForm = { title: "", type: "generic", assignee: "", quantity: null, notes: "" };
 
 interface Props {
   /** Id della deviceRequest a cui è collegata la checklist. */
@@ -195,6 +197,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
       await fn({
         requestId,
         title: newItem.title.trim(),
+        type: newItem.type,
         assignee: newItem.assignee.trim() || undefined,
         quantity: newItem.quantity ?? undefined,
         notes: newItem.notes.trim() || undefined,
@@ -422,6 +425,15 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
             <InputText
               value={newItem.title}
               onChange={(e) => setNewItem((f) => ({ ...f, title: e.target.value }))}
+              style={{ width: "100%" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 4 }}>Tipo</label>
+            <Dropdown
+              value={newItem.type}
+              options={CHECKLIST_ITEM_TYPES}
+              onChange={(e) => setNewItem((f) => ({ ...f, type: e.value }))}
               style={{ width: "100%" }}
             />
           </div>
