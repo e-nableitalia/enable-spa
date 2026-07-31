@@ -1,46 +1,24 @@
-name: Deploy Firebase
+name: Deploy Production
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       force_frontend:
-        description: "Force deploy frontend (hosting)"
+        description: "Deploy frontend (hosting) to production"
         required: false
         default: "false"
         type: choice
         options: ["false", "true"]
       force_backend:
-        description: "Force deploy backend (functions)"
+        description: "Deploy backend (functions) to production"
         required: false
         default: "false"
         type: choice
         options: ["false", "true"]
 
 jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      backend: ${{ steps.filter.outputs.backend }}
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            frontend:
-              - 'enable-device/**'
-            backend:
-              - 'functions/backend/**'
-
   deploy:
     runs-on: ubuntu-latest
-    needs: detect-changes
 
     steps:
       - uses: actions/checkout@v3
@@ -52,9 +30,9 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      # 🔥 FRONTEND
+      # 🔥 FRONTEND (production) — solo se esplicitamente richiesto
       - name: Deploy hosting
-        if: needs.detect-changes.outputs.frontend == 'true' || github.event.inputs.force_frontend == 'true'
+        if: github.event.inputs.force_frontend == 'true'
         run: |
           cd enable-device
           npm install
@@ -62,9 +40,9 @@ jobs:
           cd ..
           firebase deploy --only hosting --token ${{ secrets.FIREBASE_TOKEN }}
 
-      # 🔥 BACKEND
+      # 🔥 BACKEND (production) — solo se esplicitamente richiesto
       - name: Deploy functions
-        if: needs.detect-changes.outputs.backend == 'true' || github.event.inputs.force_backend == 'true'
+        if: github.event.inputs.force_backend == 'true'
         run: |
           cd functions/backend
           npm install
