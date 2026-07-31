@@ -2,15 +2,9 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
+import { isChecklistItemStatus, ChecklistItemStatus } from "./checklistItemStatus";
 
 const REGION = "europe-west1";
-
-/**
- * Stato di un item di checklist. Vedi createChecklist.ts per la nota sul
- * significato (assente) che il core Organizer attribuisce a questi valori.
- */
-const CHECKLIST_ITEM_STATUSES = ["Assegnare", "Da iniziare", "In corso", "Completata"] as const;
-type ChecklistItemStatus = typeof CHECKLIST_ITEM_STATUSES[number];
 
 interface ChecklistItem {
   id: string;
@@ -68,7 +62,7 @@ export const updateChecklistItem = onCall(
       if (hasTitle && (typeof title !== "string" || !title.trim())) {
         throw new HttpsError("invalid-argument", "Item title must be a non-empty string");
       }
-      if (hasStatus && !CHECKLIST_ITEM_STATUSES.includes(status as ChecklistItemStatus)) {
+      if (hasStatus && !isChecklistItemStatus(status)) {
         throw new HttpsError("invalid-argument", "Invalid item status");
       }
       if (hasAssignee && assignee !== null && typeof assignee !== "string") {
