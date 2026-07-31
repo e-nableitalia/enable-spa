@@ -3,13 +3,19 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus } from "./checklistItemStatus";
+import {
+  CHECKLIST_ITEM_STATUSES,
+  ChecklistItemStatus,
+  ChecklistItemType,
+  isChecklistItemType,
+} from "./checklistItemStatus";
 
 const REGION = "europe-west1";
 
 interface ChecklistItem {
   id: string;
   title: string;
+  type: ChecklistItemType;
   assignee: string | null;
   quantity: number | null;
   notes: string;
@@ -20,7 +26,12 @@ interface ChecklistItem {
 /**
  * Normalizza un item iniziale ricevuto dal consumer in un `ChecklistItem`
  * completo. Un item iniziale può essere una semplice stringa (il titolo) o
- * un oggetto con `title` e, opzionalmente, `quantity`/`notes`.
+ * un oggetto con `title`, `type` e, opzionalmente, `quantity`/`notes`.
+ *
+ * `type` è obbligatorio ed è validato tramite il modulo condiviso
+ * `checklistItemStatus`: non esiste un default, coerentemente con la
+ * decisione umana su EA-121 (nessun trattamento legacy per item senza
+ * type, non essendoci checklist reali già in produzione).
  *
  * Assegnatario, stato e flag di completamento NON sono accettati in input:
  * una checklist appena creata parte sempre con item non assegnati e nello
@@ -28,6 +39,7 @@ interface ChecklistItem {
  */
 function normalizeInitialItem(input: unknown): ChecklistItem {
   let title: unknown;
+  let type: unknown;
   let quantity: unknown;
   let notes: unknown;
 
@@ -36,6 +48,7 @@ function normalizeInitialItem(input: unknown): ChecklistItem {
   } else if (typeof input === "object" && input !== null) {
     const raw = input as Record<string, unknown>;
     title = raw.title;
+    type = raw.type;
     quantity = raw.quantity;
     notes = raw.notes;
   } else {
@@ -44,6 +57,10 @@ function normalizeInitialItem(input: unknown): ChecklistItem {
 
   if (typeof title !== "string" || title.trim() === "") {
     throw new HttpsError("invalid-argument", "Each item must have a non-empty title");
+  }
+
+  if (!isChecklistItemType(type)) {
+    throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
   }
 
   if (quantity !== undefined && quantity !== null && typeof quantity !== "number") {
@@ -57,6 +74,7 @@ function normalizeInitialItem(input: unknown): ChecklistItem {
   return {
     id: crypto.randomUUID(),
     title,
+    type,
     assignee: null,
     quantity: (quantity as number | undefined) ?? null,
     notes: (notes as string | undefined) ?? "",
@@ -74,7 +92,8 @@ function normalizeInitialItem(input: unknown): ChecklistItem {
  *   il significato, es. per i device sarà il `devicetype`).
  * - `title`: titolo della checklist.
  * - `items` (opzionale): elenco di item iniziali con cui popolare la
- *   checklist; se omesso la checklist viene creata senza item.
+ *   checklist; se omesso la checklist viene creata senza item. Ogni item
+ *   richiede un `type` esplicito ('boolean' | 'generic' | 'numeric').
  *
  * Crea un documento in `checklists/{checklistId}` e restituisce il
  * `checklistId` generato al consumer.
