@@ -108,7 +108,7 @@ describe("addDeviceRequestChecklistItem", () => {
 
   it("adds an item to the checklist linked to the request (admin)", async () => {
     const result = await addDeviceRequestChecklistItem.run(
-      buildRequest({ requestId: "req-1", title: "Prepara stampante", quantity: 2 }, "admin-1")
+      buildRequest({ requestId: "req-1", title: "Prepara stampante", type: "numeric", quantity: 2 }, "admin-1")
     );
 
     expect(result).toHaveProperty("itemId");
@@ -118,12 +118,12 @@ describe("addDeviceRequestChecklistItem", () => {
       { items: { items: unknown[] } }
     ];
     const [newItem] = updatePayload.items.items;
-    expect(newItem).toMatchObject({ title: "Prepara stampante", quantity: 2, status: "Assegnare", completed: false });
+    expect(newItem).toMatchObject({ title: "Prepara stampante", type: "numeric", quantity: 2, status: "Assegnare", completed: false });
   });
 
   it("allows a volunteer assigned to the request to add an item", async () => {
     const result = await addDeviceRequestChecklistItem.run(
-      buildRequest({ requestId: "req-1", title: "Verifica materiale" }, "volunteer-1")
+      buildRequest({ requestId: "req-1", title: "Verifica materiale", type: "generic" }, "volunteer-1")
     );
 
     expect(result).toHaveProperty("itemId");
