@@ -2,13 +2,19 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { isChecklistItemStatus, ChecklistItemStatus } from "./checklistItemStatus";
+import {
+  isChecklistItemStatus,
+  ChecklistItemStatus,
+  ChecklistItemType,
+  isChecklistItemType,
+} from "./checklistItemStatus";
 
 const REGION = "europe-west1";
 
 interface ChecklistItem {
   id: string;
   title: string;
+  type: ChecklistItemType;
   assignee: string | null;
   quantity: number | null;
   notes: string;
@@ -16,11 +22,13 @@ interface ChecklistItem {
   completed: boolean;
 }
 
-// updateChecklistItem: aggiorna in modo parziale i campi (titolo, stato,
-// assegnatario, quantità, note) di un item esistente all'interno della lista
-// items di una checklist. Aggiorna solo i campi esplicitamente presenti nella
-// richiesta, lasciando invariati tutti gli altri campi dell'item (incluso
-// `completed`).
+// updateChecklistItem: aggiorna in modo parziale i campi (titolo, type,
+// stato, assegnatario, quantità, note) di un item esistente all'interno
+// della lista items di una checklist. Aggiorna solo i campi esplicitamente
+// presenti nella richiesta, lasciando invariati tutti gli altri campi
+// dell'item (incluso `completed`). `type`, se fornito, è validato tramite
+// il modulo condiviso checklistItemStatus (EA-122); se omesso, il type
+// esistente dell'item resta invariato.
 export const updateChecklistItem = onCall(
   { region: REGION },
   async (request) => {
@@ -32,10 +40,11 @@ export const updateChecklistItem = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const { checklistId, itemId, title, status, assignee, quantity, notes } = request.data as {
+      const { checklistId, itemId, title, type, status, assignee, quantity, notes } = request.data as {
         checklistId?: string;
         itemId?: string;
         title?: string;
+        type?: string;
         status?: string;
         assignee?: string | null;
         quantity?: number | null;
@@ -50,17 +59,21 @@ export const updateChecklistItem = onCall(
       }
 
       const hasTitle = title !== undefined;
+      const hasType = type !== undefined;
       const hasStatus = status !== undefined;
       const hasAssignee = assignee !== undefined;
       const hasQuantity = quantity !== undefined;
       const hasNotes = notes !== undefined;
 
-      if (!hasTitle && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes) {
+      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes) {
         throw new HttpsError("invalid-argument", "At least one field to update must be provided");
       }
 
       if (hasTitle && (typeof title !== "string" || !title.trim())) {
         throw new HttpsError("invalid-argument", "Item title must be a non-empty string");
+      }
+      if (hasType && !isChecklistItemType(type)) {
+        throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
       }
       if (hasStatus && !isChecklistItemStatus(status)) {
         throw new HttpsError("invalid-argument", "Invalid item status");
@@ -94,6 +107,9 @@ export const updateChecklistItem = onCall(
       const updatedItem: ChecklistItem = { ...items[itemIndex] };
       if (hasTitle) {
         updatedItem.title = title as string;
+      }
+      if (hasType) {
+        updatedItem.type = type as ChecklistItemType;
       }
       if (hasStatus) {
         updatedItem.status = status as ChecklistItemStatus;

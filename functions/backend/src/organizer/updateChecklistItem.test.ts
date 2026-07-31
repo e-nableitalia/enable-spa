@@ -1,3 +1,4 @@
+import { HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 
 const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
@@ -29,6 +30,7 @@ const OTHER_ITEM_ID = "item-2";
 const ORIGINAL_ITEM = {
   id: ITEM_ID,
   title: "Prepara stampante",
+  type: "generic",
   assignee: "Mario Rossi",
   quantity: 3,
   notes: "Nota originale",
@@ -39,6 +41,7 @@ const ORIGINAL_ITEM = {
 const OTHER_ITEM = {
   id: OTHER_ITEM_ID,
   title: "Verifica materiale",
+  type: "numeric",
   assignee: "Luigi Bianchi",
   quantity: 1,
   notes: "Altra nota",
@@ -175,5 +178,38 @@ describe("updateChecklistItem", () => {
     const untouchedItem = updatePayload.items.find((item: { id: string }) => item.id === OTHER_ITEM_ID);
 
     expect(untouchedItem).toEqual(OTHER_ITEM);
+  });
+
+  // Scenario 3: updateChecklistItem con nuovo type valido
+  it.each(["boolean", "generic", "numeric"] as const)(
+    "updates only the type field to '%s', leaving all other fields unchanged",
+    async (type) => {
+      await updateChecklistItem.run(
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, type })
+      );
+
+      expect(updateMock).toHaveBeenCalledTimes(1);
+      const [updatePayload] = updateMock.mock.calls[0];
+      const updatedItem = updatePayload.items.find((item: { id: string }) => item.id === ITEM_ID);
+
+      expect(updatedItem).toEqual({
+        ...ORIGINAL_ITEM,
+        type,
+      });
+      expect(updatePayload.updatedAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    }
+  );
+
+  // Scenario 4: updateChecklistItem con type non valido
+  it("throws invalid-argument and does not modify the item when type is not among the 3 allowed", async () => {
+    await expect(
+      updateChecklistItem.run(
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, type: "unknown-type" })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
