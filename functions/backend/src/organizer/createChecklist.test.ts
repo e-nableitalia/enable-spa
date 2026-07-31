@@ -43,8 +43,8 @@ describe("createChecklist", () => {
 
   it("creates the checklists/{checklistId} document with category, title, items and createdAt", async () => {
     const items = [
-      { title: "Prepara stampante", assignee: "user-1", quantity: 2, notes: "Nota" },
-      { title: "Verifica materiale" },
+      { title: "Prepara stampante", type: "boolean", assignee: "user-1", quantity: 2, notes: "Nota" },
+      { title: "Verifica materiale", type: "generic" },
     ];
 
     await createChecklist.run(
@@ -63,6 +63,7 @@ describe("createChecklist", () => {
         {
           id: expect.any(String),
           title: "Prepara stampante",
+          type: "boolean",
           assignee: null,
           quantity: 2,
           notes: "Nota",
@@ -72,6 +73,7 @@ describe("createChecklist", () => {
         {
           id: expect.any(String),
           title: "Verifica materiale",
+          type: "generic",
           assignee: null,
           quantity: null,
           notes: "",
@@ -82,6 +84,74 @@ describe("createChecklist", () => {
       createdBy: "user-1",
       createdAt: SERVER_TIMESTAMP_SENTINEL,
     });
+  });
+
+  // Scenario 1: item iniziale con type valido
+  it.each(["boolean", "generic", "numeric"] as const)(
+    "creates the item with the provided type '%s'",
+    async (type) => {
+      await createChecklist.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Checklist mano",
+          items: [{ title: "Verifica dita", type }],
+        })
+      );
+
+      const [savedDocument] = setMock.mock.calls[0];
+      expect(savedDocument.items[0].type).toBe(type);
+    }
+  );
+
+  // Scenario 2: item iniziale senza type o con type non valido
+  it("throws invalid-argument when an initial item has no type", async () => {
+    await expect(
+      createChecklist.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Checklist mano",
+          items: [{ title: "Verifica dita" }],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2: item iniziale senza type o con type non valido
+  it("throws invalid-argument when an initial item has a type not among the 3 allowed", async () => {
+    await expect(
+      createChecklist.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Checklist mano",
+          items: [{ title: "Verifica dita", type: "unknown-type" }],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2: anche lo shorthand a stringa non porta un type esplicito, quindi è rifiutato
+  it("throws invalid-argument when an initial item is a bare string (no type)", async () => {
+    await expect(
+      createChecklist.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Checklist mano",
+          items: ["Verifica dita"],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(setMock).not.toHaveBeenCalled();
   });
 
   it("writes createdBy with the authenticated caller's uid", async () => {
