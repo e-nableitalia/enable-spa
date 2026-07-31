@@ -3,7 +3,7 @@ name: Deploy Staging
 on:
   push:
     branches:
-      - main
+      - develop
 
 jobs:
   detect-changes:
