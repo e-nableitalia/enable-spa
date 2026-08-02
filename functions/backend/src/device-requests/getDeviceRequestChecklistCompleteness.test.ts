@@ -90,11 +90,13 @@ describe("getDeviceRequestChecklistCompleteness", () => {
     };
   });
 
+  // EA-127: calcolo type-aware, item senza `type` trattati come 'generic'
+  // (completo solo con status 'Completata').
   it("returns complete=true when all items of the checklist are complete", async () => {
     checklistsStore = {
       [CHECKLIST_ID]: {
         items: [
-          { assignee: "volunteer-1", quantity: 2, status: "In corso" },
+          { assignee: "volunteer-1", quantity: 2, status: "Completata" },
         ],
       },
     };
@@ -106,6 +108,7 @@ describe("getDeviceRequestChecklistCompleteness", () => {
     expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: true });
   });
 
+  // EA-127 (fix del bug): un item generic ancora 'In corso' non è completo.
   it("returns complete=false when at least one item is still incomplete", async () => {
     checklistsStore = {
       [CHECKLIST_ID]: {
