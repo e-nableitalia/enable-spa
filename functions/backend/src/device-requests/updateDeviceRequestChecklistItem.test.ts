@@ -141,6 +141,23 @@ describe("updateDeviceRequestChecklistItem", () => {
     });
   });
 
+  it("forwards and persists type when updating an item (admin)", async () => {
+    const result = await updateDeviceRequestChecklistItem.run(
+      buildRequest(
+        {
+          requestId: "req-1",
+          itemId: "item-1",
+          type: "numeric",
+        },
+        "admin-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    const updatedItems = checklistsStore[CHECKLIST_ID]?.items as Record<string, unknown>[];
+    expect(updatedItems[0]).toMatchObject({ type: "numeric" });
+  });
+
   it("allows a volunteer assigned to the request to update an item", async () => {
     const result = await updateDeviceRequestChecklistItem.run(
       buildRequest({ requestId: "req-1", itemId: "item-1", status: "Da iniziare" }, "volunteer-1")
