@@ -3,13 +3,14 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus } from "./checklistItemStatus";
+import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus, ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
 
 const REGION = "europe-west1";
 
 interface ChecklistItem {
   id: string;
   title: string;
+  type: ChecklistItemType;
   assignee: string | null;
   quantity: number | null;
   notes: string;
@@ -19,25 +20,36 @@ interface ChecklistItem {
 
 interface TemplateItem {
   title: unknown;
+  type: unknown;
   quantity: unknown;
 }
 
 /**
  * Clona un item di template in un nuovo `ChecklistItem` di istanza.
  *
- * Logica di clonazione (Epic EA-3): titolo e quantità vengono copiati dal
- * template, mentre stato, assegnatario e flag di completamento vengono
- * sempre azzerati, indipendentemente da cosa contenesse il template (un
- * template non ha comunque questi campi, essendo un catalogo di
- * riferimento, non un'istanza).
+ * Logica di clonazione (Epic EA-3, aggiornata da EA-126): titolo, type e
+ * quantità vengono copiati dal template, mentre stato, assegnatario e flag
+ * di completamento vengono sempre azzerati, indipendentemente da cosa
+ * contenesse il template (un template non ha comunque questi campi, essendo
+ * un catalogo di riferimento, non un'istanza).
+ *
+ * `type` è garantito valorizzato su ogni item di template a valle di EA-125
+ * (`normalizeTemplateItem` lo richiede e valida in creazione/modifica). Per
+ * i template creati prima di EA-125 (privi di `type` in Firestore), si
+ * applica lo stesso default transitorio `"generic"` già usato altrove per
+ * dati storici (vedi `docs/FINDINGS.md` F-8), invece di propagare un
+ * `undefined` che romperebbe l'invariante "type sempre valorizzato" sulla
+ * nuova istanza.
  */
 function cloneTemplateItem(templateItem: TemplateItem): ChecklistItem {
   const title = typeof templateItem?.title === "string" ? templateItem.title : "";
+  const type: ChecklistItemType = isChecklistItemType(templateItem?.type) ? templateItem.type : "generic";
   const quantity = typeof templateItem?.quantity === "number" ? templateItem.quantity : null;
 
   return {
     id: crypto.randomUUID(),
     title,
+    type,
     assignee: null,
     quantity,
     notes: "",
@@ -57,7 +69,7 @@ function cloneTemplateItem(templateItem: TemplateItem): ChecklistItem {
  *   sovrascrivere quello del template. Se omesso, la categoria è ereditata
  *   dal template.
  *
- * Copia gli item del template nella nuova istanza (titolo e quantità
+ * Copia gli item del template nella nuova istanza (titolo, type e quantità
  * copiati, stato impostato ad 'Assegnare', assegnatario a null e flag di
  * completamento a false su ciascun item clonato). Registra `fromTemplate:
  * <templateId>` come riferimento storico, non come dipendenza viva: il
