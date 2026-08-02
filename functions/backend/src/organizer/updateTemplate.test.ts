@@ -57,18 +57,21 @@ describe("updateTemplate", () => {
     });
   });
 
-  it("updates the items field, normalizing string and object items, and sets updatedAt", async () => {
+  it("updates the items field, normalizing object items with their type, and sets updatedAt", async () => {
     await updateTemplate.run(
       buildRequest({
         templateId: TEMPLATE_ID,
-        items: ["Prepara stampante", { title: "Verifica materiale", quantity: 3 }],
+        items: [
+          { title: "Prepara stampante", type: "boolean" },
+          { title: "Verifica materiale", type: "generic", quantity: 3 },
+        ],
       })
     );
 
     expect(updateMock).toHaveBeenCalledWith({
       items: [
-        { title: "Prepara stampante", quantity: null },
-        { title: "Verifica materiale", quantity: 3 },
+        { title: "Prepara stampante", type: "boolean", quantity: null },
+        { title: "Verifica materiale", type: "generic", quantity: 3 },
       ],
       updatedAt: SERVER_TIMESTAMP_SENTINEL,
     });
@@ -79,15 +82,79 @@ describe("updateTemplate", () => {
       buildRequest({
         templateId: TEMPLATE_ID,
         title: "Titolo aggiornato",
-        items: [{ title: "Imballa dispositivo", quantity: 1 }],
+        items: [{ title: "Imballa dispositivo", type: "numeric", quantity: 1 }],
       })
     );
 
     expect(updateMock).toHaveBeenCalledWith({
       title: "Titolo aggiornato",
-      items: [{ title: "Imballa dispositivo", quantity: 1 }],
+      items: [{ title: "Imballa dispositivo", type: "numeric", quantity: 1 }],
       updatedAt: SERVER_TIMESTAMP_SENTINEL,
     });
+  });
+
+  // Scenario 3: updateTemplate con item type valido
+  it.each(["boolean", "generic", "numeric"] as const)(
+    "updates the item with the provided type '%s'",
+    async (type) => {
+      await updateTemplate.run(
+        buildRequest({
+          templateId: TEMPLATE_ID,
+          items: [{ title: "Verifica dita", type }],
+        })
+      );
+
+      const [updatePayload] = updateMock.mock.calls[0];
+      expect(updatePayload.items[0].type).toBe(type);
+    }
+  );
+
+  // Scenario 4: updateTemplate con item senza type o non valido
+  it("throws invalid-argument and does not update when an item in the new list has no type", async () => {
+    await expect(
+      updateTemplate.run(
+        buildRequest({
+          templateId: TEMPLATE_ID,
+          items: [{ title: "Verifica dita" }],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 4: updateTemplate con item senza type o non valido
+  it("throws invalid-argument and does not update when an item in the new list has a type not among the 3 allowed", async () => {
+    await expect(
+      updateTemplate.run(
+        buildRequest({
+          templateId: TEMPLATE_ID,
+          items: [{ title: "Verifica dita", type: "unknown-type" }],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 4: lo shorthand a stringa non porta un type esplicito, quindi è rifiutato
+  it("throws invalid-argument and does not update when an item in the new list is a bare string (no type)", async () => {
+    await expect(
+      updateTemplate.run(
+        buildRequest({
+          templateId: TEMPLATE_ID,
+          items: ["Verifica dita"],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(updateMock).not.toHaveBeenCalled();
   });
 
   it("returns the updated templateId to the consumer", async () => {
