@@ -119,7 +119,10 @@ export default function AdminChecklistTemplatesPage() {
     setEditingTemplate(template);
     setTemplateForm({
       title: template.title,
-      items: template.items.map((item) => ({ ...item })),
+      // Template creati prima dell'introduzione di `type` non hanno il campo:
+      // fallback a "generic" (comportamento transitorio deciso in ss-checklist-item-model),
+      // altrimenti il salvataggio di un template legacy fallirebbe sempre con invalid-argument.
+      items: template.items.map((item) => ({ ...item, type: item.type ?? "generic" })),
     });
     setShowDialog(true);
   };
