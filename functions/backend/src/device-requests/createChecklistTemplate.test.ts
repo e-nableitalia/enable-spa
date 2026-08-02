@@ -73,7 +73,11 @@ describe("createDeviceChecklistTemplate", () => {
   it("delegates to the core createTemplate and creates the template when the authenticated user is admin", async () => {
     const result = await createDeviceChecklistTemplate.run(
       buildRequest(
-        { category: "Kinetic Hand", title: "Checklist Kinetic Hand", items: ["Stampa dita"] },
+        {
+          category: "Kinetic Hand",
+          title: "Checklist Kinetic Hand",
+          items: [{ title: "Stampa dita", type: "generic" }],
+        },
         "admin-1"
       )
     );
@@ -84,7 +88,7 @@ describe("createDeviceChecklistTemplate", () => {
       expect.objectContaining({
         category: "Kinetic Hand",
         title: "Checklist Kinetic Hand",
-        items: [{ title: "Stampa dita", quantity: null }],
+        items: [{ title: "Stampa dita", type: "generic", quantity: null }],
       })
     );
     expect(result).toEqual({ templateId: GENERATED_TEMPLATE_ID });
