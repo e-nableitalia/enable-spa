@@ -43,8 +43,8 @@ describe("createTemplate", () => {
 
   it("creates the templates/{templateId} document with category, title, items and createdAt", async () => {
     const items = [
-      { title: "Prepara stampante", quantity: 2 },
-      "Verifica materiale",
+      { title: "Prepara stampante", type: "boolean", quantity: 2 },
+      { title: "Verifica materiale", type: "generic" },
     ];
 
     await createTemplate.run(
@@ -59,11 +59,79 @@ describe("createTemplate", () => {
       category: "devicetype-arto-superiore",
       title: "Template evento",
       items: [
-        { title: "Prepara stampante", quantity: 2 },
-        { title: "Verifica materiale", quantity: null },
+        { title: "Prepara stampante", type: "boolean", quantity: 2 },
+        { title: "Verifica materiale", type: "generic", quantity: null },
       ],
       createdAt: SERVER_TIMESTAMP_SENTINEL,
     });
+  });
+
+  // Scenario 1: createTemplate con item type valido
+  it.each(["boolean", "generic", "numeric"] as const)(
+    "creates the item with the provided type '%s'",
+    async (type) => {
+      await createTemplate.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Template mano",
+          items: [{ title: "Verifica dita", type }],
+        })
+      );
+
+      const [savedDocument] = setMock.mock.calls[0];
+      expect(savedDocument.items[0].type).toBe(type);
+    }
+  );
+
+  // Scenario 2: createTemplate con item senza type o non valido
+  it("throws invalid-argument when an item has no type", async () => {
+    await expect(
+      createTemplate.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Template mano",
+          items: [{ title: "Verifica dita" }],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2: createTemplate con item senza type o non valido
+  it("throws invalid-argument when an item has a type not among the 3 allowed", async () => {
+    await expect(
+      createTemplate.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Template mano",
+          items: [{ title: "Verifica dita", type: "unknown-type" }],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2: lo shorthand a stringa non porta un type esplicito, quindi è rifiutato
+  it("throws invalid-argument when an item is a bare string (no type)", async () => {
+    await expect(
+      createTemplate.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Template mano",
+          items: ["Verifica dita"],
+        })
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+    );
+
+    expect(setMock).not.toHaveBeenCalled();
   });
 
   it("returns the generated templateId to the consumer", async () => {

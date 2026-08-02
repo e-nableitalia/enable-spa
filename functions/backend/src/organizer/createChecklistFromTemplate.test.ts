@@ -70,8 +70,8 @@ describe("createChecklistFromTemplate", () => {
         category: "devicetype-arto-superiore",
         title: "Checklist stampa standard",
         items: [
-          { title: "Prepara stampante", quantity: 2 },
-          { title: "Verifica materiale", quantity: null },
+          { title: "Prepara stampante", type: "boolean", quantity: 2 },
+          { title: "Verifica materiale", type: "numeric", quantity: null },
         ],
       },
     };
@@ -89,6 +89,7 @@ describe("createChecklistFromTemplate", () => {
       {
         id: expect.any(String),
         title: "Prepara stampante",
+        type: "boolean",
         assignee: null,
         quantity: 2,
         notes: "",
@@ -98,6 +99,7 @@ describe("createChecklistFromTemplate", () => {
       {
         id: expect.any(String),
         title: "Verifica materiale",
+        type: "numeric",
         assignee: null,
         quantity: null,
         notes: "",
@@ -109,6 +111,51 @@ describe("createChecklistFromTemplate", () => {
     // ogni item clonato ha un id univoco generato per la nuova istanza.
     const ids = savedDocument.items.map((item: { id: string }) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("propagates the type of each template item onto the cloned instance item (Scenario 1)", async () => {
+    templatesStore[TEMPLATE_ID] = {
+      category: "devicetype-arto-superiore",
+      title: "Checklist stampa standard",
+      items: [
+        { title: "Item booleano", type: "boolean", quantity: null },
+        { title: "Item generico", type: "generic", quantity: null },
+        { title: "Item numerico", type: "numeric", quantity: 3 },
+      ],
+    };
+
+    await createChecklistFromTemplate.run(
+      buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
+    );
+
+    const [savedDocument] = setMock.mock.calls[0];
+    expect(savedDocument.items.map((item: { type: string }) => item.type)).toEqual([
+      "boolean",
+      "generic",
+      "numeric",
+    ]);
+    // status/assignee/completed restano ai valori iniziali di una nuova istanza,
+    // indipendentemente dal type propagato.
+    for (const item of savedDocument.items) {
+      expect(item.status).toBe("Assegnare");
+      expect(item.assignee).toBeNull();
+      expect(item.completed).toBe(false);
+    }
+  });
+
+  it("defaults type to 'generic' when a legacy template item has no type (pre-EA-125 data)", async () => {
+    templatesStore[TEMPLATE_ID] = {
+      category: "devicetype-arto-superiore",
+      title: "Checklist legacy",
+      items: [{ title: "Item legacy senza type", quantity: null }],
+    };
+
+    await createChecklistFromTemplate.run(
+      buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
+    );
+
+    const [savedDocument] = setMock.mock.calls[0];
+    expect(savedDocument.items[0].type).toBe("generic");
   });
 
   it("registers fromTemplate as a historical reference to the source template", async () => {

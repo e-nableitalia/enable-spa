@@ -3,13 +3,14 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus } from "./checklistItemStatus";
+import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus, ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
 
 const REGION = "europe-west1";
 
 interface ChecklistItem {
   id: string;
   title: string;
+  type: ChecklistItemType;
   assignee: string | null;
   quantity: number | null;
   notes: string;
@@ -19,6 +20,7 @@ interface ChecklistItem {
 
 interface SourceChecklistItem {
   title: unknown;
+  type: unknown;
   quantity: unknown;
 }
 
@@ -27,18 +29,28 @@ interface SourceChecklistItem {
  * nuova istanza.
  *
  * Logica di clonazione (Epic EA-3, riferimento `useWorkshopAsTemplate` nel
- * mockup allegato): titolo e quantità vengono copiati dalla sorgente,
- * mentre stato, assegnatario e flag di completamento vengono sempre
- * azzerati, indipendentemente dallo stato di avanzamento che l'item aveva
- * nella sorgente — si riparte sempre da zero.
+ * mockup allegato; aggiornata da EA-126): titolo, type e quantità vengono
+ * copiati dalla sorgente, mentre stato, assegnatario e flag di
+ * completamento vengono sempre azzerati, indipendentemente dallo stato di
+ * avanzamento che l'item aveva nella sorgente — si riparte sempre da zero,
+ * ma senza perdere il type dell'item.
+ *
+ * `type` è garantito valorizzato su ogni item di istanza a valle di EA-123
+ * (`normalizeInitialItem` lo richiede e valida in creazione). Per le
+ * istanze create prima di EA-123 (privi di `type` in Firestore), si applica
+ * lo stesso default transitorio `"generic"` già usato altrove per dati
+ * storici (vedi `docs/FINDINGS.md` F-8), invece di propagare un `undefined`
+ * che romperebbe l'invariante "type sempre valorizzato" sulla nuova istanza.
  */
 function cloneSourceItem(sourceItem: SourceChecklistItem): ChecklistItem {
   const title = typeof sourceItem?.title === "string" ? sourceItem.title : "";
+  const type: ChecklistItemType = isChecklistItemType(sourceItem?.type) ? sourceItem.type : "generic";
   const quantity = typeof sourceItem?.quantity === "number" ? sourceItem.quantity : null;
 
   return {
     id: crypto.randomUUID(),
     title,
+    type,
     assignee: null,
     quantity,
     notes: "",
@@ -65,10 +77,10 @@ function cloneSourceItem(sourceItem: SourceChecklistItem): ChecklistItem {
  *   sovrascrivere quello della sorgente. Se omesso, la categoria è
  *   ereditata dalla sorgente.
  *
- * Copia gli item della sorgente nella nuova istanza (titolo e quantità
- * copiati, stato impostato ad 'Assegnare', assegnatario a null e flag di
- * completamento a false su ciascun item clonato, indipendentemente dallo
- * stato che avevano nella sorgente). Registra `clonedFrom:
+ * Copia gli item della sorgente nella nuova istanza (titolo, type e
+ * quantità copiati, stato impostato ad 'Assegnare', assegnatario a null e
+ * flag di completamento a false su ciascun item clonato, indipendentemente
+ * dallo stato che avevano nella sorgente). Registra `clonedFrom:
  * <sourceChecklistId>` come riferimento storico, non come dipendenza viva:
  * la sorgente può essere modificata o eliminata in seguito senza che la
  * nuova istanza ne risenta.
