@@ -16,8 +16,11 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 
 // ---- Types ----
 
+const CHECKLIST_ITEM_TYPES = ["boolean", "generic", "numeric"];
+
 interface TemplateItemForm {
   title: string;
+  type: string;
   quantity: number | null;
 }
 
@@ -32,7 +35,7 @@ interface TemplateForm {
   items: TemplateItemForm[];
 }
 
-const EMPTY_ITEM: TemplateItemForm = { title: "", quantity: null };
+const EMPTY_ITEM: TemplateItemForm = { title: "", type: "generic", quantity: null };
 
 const EMPTY_TEMPLATE_FORM: TemplateForm = {
   title: "",
@@ -160,7 +163,7 @@ export default function AdminChecklistTemplatesPage() {
     try {
       const items = templateForm.items
         .filter((item) => item.title.trim() !== "")
-        .map((item) => ({ title: item.title.trim(), quantity: item.quantity }));
+        .map((item) => ({ title: item.title.trim(), type: item.type, quantity: item.quantity }));
 
       if (editingTemplate) {
         const fn = httpsCallable<
@@ -353,6 +356,12 @@ export default function AdminChecklistTemplatesPage() {
                     onChange={(e) => updateItemRow(index, { title: e.target.value })}
                     placeholder="Titolo item"
                     style={{ flex: 1 }}
+                  />
+                  <Dropdown
+                    value={item.type}
+                    options={CHECKLIST_ITEM_TYPES}
+                    onChange={(e) => updateItemRow(index, { type: e.value })}
+                    style={{ width: 120 }}
                   />
                   <InputNumber
                     value={item.quantity}
