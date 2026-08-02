@@ -30,10 +30,11 @@ export const updateDeviceRequestChecklistItem = onCall(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
-    const { requestId, itemId, title, status, assignee, quantity, notes } = request.data as {
+    const { requestId, itemId, title, type, status, assignee, quantity, notes } = request.data as {
       requestId?: string;
       itemId?: string;
       title?: string;
+      type?: string;
       status?: string;
       assignee?: string | null;
       quantity?: number | null;
@@ -49,7 +50,7 @@ export const updateDeviceRequestChecklistItem = onCall(
 
     const result = (await updateChecklistItem.run({
       ...request,
-      data: { checklistId, itemId, title, status, assignee, quantity, notes },
+      data: { checklistId, itemId, title, type, status, assignee, quantity, notes },
     } as CallableRequest)) as { success: boolean };
 
     console.log(

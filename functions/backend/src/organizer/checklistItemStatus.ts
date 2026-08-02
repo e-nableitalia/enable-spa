@@ -12,10 +12,11 @@
  * valori di stato: sono semplicemente le quattro fasi previste dal modello
  * v1 (vedi process-organizer-core-newfeature.md).
  *
- * `CHECKLIST_ITEM_TYPES` e `isChecklistItemType` sono un prerequisito
- * strutturale per il discriminante `type` che verrà introdotto sulle
- * funzioni CRUD nelle Story successive di questa Epic: qui vengono solo
- * esposti, non ancora richiamati da nessuna Cloud Function.
+ * `CHECKLIST_ITEM_TYPES` e `isChecklistItemType` sono il discriminante
+ * `type` degli item di checklist, validato da `createChecklist` (EA-123),
+ * `addChecklistItem` e `updateChecklistItem` (EA-124). Le rimanenti
+ * funzioni CRUD del core (`cloneChecklist`, `createChecklistFromTemplate`)
+ * lo adotteranno nelle Story successive di questa Epic.
  */
 
 export const CHECKLIST_ITEM_STATUSES = ["Assegnare", "Da iniziare", "In corso", "Completata"] as const;
