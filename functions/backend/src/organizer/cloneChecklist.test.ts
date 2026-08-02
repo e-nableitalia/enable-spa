@@ -75,6 +75,7 @@ describe("cloneChecklist", () => {
           {
             id: "item-1",
             title: "Prepara stampante",
+            type: "boolean",
             assignee: "vol-1",
             quantity: 2,
             notes: "Nota storica",
@@ -84,6 +85,7 @@ describe("cloneChecklist", () => {
           {
             id: "item-2",
             title: "Verifica materiale",
+            type: "numeric",
             assignee: null,
             quantity: null,
             notes: "",
@@ -107,6 +109,7 @@ describe("cloneChecklist", () => {
       {
         id: expect.any(String),
         title: "Prepara stampante",
+        type: "boolean",
         assignee: null,
         quantity: 2,
         notes: "",
@@ -116,6 +119,7 @@ describe("cloneChecklist", () => {
       {
         id: expect.any(String),
         title: "Verifica materiale",
+        type: "numeric",
         assignee: null,
         quantity: null,
         notes: "",
@@ -137,8 +141,8 @@ describe("cloneChecklist", () => {
       category: "devicetype-arto-superiore",
       title: "Checklist completata",
       items: [
-        { id: "item-1", title: "Task A", assignee: "vol-1", quantity: 1, notes: "x", status: "Completata", completed: true },
-        { id: "item-2", title: "Task B", assignee: "vol-2", quantity: 3, notes: "y", status: "Completata", completed: true },
+        { id: "item-1", title: "Task A", type: "generic", assignee: "vol-1", quantity: 1, notes: "x", status: "Completata", completed: true },
+        { id: "item-2", title: "Task B", type: "numeric", assignee: "vol-2", quantity: 3, notes: "y", status: "Completata", completed: true },
       ],
     };
 
@@ -156,6 +160,46 @@ describe("cloneChecklist", () => {
     expect(savedDocument.items[0].quantity).toBe(1);
     expect(savedDocument.items[1].title).toBe("Task B");
     expect(savedDocument.items[1].quantity).toBe(3);
+  });
+
+  it("propagates the type of the source item onto the cloned instance item, regardless of source progress (Scenario 2)", async () => {
+    checklistsStore[SOURCE_CHECKLIST_ID] = {
+      category: "devicetype-arto-superiore",
+      title: "Checklist con item in stati diversi",
+      items: [
+        { id: "item-1", title: "Item boolean completato", type: "boolean", assignee: "vol-1", quantity: null, notes: "", status: "Completata", completed: true },
+        { id: "item-2", title: "Item generic non iniziato", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+        { id: "item-3", title: "Item numeric in corso", type: "numeric", assignee: "vol-2", quantity: 5, notes: "", status: "In corso", completed: false },
+      ],
+    };
+
+    await cloneChecklist.run(
+      buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
+    );
+
+    const [savedDocument] = setMock.mock.calls[0];
+    expect(savedDocument.items.map((item: { type: string }) => item.type)).toEqual([
+      "boolean",
+      "generic",
+      "numeric",
+    ]);
+  });
+
+  it("defaults type to 'generic' when a legacy source item has no type (pre-EA-123 data)", async () => {
+    checklistsStore[SOURCE_CHECKLIST_ID] = {
+      category: "devicetype-arto-superiore",
+      title: "Checklist legacy",
+      items: [
+        { id: "item-1", title: "Item legacy senza type", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+      ],
+    };
+
+    await cloneChecklist.run(
+      buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
+    );
+
+    const [savedDocument] = setMock.mock.calls[0];
+    expect(savedDocument.items[0].type).toBe("generic");
   });
 
   it("registers clonedFrom as a historical reference to the source checklist", async () => {
