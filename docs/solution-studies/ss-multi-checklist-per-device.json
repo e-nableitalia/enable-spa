@@ -1,6 +1,6 @@
 {
   "id": "ss-multi-checklist-per-device",
-  "status": "draft",
+  "status": "decided",
   "request_ref": "requests/ss-multi-checklist-per-device.md",
   "problem_statement": "Il layer di integrazione device-requests (Epic EA-108) assume oggi ovunque una relazione 1:1 tra una `deviceRequest` e la sua checklist operativa del core Organizer: `deviceRequests/{id}.checklistId` e' un campo singolare, scritto una sola volta da `createDeviceRequestChecklist`/`cloneDeviceRequestChecklist` (entrambe falliscono con `already-exists` se il campo e' gia' valorizzato) e letto come tale da `resolveDeviceRequestChecklistAccess` (usata da `getDeviceRequestChecklist`, `getDeviceRequestChecklistCompleteness`, `addDeviceRequestChecklistItem`, `updateDeviceRequestChecklistItem`, `removeDeviceRequestChecklistItem`), da `createChecklistShareLink`/`getChecklistShareStatus`, e dall'unico pannello `ChecklistPanel.tsx` mostrato in `RequestDetail.tsx`. Il problema di fondo non e' la UI a pannello singolo ne' l'auto-selezione del template (sintomi correlati ma distinti): e' che il modello dati attuale non puo' rappresentare piu' di una checklist indipendente per la stessa richiesta, mentre esistono casi d'uso legittimi in cui un device richiede piu' checklist parallele con owner/scopo diversi (es. fabbricazione + collaudo/qualita', o piu' fasi distinte). Questo studio esplora come rappresentare quella cardinalita' 1:N, trattando la direzione 'campo array su deviceRequest' proposta nella richiesta come una delle opzioni possibili, non come una decisione gia' presa.",
   "constraints": [
@@ -19,7 +19,9 @@
       "name": "Campo array `checklistIds: string[]` su `deviceRequest`, stesso pattern di `assignedVolunteers`",
       "summary": "Sostituire `deviceRequests/{id}.checklistId` (singolare) con `checklistIds: string[]` sul documento principale, popolato in ordine di creazione/clonazione. `createDeviceRequestChecklist`/`cloneDeviceRequestChecklist` fanno `arrayUnion` invece di assegnare e sostituire il vincolo `already-exists` con un limite di cardinalita' esplicito (o nessun limite). `resolveDeviceRequestChecklistAccess` viene esteso per richiedere anche un `checklistId` esplicito dal chiamante, verificato per appartenenza all'array invece di essere risolto implicitamente. In UI, `RequestDetail.tsx` sostituisce il pannello singolo con una vista a tab (una per checklist), ciascuna che monta `ChecklistPanel` passando il `checklistId` esplicito della tab attiva.",
       "domain_impact": {
-        "existing_domains_touched": ["device-requests"],
+        "existing_domains_touched": [
+          "device-requests"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "Risoluzione RBAC per coppia (requestId, checklistId) invece che per solo requestId",
@@ -62,7 +64,9 @@
       "name": "Sottocollezione di riferimenti `deviceRequests/{id}/checklists/{linkId}`, ciascuno con metadati propri",
       "summary": "Introdurre una sottocollezione di documenti di collegamento (non le checklist stesse, che restano nella collezione `checklists` del core Organizer, rispettando il confine EA-3): ogni documento `deviceRequests/{id}/checklists/{linkId}` contiene `{checklistId, label?, createdAt, createdBy}`, dove `label` e' un metadato opaco al core ma di prima classe nel layer device-requests (es. 'fabbricazione', 'collaudo'). Stesso pattern gia' presente nello stesso documento per `events`. `createDeviceRequestChecklist`/`cloneDeviceRequestChecklist` creano un nuovo documento di collegamento invece di scrivere un campo sul padre; le funzioni di lettura/scrittura item accettano `linkId` (o `checklistId` risolto tramite di esso) per individuare la checklist target.",
       "domain_impact": {
-        "existing_domains_touched": ["device-requests"],
+        "existing_domains_touched": [
+          "device-requests"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "Gestione della sottocollezione checklist-link (CRUD sui documenti di collegamento, non sulle checklist stesse)",
@@ -105,7 +109,9 @@
       "name": "Nessun cambio di cardinalita' checklist: modellare le fasi come `deviceRequest` collegate tra loro (1:1 checklist preservato)",
       "summary": "Non toccare affatto l'invariante 1:1 checklist<->deviceRequest ne' alcuna delle 9 Cloud Function esistenti del layer device-requests. Introdurre invece un nuovo concetto di collegamento tra `deviceRequest` sorelle (es. `groupId` o `relatedRequestIds: string[]` sul documento principale, stesso pattern precedente di `assignedVolunteers`): una richiesta di 'collaudo' o una fase successiva diventa una nuova `deviceRequest` a se stante, con il proprio stato, i propri volontari assegnati e la propria checklist singola, collegata alla richiesta originaria solo per navigazione/raggruppamento in UI (una sezione 'richieste collegate' in `RequestDetail.tsx`, non tab sulla stessa checklist).",
       "domain_impact": {
-        "existing_domains_touched": ["device-requests"],
+        "existing_domains_touched": [
+          "device-requests"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "Relazione di raggruppamento tra deviceRequest (nuovo campo, nuova sezione UI di navigazione tra richieste collegate)",
@@ -149,5 +155,11 @@
     "option_id": "opt-a-checklist-ids-array",
     "rationale": "Option C risolve un problema diverso da quello descritto (frammenta la pratica invece di organizzare piu' checklist sotto la stessa pratica) e propaga rischio a domini adiacenti gia' stabili (AdminDashboard/AdminStats, notifiche) fuori dal perimetro device-requests/checklist dichiarato in questo studio: la scarto come prima scelta, e la subordino allo spike bloccante che propongo (verificare con chi ha validato lo staging se i casi reali sono davvero 'fasi indipendenti' prima di considerarla). Tra Option A e Option B la differenza pratica e' minore ma reale: Option B offre un posto piu' pulito per metadati per-checklist (label) sfruttando un pattern di sottocollezione gia' presente nello stesso documento (`events`), ma paga un'indirezione aggiuntiva (linkId->checklistId) e una lettura extra ovunque serva l'elenco, senza risolvere un problema che Option A non abbia gia' (entrambe richiedono comunque il cambio di firma breaking sulle 5 Cloud Function esistenti). Raccomando Option A perche' e' l'estensione piu' diretta di un pattern gia' validato nello stesso documento (`assignedVolunteers`), non introduce indirezioni aggiuntive nelle chiamate piu' frequenti (lettura/scrittura item), e il suo con piu' rilevante — l'assenza di un posto per un'etichetta per-checklist — puo' essere assorbito in un secondo momento passando da `checklistIds: string[]` a un array di oggetti `{checklistId, label}` con una migrazione incrementale, se il bisogno di etichettatura si conferma reale, senza dover ripartire da una sottocollezione. Punti aperti da decidere esplicitamente al gate, non coperti dalla scelta tra le tre opzioni: (1) se e come `createChecklistShareLink`/`getChecklistShareStatus` debbano accettare un checklistId esplicito o restare scoped a un'unica checklist 'principale' per richiesta anche in un modello 1:N; (2) se imporre un limite di cardinalita' a `checklistIds`; (3) la scelta esplicita del template quando ne esistono piu' per lo stesso devicetype, gia' segnalata dalla richiesta come possibile cambio indipendente."
   },
-  "decision": null
+  "decision": {
+    "option_id": "opt-a-checklist-ids-array",
+    "decided_by": "human:Alberto Navatta",
+    "decided_at": "2026-08-03T06:24:46.373Z",
+    "rationale": "Le checklist vivono già in una collection indipendente dal core Organizer, riusabile senza legame al device o al template — deviceRequest.checklistIds è solo un array di riferimenti, coerente con questo disaccoppiamento già esistente e con il pattern già validato di assignedVolunteers. Scartate Opt B (indirezione aggiuntiva senza vantaggio reale dato che il disaccoppiamento che cercavo è già garantito dal core) e Opt C (risolve un problema diverso, frammenta la pratica).",
+    "accepted_open_spikes": []
+  }
 }
