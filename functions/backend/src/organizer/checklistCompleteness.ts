@@ -8,15 +8,21 @@
  * limita a esporre lo stato, il consumer decide cosa fare dell'esito
  * (es. sbloccare una transizione di stato altrove).
  *
- * Definizione di completezza di un item (riferimento: `canConfirm` nel
- * mockup allegato all'Epic):
- * - l'assegnatario è valorizzato (non null, non stringa vuota/whitespace);
- * - la quantità è valorizzata SE l'item ha il campo quantità: la presenza
- *   della chiave `quantity` (anche con valore `null`) indica che la
- *   quantità è rilevante per quell'item e quindi deve essere valorizzata;
- *   se la chiave è del tutto assente (`undefined`), l'item non richiede
- *   quantità e il controllo viene ignorato per quell'item;
- * - lo stato è diverso da "Assegnare" (stato iniziale del modello v1).
+ * Definizione di completezza di un item (EA-127): il calcolo dipende dal
+ * `type` dell'item ('boolean' | 'generic' | 'numeric', vedi
+ * `checklistItemStatus.ts`), oltre all'assegnatario sempre richiesto:
+ * - l'assegnatario è valorizzato (non null, non stringa vuota/whitespace)
+ *   in tutti i casi;
+ * - `boolean`: completo se `completed === true`, indipendentemente da
+ *   `status` e `quantity`;
+ * - `generic`: completo se `status === 'Completata'` (corregge il bug per
+ *   cui qualunque stato diverso da "Assegnare", incluso "Da iniziare" e
+ *   "In corso", risultava completo);
+ * - `numeric`: come `generic`, più la quantità valorizzata (non `null`,
+ *   non `undefined`);
+ * - `type` assente o non riconosciuto (item legacy pre-EA-123): trattato
+ *   come `generic`, l'unico calcolo esprimibile con i soli campi
+ *   storicamente disponibili (`status`, senza `completed`).
  *
  * Una checklist è completa quando TUTTI i suoi item lo sono. Una
  * checklist senza item è considerata completa (nessun item incompleto).
@@ -29,12 +35,14 @@
  * indipendente da come il consumer rappresenta i propri item.
  */
 export interface ChecklistItemLike {
+  type?: string | null;
   assignee?: string | null;
   quantity?: number | null;
   status: string;
+  completed?: boolean | null;
 }
 
-const INITIAL_STATUS = "Assegnare";
+const COMPLETED_STATUS = "Completata";
 
 /**
  * Verifica se l'assegnatario di un item è valorizzato.
@@ -44,37 +52,57 @@ function hasAssignee(item: ChecklistItemLike): boolean {
 }
 
 /**
- * Verifica se il campo quantità, quando rilevante (presente sull'item),
- * è valorizzato. Se il campo non è presente sull'item, la quantità non è
- * rilevante per quell'item e il controllo è considerato soddisfatto.
+ * Verifica se la quantità di un item è valorizzata (non `null`, non
+ * `undefined`). Usato solo per gli item `numeric`, per cui la quantità è
+ * per definizione rilevante.
  */
-function hasQuantityWhenRelevant(item: ChecklistItemLike): boolean {
-  const isQuantityRelevant = Object.prototype.hasOwnProperty.call(item, "quantity") &&
-    item.quantity !== undefined;
-
-  if (!isQuantityRelevant) {
-    return true;
-  }
-
-  return item.quantity !== null;
+function hasQuantity(item: ChecklistItemLike): boolean {
+  return item.quantity !== null && item.quantity !== undefined;
 }
 
 /**
- * Verifica se lo stato di un item è diverso dallo stato iniziale
- * "Assegnare".
+ * Verifica se lo stato di un item è "Completata".
  */
-function hasProgressedPastInitialStatus(item: ChecklistItemLike): boolean {
-  return item.status !== INITIAL_STATUS;
+function hasCompletedStatus(item: ChecklistItemLike): boolean {
+  return item.status === COMPLETED_STATUS;
 }
 
 /**
- * Restituisce true se il singolo item soddisfa tutti i criteri di
- * completezza.
+ * Item `boolean`: completo se assegnatario valorizzato e `completed === true`.
+ */
+function isBooleanItemComplete(item: ChecklistItemLike): boolean {
+  return hasAssignee(item) && item.completed === true;
+}
+
+/**
+ * Item `generic` (o item legacy privi di `type`): completo se assegnatario
+ * valorizzato e stato "Completata".
+ */
+function isGenericItemComplete(item: ChecklistItemLike): boolean {
+  return hasAssignee(item) && hasCompletedStatus(item);
+}
+
+/**
+ * Item `numeric`: come `generic`, più la quantità valorizzata.
+ */
+function isNumericItemComplete(item: ChecklistItemLike): boolean {
+  return isGenericItemComplete(item) && hasQuantity(item);
+}
+
+/**
+ * Restituisce true se il singolo item soddisfa i criteri di completezza
+ * previsti per il suo `type`.
  */
 export function isChecklistItemComplete(item: ChecklistItemLike): boolean {
-  return hasAssignee(item) &&
-    hasQuantityWhenRelevant(item) &&
-    hasProgressedPastInitialStatus(item);
+  if (item.type === "boolean") {
+    return isBooleanItemComplete(item);
+  }
+
+  if (item.type === "numeric") {
+    return isNumericItemComplete(item);
+  }
+
+  return isGenericItemComplete(item);
 }
 
 /**
