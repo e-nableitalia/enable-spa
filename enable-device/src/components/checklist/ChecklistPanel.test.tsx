@@ -139,4 +139,27 @@ describe("ChecklistPanel - colonna Quantità condizionale sul type dell'item", (
     await selectDropdownOption(user, typeTrigger, "Quantità numerica");
     expect(within(dialog).getByRole("spinbutton")).toBeInTheDocument();
   });
+
+  it("Il bottone 'Aggiungi' resta disabilitato finché non è selezionato un Tipo, anche con il Titolo compilato", async () => {
+    mockChecklist([]);
+    const user = userEvent.setup();
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Aggiungi item" }));
+    const dialog = screen.getByRole("dialog");
+    const addButton = within(dialog).getByRole("button", { name: "Aggiungi" });
+
+    // Solo Titolo compilato (primo campo testuale del dialog), nessun Tipo
+    // selezionato: il bottone resta disabilitato.
+    const titleInput = within(dialog).getAllByRole("textbox")[0];
+    await user.type(titleInput, "Verifica dita");
+    expect(addButton).toBeDisabled();
+
+    // Selezionato un Tipo: il bottone si abilita.
+    const typeTrigger = within(dialog).getByRole("button", { name: "Seleziona il tipo" });
+    await selectDropdownOption(user, typeTrigger, "Generico");
+    expect(addButton).not.toBeDisabled();
+  });
 });

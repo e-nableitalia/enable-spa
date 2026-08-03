@@ -428,7 +428,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
               label="Aggiungi"
               icon="pi pi-plus"
               loading={addingItem}
-              disabled={!newItem.title.trim()}
+              disabled={!newItem.title.trim() || !newItem.type}
               onClick={addItem}
             />
           </div>
