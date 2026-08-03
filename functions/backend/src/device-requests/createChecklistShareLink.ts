@@ -15,8 +15,10 @@ const SHARE_BASE_URL = "https://app.e-nableitalia.it";
  * `deviceRequest` (Story EA-113, livello famiglia/visibilita' esterna,
  * unico tier di condivisione a link previsto dall'Epic).
  *
- * Riceve dal consumer `requestId`: risolve `checklistId` e applica lo
- * stesso controllo RBAC delle altre Cloud Function del layer
+ * Riceve dal consumer `requestId` e `checklistId` (EA-131: `checklistId`
+ * esplicito, non più risolto implicitamente, stesso cambio di contratto
+ * applicato alle 5 Cloud Function del layer): applica lo stesso controllo
+ * RBAC e la verifica di appartenenza a `checklistIds`
  * (`deviceRequestChecklistAccess.ts` — admin o volontario assegnato).
  *
  * Il token e' persistito lato server nella collection
@@ -40,13 +42,16 @@ export const createChecklistShareLink = onCall(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
-    const { requestId } = request.data as { requestId?: string };
+    const { requestId, checklistId } = request.data as { requestId?: string; checklistId?: string };
     if (!requestId || typeof requestId !== "string") {
       throw new HttpsError("invalid-argument", "Missing parameter: requestId");
     }
+    if (!checklistId || typeof checklistId !== "string") {
+      throw new HttpsError("invalid-argument", "Missing parameter: checklistId");
+    }
 
     const db = getFirestore();
-    const { checklistId } = await resolveDeviceRequestChecklistAccess(db, uid, requestId);
+    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
 
     const existingSnap = await db
       .collection("checklistShareLinks")

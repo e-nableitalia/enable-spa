@@ -95,6 +95,10 @@ describe("updateDeviceRequestChecklistItem", () => {
     deviceRequestsStore = {
       "req-1": {
         assignedVolunteers: ["volunteer-1"],
+        checklistIds: [CHECKLIST_ID],
+      },
+      "req-legacy": {
+        assignedVolunteers: ["volunteer-1"],
         checklistId: CHECKLIST_ID,
       },
     };
@@ -121,6 +125,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       buildRequest(
         {
           requestId: "req-1",
+          checklistId: CHECKLIST_ID,
           itemId: "item-1",
           assignee: "volunteer-1",
           quantity: 3,
@@ -146,6 +151,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       buildRequest(
         {
           requestId: "req-1",
+          checklistId: CHECKLIST_ID,
           itemId: "item-1",
           type: "numeric",
         },
@@ -160,7 +166,10 @@ describe("updateDeviceRequestChecklistItem", () => {
 
   it("allows a volunteer assigned to the request to update an item", async () => {
     const result = await updateDeviceRequestChecklistItem.run(
-      buildRequest({ requestId: "req-1", itemId: "item-1", status: "Da iniziare" }, "volunteer-1")
+      buildRequest(
+        { requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", status: "Da iniziare" },
+        "volunteer-1"
+      )
     );
 
     expect(result).toEqual({ success: true });
@@ -169,7 +178,10 @@ describe("updateDeviceRequestChecklistItem", () => {
   it("denies updating an item to a volunteer not assigned to the request", async () => {
     await expect(
       updateDeviceRequestChecklistItem.run(
-        buildRequest({ requestId: "req-1", itemId: "item-1", status: "In corso" }, "volunteer-2")
+        buildRequest(
+          { requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", status: "In corso" },
+          "volunteer-2"
+        )
       )
     ).rejects.toMatchObject(
       new HttpsError("permission-denied", "Only admin or assigned volunteers can access the checklist for this request")
@@ -178,10 +190,36 @@ describe("updateDeviceRequestChecklistItem", () => {
     expect(checklistUpdateMock).not.toHaveBeenCalled();
   });
 
+  // Scenario 3 (EA-131): checklistId non appartenente a checklistIds -> not-found.
+  it("throws not-found when checklistId does not belong to checklistIds of the request", async () => {
+    await expect(
+      updateDeviceRequestChecklistItem.run(
+        buildRequest(
+          { requestId: "req-1", checklistId: "other-checklist", itemId: "item-1", status: "In corso" },
+          "admin-1"
+        )
+      )
+    ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this device request"));
+
+    expect(checklistUpdateMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 5 (EA-131): richiesta legacy con solo checklistId singolare -> risolta comunque.
+  it("resolves access for a legacy request with only the singular checklistId field", async () => {
+    const result = await updateDeviceRequestChecklistItem.run(
+      buildRequest(
+        { requestId: "req-legacy", checklistId: CHECKLIST_ID, itemId: "item-1", status: "In corso" },
+        "volunteer-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+  });
+
   it("throws unauthenticated when there is no auth context", async () => {
     await expect(
       updateDeviceRequestChecklistItem.run(
-        buildRequest({ requestId: "req-1", itemId: "item-1", status: "In corso" }, null)
+        buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", status: "In corso" }, null)
       )
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
 
@@ -190,15 +228,30 @@ describe("updateDeviceRequestChecklistItem", () => {
 
   it("throws invalid-argument when requestId is missing", async () => {
     await expect(
-      updateDeviceRequestChecklistItem.run(buildRequest({ itemId: "item-1", status: "In corso" }, "admin-1"))
+      updateDeviceRequestChecklistItem.run(
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: "item-1", status: "In corso" }, "admin-1")
+      )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: requestId"));
+
+    expect(checklistUpdateMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2 (EA-131): vecchio contratto (solo requestId, senza checklistId) -> invalid-argument.
+  it("throws invalid-argument when checklistId is missing", async () => {
+    await expect(
+      updateDeviceRequestChecklistItem.run(
+        buildRequest({ requestId: "req-1", itemId: "item-1", status: "In corso" }, "admin-1")
+      )
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: checklistId"));
 
     expect(checklistUpdateMock).not.toHaveBeenCalled();
   });
 
   it("propagates invalid-argument from the core updateChecklistItem when itemId is missing", async () => {
     await expect(
-      updateDeviceRequestChecklistItem.run(buildRequest({ requestId: "req-1", status: "In corso" }, "admin-1"))
+      updateDeviceRequestChecklistItem.run(
+        buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID, status: "In corso" }, "admin-1")
+      )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing itemId"));
 
     expect(checklistUpdateMock).not.toHaveBeenCalled();
