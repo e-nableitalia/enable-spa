@@ -98,3 +98,13 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/checklistCompleteness.test.ts` — describe "type assente o non riconosciuto (item legacy pre-EA-123)"
 - **Story/PR/sessione di provenienza**: Story Jira EA-127 "Checklist item: il gate di completezza distingue il calcolo per `type`...", sessione 2026-08-03.
 - **Stato**: da decidere. Proposta: task Jira nell'Epic EA-3 per confermare (o correggere) questa scelta di fallback, valutando anche se serva un backfill del campo `type` sui documenti `checklists/{id}` esistenti in produzione creati prima di EA-123, riferimento F-10.
+
+## F-11: Il ramo `boolean` del gate di completezza type-aware (EA-127) è irraggiungibile in produzione: nessuna funzione scrive mai `completed: true`
+
+- **Descrizione**: EA-127 introduce `isBooleanItemComplete` (completo se `assignee` valorizzato e `completed === true`), corretto e testato come funzione pura, ma nessuna Cloud Function in tutto il repo — né nel core Organizer né nel layer `device-requests` né nel frontend — scrive mai `completed: true` su un item. Le uniche scritture del campo sono `completed: false` in fase di creazione/clonazione (`createChecklist.ts`, `addChecklistItem.ts`, `cloneChecklist.ts`, `createChecklistFromTemplate.ts`); `updateChecklistItem.ts` non accetta `completed` tra i campi aggiornabili. Un item `type='boolean'` può quindi essere creato, ma non esiste oggi alcun percorso applicativo che lo faccia mai risultare completo — stessa classe di problema già documentata in [[F-5]] (un ramo del gate mai esercitato in produzione perché nessuna funzione lo rende raggiungibile).
+- **Evidenza**:
+  - `functions/backend/src/organizer/checklistCompleteness.ts` — `isBooleanItemComplete` referenzia `item.completed`
+  - `grep -rn "completed" functions/backend/src enable-device/src` — nessuna scrittura di `completed: true` in nessun file, in nessun layer
+  - `functions/backend/src/organizer/updateChecklistItem.ts` — campi aggiornabili: `title`/`type`/`status`/`assignee`/`quantity`/`notes`, mai `completed`
+- **Story/PR/sessione di provenienza**: rilevato durante la review della Story Jira EA-127 (Epic checklist item model), sessione 2026-08-03.
+- **Stato**: da decidere. Proposta: task Jira nell'Epic checklist-item-model per esporre la scrittura di `completed` (probabilmente in `updateChecklistItem`, simmetrico a come `status` è già aggiornabile) — senza questo, lo Scenario 1 di EA-127 resta un ramo di codice morto silenzioso, riferimento F-11.
