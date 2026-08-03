@@ -102,17 +102,17 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const getChecklistFn = httpsCallable<{ requestId: string }, ChecklistData>(
+      const getChecklistFn = httpsCallable<{ requestId: string; checklistId: string }, ChecklistData>(
         functions,
         "getDeviceRequestChecklist"
       );
-      const getCompletenessFn = httpsCallable<{ requestId: string }, { complete: boolean }>(
+      const getCompletenessFn = httpsCallable<{ requestId: string; checklistId: string }, { complete: boolean }>(
         functions,
         "getDeviceRequestChecklistCompleteness"
       );
       const [checklistResult, completenessResult] = await Promise.all([
-        getChecklistFn({ requestId }),
-        getCompletenessFn({ requestId }),
+        getChecklistFn({ requestId, checklistId }),
+        getCompletenessFn({ requestId, checklistId }),
       ]);
       setChecklist(checklistResult.data);
       setComplete(completenessResult.data.complete);
@@ -151,6 +151,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
       const fn = httpsCallable(functions, "updateDeviceRequestChecklistItem");
       await fn({
         requestId,
+        checklistId,
         itemId: item.id,
         title: draft.title,
         assignee: draft.assignee,
@@ -184,7 +185,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
         setRemovingItemId(item.id);
         try {
           const fn = httpsCallable(functions, "removeDeviceRequestChecklistItem");
-          await fn({ requestId, itemId: item.id });
+          await fn({ requestId, checklistId, itemId: item.id });
           toast.current?.show({ severity: "success", summary: "Item rimosso", life: 2500 });
           await load();
         } catch (err) {
@@ -208,6 +209,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
       const fn = httpsCallable(functions, "addDeviceRequestChecklistItem");
       await fn({
         requestId,
+        checklistId,
         title: newItem.title.trim(),
         type: newItem.type ?? undefined,
         assignee: newItem.assignee.trim() || undefined,
@@ -233,11 +235,11 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
   const generateShareLink = async () => {
     setGeneratingShareLink(true);
     try {
-      const fn = httpsCallable<{ requestId: string }, { token: string; url: string }>(
+      const fn = httpsCallable<{ requestId: string; checklistId: string }, { token: string; url: string }>(
         functions,
         "createChecklistShareLink"
       );
-      const result = await fn({ requestId });
+      const result = await fn({ requestId, checklistId: checklistId as string });
       setShareUrl(result.data.url);
     } catch (err) {
       toast.current?.show({
