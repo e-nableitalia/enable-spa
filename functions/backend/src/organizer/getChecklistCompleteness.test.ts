@@ -48,12 +48,13 @@ describe("getChecklistCompleteness", () => {
     collectionMock.mockReturnValue({ doc: docMock });
   });
 
-  // Scenario: checklist completa quando tutti gli item soddisfano assegnatario,
-  // quantità (se rilevante) e stato diverso da "Assegnare".
+  // Scenario: checklist completa quando tutti gli item soddisfano assegnatario
+  // e stato "Completata" (EA-127: calcolo type-aware, item senza `type`
+  // trattati come 'generic').
   it("returns complete: true when all items satisfy the completeness criteria", async () => {
     getMock.mockResolvedValue(
       buildChecklistSnapshot([
-        { id: "item-1", assignee: "Mario Rossi", quantity: 2, status: "In corso" },
+        { id: "item-1", assignee: "Mario Rossi", quantity: 2, status: "Completata" },
         { id: "item-2", assignee: "Luigi Bianchi", status: "Completata" },
       ])
     );
@@ -69,7 +70,7 @@ describe("getChecklistCompleteness", () => {
   it("returns complete: false when at least one item has no assignee", async () => {
     getMock.mockResolvedValue(
       buildChecklistSnapshot([
-        { id: "item-1", assignee: null, quantity: 2, status: "In corso" },
+        { id: "item-1", assignee: null, quantity: 2, status: "Completata" },
       ])
     );
 
@@ -78,12 +79,12 @@ describe("getChecklistCompleteness", () => {
     expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: false });
   });
 
-  // Scenario: checklist incompleta perché un item con campo quantità rilevante
-  // non lo ha valorizzato
-  it("returns complete: false when an item's quantity field is present but null", async () => {
+  // Scenario 4 (EA-127): checklist incompleta perché un item numeric con quantità
+  // rilevante non l'ha valorizzata
+  it("returns complete: false when a numeric item's quantity field is present but null", async () => {
     getMock.mockResolvedValue(
       buildChecklistSnapshot([
-        { id: "item-1", assignee: "Mario Rossi", quantity: null, status: "In corso" },
+        { id: "item-1", type: "numeric", assignee: "Mario Rossi", quantity: null, status: "Completata" },
       ])
     );
 
@@ -103,6 +104,37 @@ describe("getChecklistCompleteness", () => {
     const result = await getChecklistCompleteness.run(buildRequest({ checklistId: CHECKLIST_ID }));
 
     expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: false });
+  });
+
+  // Scenario 2 (EA-127): checklist incompleta perché un item generic è ancora
+  // 'Da iniziare' o 'In corso' (corregge il bug per cui qualunque stato diverso
+  // da "Assegnare" risultava completo)
+  it.each(["Da iniziare", "In corso"])(
+    "returns complete: false when a generic item's status is '%s'",
+    async (status) => {
+      getMock.mockResolvedValue(
+        buildChecklistSnapshot([
+          { id: "item-1", type: "generic", assignee: "Mario Rossi", quantity: 2, status },
+        ])
+      );
+
+      const result = await getChecklistCompleteness.run(buildRequest({ checklistId: CHECKLIST_ID }));
+
+      expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: false });
+    }
+  );
+
+  // Scenario 1 (EA-127): item boolean completo indipendentemente da status e quantity
+  it("returns complete: true for a boolean item with assignee set and completed=true, regardless of status/quantity", async () => {
+    getMock.mockResolvedValue(
+      buildChecklistSnapshot([
+        { id: "item-1", type: "boolean", assignee: "Mario Rossi", status: "Assegnare", completed: true },
+      ])
+    );
+
+    const result = await getChecklistCompleteness.run(buildRequest({ checklistId: CHECKLIST_ID }));
+
+    expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: true });
   });
 
   // Scenario: checklist senza item è considerata completa

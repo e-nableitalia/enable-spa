@@ -90,6 +90,25 @@ describe("getChecklistShareStatus", () => {
     expect(Object.keys(result as object)).toEqual(["percentComplete"]);
   });
 
+  // Scenario 6 (EA-127): il fix del gate di completezza si propaga
+  // automaticamente qui senza alcuna modifica a getChecklistShareStatus.ts:
+  // un item generic in 'In corso' non viene più conteggiato come completo.
+  it("does not count a generic item still 'In corso' as complete (type-aware gate propagation)", async () => {
+    checklistsStore = {
+      [CHECKLIST_ID]: {
+        title: "Checklist di fabbricazione",
+        items: [
+          { type: "generic", assignee: "Mario Rossi", quantity: 2, status: "In corso" },
+          { type: "generic", assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
+        ],
+      },
+    };
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({ percentComplete: 50 });
+  });
+
   it("returns 100% for a checklist without items", async () => {
     checklistsStore = { [CHECKLIST_ID]: { items: [] } };
 

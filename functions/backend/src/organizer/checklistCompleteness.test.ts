@@ -6,70 +6,153 @@ import {
 
 function buildItem(overrides: Partial<ChecklistItemLike> = {}): ChecklistItemLike {
   return {
+    type: "generic",
     assignee: "Mario Rossi",
     quantity: 3,
-    status: "Da iniziare",
+    status: "Completata",
+    completed: false,
     ...overrides,
   };
 }
 
 describe("isChecklistItemComplete", () => {
-  // Scenario: item completo con assegnatario, quantità e stato avanzato
-  it("returns true when assignee is set, quantity is set and status is not the initial one", () => {
-    expect(isChecklistItemComplete(buildItem())).toBe(true);
+  describe("type='boolean'", () => {
+    // Scenario 1: item boolean con assignee e completed=true è completo
+    it("returns true when assignee is set and completed is true, regardless of status and quantity", () => {
+      const item = buildItem({
+        type: "boolean",
+        completed: true,
+        status: "Assegnare",
+        quantity: null,
+      });
+      expect(isChecklistItemComplete(item)).toBe(true);
+    });
+
+    it("returns false when completed is false", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "boolean", completed: false }))
+      ).toBe(false);
+    });
+
+    it("returns false when completed is undefined", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "boolean", completed: undefined }))
+      ).toBe(false);
+    });
+
+    it("returns false when assignee is missing even if completed is true", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "boolean", completed: true, assignee: null }))
+      ).toBe(false);
+    });
   });
 
-  // Scenario: assegnatario mancante (null)
-  it("returns false when assignee is null", () => {
-    expect(isChecklistItemComplete(buildItem({ assignee: null }))).toBe(false);
+  describe("type='generic'", () => {
+    // Scenario 2: item generic con status 'Da iniziare' o 'In corso' NON è completo (fix del bug)
+    it.each(["Da iniziare", "In corso"])(
+      "returns false when status is '%s' (previously treated as complete)",
+      (status) => {
+        expect(
+          isChecklistItemComplete(buildItem({ type: "generic", status }))
+        ).toBe(false);
+      }
+    );
+
+    // Scenario 3: item generic con status 'Completata' è completo
+    it("returns true when assignee is set and status is 'Completata'", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "generic", status: "Completata" }))
+      ).toBe(true);
+    });
+
+    it("returns false when status is still 'Assegnare'", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "generic", status: "Assegnare" }))
+      ).toBe(false);
+    });
+
+    it("returns false when assignee is missing", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "generic", assignee: null }))
+      ).toBe(false);
+    });
+
+    it("ignores quantity entirely (complete even if quantity is null or absent)", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "generic", quantity: null }))
+      ).toBe(true);
+      const withoutQuantity: ChecklistItemLike = {
+        type: "generic",
+        assignee: "Mario Rossi",
+        status: "Completata",
+      };
+      expect(isChecklistItemComplete(withoutQuantity)).toBe(true);
+    });
   });
 
-  // Scenario: assegnatario mancante (undefined)
-  it("returns false when assignee is undefined", () => {
-    expect(isChecklistItemComplete(buildItem({ assignee: undefined }))).toBe(false);
+  describe("type='numeric'", () => {
+    // Scenario 4: item numeric con quantity non valorizzata NON è completo
+    it("returns false when quantity is null", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "numeric", status: "Completata", quantity: null }))
+      ).toBe(false);
+    });
+
+    it("returns false when quantity is entirely absent", () => {
+      const item: ChecklistItemLike = {
+        type: "numeric",
+        assignee: "Mario Rossi",
+        status: "Completata",
+      };
+      expect(isChecklistItemComplete(item)).toBe(false);
+    });
+
+    // Scenario 5: item numeric con quantity valorizzata è completo
+    it("returns true when assignee is set, status is 'Completata' and quantity is set", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "numeric", status: "Completata", quantity: 5 }))
+      ).toBe(true);
+    });
+
+    it("returns true when quantity is explicitly 0", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "numeric", status: "Completata", quantity: 0 }))
+      ).toBe(true);
+    });
+
+    it("returns false when status is not 'Completata' even if quantity is set", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "numeric", status: "In corso", quantity: 5 }))
+      ).toBe(false);
+    });
+
+    it("returns false when assignee is missing", () => {
+      expect(
+        isChecklistItemComplete(
+          buildItem({ type: "numeric", status: "Completata", quantity: 5, assignee: null })
+        )
+      ).toBe(false);
+    });
   });
 
-  // Scenario: assegnatario stringa vuota
-  it("returns false when assignee is an empty string", () => {
-    expect(isChecklistItemComplete(buildItem({ assignee: "" }))).toBe(false);
-  });
+  describe("type assente o non riconosciuto (item legacy pre-EA-123)", () => {
+    it("falls back to the 'generic' calculation when type is undefined", () => {
+      const completeItem: ChecklistItemLike = { assignee: "Mario Rossi", status: "Completata" };
+      expect(isChecklistItemComplete(completeItem)).toBe(true);
 
-  // Scenario: assegnatario solo whitespace
-  it("returns false when assignee is a whitespace-only string", () => {
-    expect(isChecklistItemComplete(buildItem({ assignee: "   " }))).toBe(false);
-  });
+      const inProgressItem: ChecklistItemLike = { assignee: "Mario Rossi", status: "In corso" };
+      expect(isChecklistItemComplete(inProgressItem)).toBe(false);
+    });
 
-  // Scenario: campo quantità presente ma non valorizzato (null) -> incompleto
-  it("returns false when the quantity field is present but null", () => {
-    expect(isChecklistItemComplete(buildItem({ quantity: null }))).toBe(false);
+    it("falls back to the 'generic' calculation for an unrecognized type value", () => {
+      expect(
+        isChecklistItemComplete(buildItem({ type: "unknown-type", status: "Completata" }))
+      ).toBe(true);
+      expect(
+        isChecklistItemComplete(buildItem({ type: "unknown-type", status: "In corso" }))
+      ).toBe(false);
+    });
   });
-
-  // Scenario: campo quantità assente -> non rilevante, non blocca il completamento
-  it("returns true when the quantity field is entirely absent from the item", () => {
-    const item: ChecklistItemLike = {
-      assignee: "Mario Rossi",
-      status: "Da iniziare",
-    };
-    expect(isChecklistItemComplete(item)).toBe(true);
-  });
-
-  // Scenario: quantità valorizzata a 0 è comunque un valore valido
-  it("returns true when quantity is explicitly set to 0", () => {
-    expect(isChecklistItemComplete(buildItem({ quantity: 0 }))).toBe(true);
-  });
-
-  // Scenario: stato ancora "Assegnare" (stato iniziale) -> incompleto
-  it("returns false when status is still 'Assegnare'", () => {
-    expect(isChecklistItemComplete(buildItem({ status: "Assegnare" }))).toBe(false);
-  });
-
-  // Scenario: stato "In corso" o "Completata" -> soddisfa il criterio di stato
-  it.each(["In corso", "Completata"])(
-    "returns true when status is '%s' and other fields are valid",
-    (status) => {
-      expect(isChecklistItemComplete(buildItem({ status }))).toBe(true);
-    }
-  );
 });
 
 describe("isChecklistComplete", () => {
@@ -78,11 +161,12 @@ describe("isChecklistComplete", () => {
     expect(isChecklistComplete([])).toBe(true);
   });
 
-  // Scenario: checklist completa quando tutti gli item sono completi
-  it("returns true when all items are complete", () => {
+  // Scenario: checklist completa quando tutti gli item sono completi, tipi misti
+  it("returns true when all items are complete across mixed types", () => {
     const items = [
-      buildItem(),
-      buildItem({ quantity: undefined, status: "Completata" }),
+      buildItem({ type: "boolean", completed: true }),
+      buildItem({ type: "generic", status: "Completata" }),
+      buildItem({ type: "numeric", status: "Completata", quantity: 2 }),
     ];
     expect(isChecklistComplete(items)).toBe(true);
   });
@@ -90,8 +174,8 @@ describe("isChecklistComplete", () => {
   // Scenario: checklist incompleta quando almeno un item non è completo
   it("returns false when at least one item is incomplete", () => {
     const items = [
-      buildItem(),
-      buildItem({ assignee: null }),
+      buildItem({ type: "generic", status: "Completata" }),
+      buildItem({ type: "generic", status: "In corso" }),
     ];
     expect(isChecklistComplete(items)).toBe(false);
   });
