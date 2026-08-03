@@ -8,15 +8,26 @@ import { createChecklistFromTemplate } from "../organizer/createChecklistFromTem
 const REGION = "europe-west1";
 
 /**
+ * Numero massimo di checklist collegabili alla stessa `deviceRequest`
+ * (campo array `checklistIds`). Valore proposto in EA-130 (fasi previste:
+ * fabbricazione, collaudo/qualità, più margine) — da confermare o
+ * modificare dall'umano, non è una decisione definitiva presa qui.
+ */
+const MAX_CHECKLISTS_PER_REQUEST = 5;
+
+/**
  * Cloud Function callable del layer di integrazione device-requests: crea
- * la checklist Organizer collegata a una `deviceRequest` e ne salva il
- * riferimento (`checklistId`) sul documento `deviceRequests/{requestId}`.
+ * la checklist Organizer collegata a una `deviceRequest` e ne aggiunge il
+ * riferimento al campo array `deviceRequests/{requestId}.checklistIds`.
  *
  * Il core Organizer (`organizer/createChecklist.ts`,
  * `organizer/createChecklistFromTemplate.ts`) non conosce il concetto di
  * deviceRequest e non mantiene un back-reference: questo layer introduce
- * sul documento `deviceRequests/{requestId}` il campo `checklistId`,
- * valorizzato qui alla creazione.
+ * sul documento `deviceRequests/{requestId}` il campo `checklistIds`,
+ * esteso qui alla creazione tramite `arrayUnion` (relazione 1:N, stesso
+ * pattern già usato da `assignedVolunteers` sullo stesso documento — vedi
+ * `device/createDeviceRequest.ts`). Una richiesta può avere più checklist
+ * (es. fabbricazione, collaudo), fino al limite `MAX_CHECKLISTS_PER_REQUEST`.
  *
  * RBAC: la creazione è permessa solo all'admin o ai volontari assegnati
  * alla richiesta (`assignedVolunteers`), stesso pattern di controllo
@@ -71,11 +82,18 @@ export const createDeviceRequestChecklist = onCall(
 
     const requestData = requestSnap.data() ?? {};
 
-    if (requestData.checklistId) {
-      console.log(`[createDeviceRequestChecklist] KO: request ${requestId} already has a checklist`);
+    const existingChecklistIds: unknown[] = Array.isArray(requestData.checklistIds)
+      ? requestData.checklistIds
+      : [];
+
+    if (existingChecklistIds.length >= MAX_CHECKLISTS_PER_REQUEST) {
+      console.log(
+        `[createDeviceRequestChecklist] KO: request ${requestId} already has the maximum ` +
+          `number of checklists (${MAX_CHECKLISTS_PER_REQUEST})`
+      );
       throw new HttpsError(
-        "already-exists",
-        "A checklist is already linked to this device request"
+        "failed-precondition",
+        `This device request already has the maximum number of checklists (${MAX_CHECKLISTS_PER_REQUEST})`
       );
     }
 
@@ -153,7 +171,7 @@ export const createDeviceRequestChecklist = onCall(
     }
 
     await requestRef.update({
-      checklistId,
+      checklistIds: FieldValue.arrayUnion(checklistId),
       updatedAt: FieldValue.serverTimestamp(),
     });
 

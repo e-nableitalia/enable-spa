@@ -7,19 +7,32 @@ import { cloneChecklist } from "../organizer/cloneChecklist";
 const REGION = "europe-west1";
 
 /**
+ * Numero massimo di checklist collegabili alla stessa `deviceRequest`
+ * (campo array `checklistIds`), stesso limite applicato in
+ * `createDeviceRequestChecklist.ts` — valore proposto in EA-130, da
+ * confermare o modificare dall'umano.
+ */
+const MAX_CHECKLISTS_PER_REQUEST = 5;
+
+/**
  * Cloud Function callable del layer di integrazione device-requests: popola
  * la checklist di una `deviceRequest` clonando quella di un'altra
  * `deviceRequest` sorgente (`organizer/cloneChecklist.ts`), invece di
  * ripartire da zero o dal solo template (`createDeviceRequestChecklist.ts`).
  *
  * Riceve dal consumer:
- * - `requestId`: id della `deviceRequest` di destinazione, che non deve
- *   avere già un `checklistId` (stesso vincolo di unicità di
- *   `createDeviceRequestChecklist.ts`).
- * - `sourceRequestId`: id della `deviceRequest` sorgente da cui clonare;
- *   deve avere un `checklistId` valorizzato. Nessuna restrizione di
- *   `devicetype` è imposta qui: la scelta della sorgente (stesso
- *   devicetype o libera) è demandata al consumer.
+ * - `requestId`: id della `deviceRequest` di destinazione. Una richiesta
+ *   può già avere altre checklist collegate (`checklistIds`): la clonazione
+ *   aggiunge la nuova checklist tramite `arrayUnion`, fino al limite
+ *   `MAX_CHECKLISTS_PER_REQUEST`.
+ * - `sourceRequestId`: id della `deviceRequest` sorgente, mantenuto per
+ *   audit/log e per verificare l'appartenenza di `sourceChecklistId`.
+ * - `sourceChecklistId`: id esplicito della checklist da clonare, che deve
+ *   appartenere a `checklistIds` della richiesta sorgente (una sorgente può
+ *   avere più di una checklist: non viene più risolta implicitamente "la"
+ *   checklist della sorgente). Nessuna restrizione di `devicetype` è
+ *   imposta qui: la scelta della sorgente (stesso devicetype o libera) è
+ *   demandata al consumer.
  * - `title` (opzionale): titolo della nuova checklist; se omesso viene
  *   generato un titolo di default a partire dal `requestNumber` della
  *   richiesta di destinazione.
@@ -45,7 +58,7 @@ export const cloneDeviceRequestChecklist = onCall(
     }
 
     const data = request.data ?? {};
-    const { requestId, sourceRequestId, title } = data;
+    const { requestId, sourceRequestId, sourceChecklistId, title } = data;
 
     if (!requestId || typeof requestId !== "string") {
       console.log("[cloneDeviceRequestChecklist] KO: Missing or invalid requestId");
@@ -55,6 +68,11 @@ export const cloneDeviceRequestChecklist = onCall(
     if (!sourceRequestId || typeof sourceRequestId !== "string") {
       console.log("[cloneDeviceRequestChecklist] KO: Missing or invalid sourceRequestId");
       throw new HttpsError("invalid-argument", "Missing or invalid sourceRequestId");
+    }
+
+    if (!sourceChecklistId || typeof sourceChecklistId !== "string") {
+      console.log("[cloneDeviceRequestChecklist] KO: Missing or invalid sourceChecklistId");
+      throw new HttpsError("invalid-argument", "Missing or invalid sourceChecklistId");
     }
 
     if (title !== undefined && title !== null && typeof title !== "string") {
@@ -74,11 +92,18 @@ export const cloneDeviceRequestChecklist = onCall(
 
     const requestData = requestSnap.data() ?? {};
 
-    if (requestData.checklistId) {
-      console.log(`[cloneDeviceRequestChecklist] KO: request ${requestId} already has a checklist`);
+    const existingChecklistIds: unknown[] = Array.isArray(requestData.checklistIds)
+      ? requestData.checklistIds
+      : [];
+
+    if (existingChecklistIds.length >= MAX_CHECKLISTS_PER_REQUEST) {
+      console.log(
+        `[cloneDeviceRequestChecklist] KO: request ${requestId} already has the maximum ` +
+          `number of checklists (${MAX_CHECKLISTS_PER_REQUEST})`
+      );
       throw new HttpsError(
-        "already-exists",
-        "A checklist is already linked to this device request"
+        "failed-precondition",
+        `This device request already has the maximum number of checklists (${MAX_CHECKLISTS_PER_REQUEST})`
       );
     }
 
@@ -108,15 +133,18 @@ export const cloneDeviceRequestChecklist = onCall(
     }
 
     const sourceRequestData = sourceRequestSnap.data() ?? {};
-    const sourceChecklistId = sourceRequestData.checklistId;
+    const sourceChecklistIds: unknown[] = Array.isArray(sourceRequestData.checklistIds)
+      ? sourceRequestData.checklistIds
+      : [];
 
-    if (!sourceChecklistId || typeof sourceChecklistId !== "string") {
+    if (!sourceChecklistIds.includes(sourceChecklistId)) {
       console.log(
-        `[cloneDeviceRequestChecklist] KO: source request ${sourceRequestId} has no checklist to clone from`
+        `[cloneDeviceRequestChecklist] KO: checklist ${sourceChecklistId} is not linked to ` +
+          `source request ${sourceRequestId}`
       );
       throw new HttpsError(
         "failed-precondition",
-        "Source device request has no checklist to clone from"
+        "The source checklist is not linked to the source device request"
       );
     }
 
@@ -136,7 +164,7 @@ export const cloneDeviceRequestChecklist = onCall(
     const checklistId = (result as { checklistId: string }).checklistId;
 
     await requestRef.update({
-      checklistId,
+      checklistIds: FieldValue.arrayUnion(checklistId),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
