@@ -85,6 +85,10 @@ describe("getDeviceRequestChecklistCompleteness", () => {
     deviceRequestsStore = {
       "req-1": {
         assignedVolunteers: ["volunteer-1"],
+        checklistIds: [CHECKLIST_ID],
+      },
+      "req-legacy": {
+        assignedVolunteers: ["volunteer-1"],
         checklistId: CHECKLIST_ID,
       },
     };
@@ -102,7 +106,7 @@ describe("getDeviceRequestChecklistCompleteness", () => {
     };
 
     const result = await getDeviceRequestChecklistCompleteness.run(
-      buildRequest({ requestId: "req-1" }, "admin-1")
+      buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "admin-1")
     );
 
     expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: true });
@@ -120,7 +124,7 @@ describe("getDeviceRequestChecklistCompleteness", () => {
     };
 
     const result = await getDeviceRequestChecklistCompleteness.run(
-      buildRequest({ requestId: "req-1" }, "volunteer-1")
+      buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "volunteer-1")
     );
 
     expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: false });
@@ -130,15 +134,41 @@ describe("getDeviceRequestChecklistCompleteness", () => {
     checklistsStore = { [CHECKLIST_ID]: { items: [] } };
 
     await expect(
-      getDeviceRequestChecklistCompleteness.run(buildRequest({ requestId: "req-1" }, "volunteer-2"))
+      getDeviceRequestChecklistCompleteness.run(
+        buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "volunteer-2")
+      )
     ).rejects.toMatchObject(
       new HttpsError("permission-denied", "Only admin or assigned volunteers can access the checklist for this request")
     );
   });
 
+  // Scenario 3 (EA-131): checklistId non appartenente a checklistIds -> not-found.
+  it("throws not-found when checklistId does not belong to checklistIds of the request", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: [] } };
+
+    await expect(
+      getDeviceRequestChecklistCompleteness.run(
+        buildRequest({ requestId: "req-1", checklistId: "other-checklist" }, "admin-1")
+      )
+    ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this device request"));
+  });
+
+  // Scenario 5 (EA-131): richiesta legacy con solo checklistId singolare -> risolta comunque.
+  it("resolves access for a legacy request with only the singular checklistId field", async () => {
+    checklistsStore = {
+      [CHECKLIST_ID]: { items: [{ assignee: "volunteer-1", quantity: 2, status: "Completata" }] },
+    };
+
+    const result = await getDeviceRequestChecklistCompleteness.run(
+      buildRequest({ requestId: "req-legacy", checklistId: CHECKLIST_ID }, "volunteer-1")
+    );
+
+    expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: true });
+  });
+
   it("throws unauthenticated when there is no auth context", async () => {
     await expect(
-      getDeviceRequestChecklistCompleteness.run(buildRequest({ requestId: "req-1" }, null))
+      getDeviceRequestChecklistCompleteness.run(buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, null))
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
 
     expect(collectionMock).not.toHaveBeenCalled();
@@ -146,7 +176,14 @@ describe("getDeviceRequestChecklistCompleteness", () => {
 
   it("throws invalid-argument when requestId is missing", async () => {
     await expect(
-      getDeviceRequestChecklistCompleteness.run(buildRequest({}, "admin-1"))
+      getDeviceRequestChecklistCompleteness.run(buildRequest({ checklistId: CHECKLIST_ID }, "admin-1"))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: requestId"));
+  });
+
+  // Scenario 2 (EA-131): vecchio contratto (solo requestId) -> invalid-argument.
+  it("throws invalid-argument when checklistId is missing", async () => {
+    await expect(
+      getDeviceRequestChecklistCompleteness.run(buildRequest({ requestId: "req-1" }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: checklistId"));
   });
 });

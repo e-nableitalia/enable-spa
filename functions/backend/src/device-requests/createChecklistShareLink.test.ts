@@ -112,6 +112,10 @@ describe("createChecklistShareLink", () => {
     deviceRequestsStore = {
       "req-1": {
         assignedVolunteers: ["volunteer-1"],
+        checklistIds: [CHECKLIST_ID],
+      },
+      "req-legacy": {
+        assignedVolunteers: ["volunteer-1"],
         checklistId: CHECKLIST_ID,
       },
     };
@@ -119,7 +123,9 @@ describe("createChecklistShareLink", () => {
 
   // Scenario: Un utente con accesso alla richiesta genera il link di condivisione
   it("creates a persisted token linked to the checklist and returns a URL usable without auth (admin)", async () => {
-    const result = await createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "admin-1"));
+    const result = await createChecklistShareLink.run(
+      buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "admin-1")
+    );
 
     expect(result).toEqual({
       token: GENERATED_TOKEN,
@@ -132,7 +138,9 @@ describe("createChecklistShareLink", () => {
   });
 
   it("allows a volunteer assigned to the request to generate the link", async () => {
-    const result = await createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "volunteer-1"));
+    const result = await createChecklistShareLink.run(
+      buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "volunteer-1")
+    );
 
     expect(result.token).toBe(GENERATED_TOKEN);
     expect(shareLinkSetMock).toHaveBeenCalled();
@@ -140,7 +148,7 @@ describe("createChecklistShareLink", () => {
 
   it("denies generation to a volunteer not assigned to the request", async () => {
     await expect(
-      createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "volunteer-2"))
+      createChecklistShareLink.run(buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "volunteer-2"))
     ).rejects.toMatchObject(
       new HttpsError("permission-denied", "Only admin or assigned volunteers can access the checklist for this request")
     );
@@ -148,12 +156,32 @@ describe("createChecklistShareLink", () => {
     expect(shareLinkSetMock).not.toHaveBeenCalled();
   });
 
+  // Scenario 3 (EA-131): checklistId non appartenente a checklistIds -> not-found.
+  it("throws not-found when checklistId does not belong to checklistIds of the request", async () => {
+    await expect(
+      createChecklistShareLink.run(buildRequest({ requestId: "req-1", checklistId: "other-checklist" }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this device request"));
+
+    expect(shareLinkSetMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 5 (EA-131): richiesta legacy con solo checklistId singolare -> risolta comunque.
+  it("resolves access for a legacy request with only the singular checklistId field", async () => {
+    const result = await createChecklistShareLink.run(
+      buildRequest({ requestId: "req-legacy", checklistId: CHECKLIST_ID }, "volunteer-1")
+    );
+
+    expect(result.token).toBe(GENERATED_TOKEN);
+  });
+
   it("reuses the existing token instead of creating a new one when a link already exists for the checklist", async () => {
     shareLinksStore = {
       "existing-token": { checklistId: CHECKLIST_ID, requestId: "req-1" },
     };
 
-    const result = await createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "admin-1"));
+    const result = await createChecklistShareLink.run(
+      buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "admin-1")
+    );
 
     expect(result).toEqual({
       token: "existing-token",
@@ -164,7 +192,7 @@ describe("createChecklistShareLink", () => {
 
   it("throws unauthenticated when there is no auth context", async () => {
     await expect(
-      createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, null))
+      createChecklistShareLink.run(buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, null))
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
 
     expect(collectionMock).not.toHaveBeenCalled();
@@ -172,13 +200,20 @@ describe("createChecklistShareLink", () => {
 
   it("throws invalid-argument when requestId is missing", async () => {
     await expect(
-      createChecklistShareLink.run(buildRequest({}, "admin-1"))
+      createChecklistShareLink.run(buildRequest({ checklistId: CHECKLIST_ID }, "admin-1"))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: requestId"));
+  });
+
+  // Scenario 2 (EA-131): vecchio contratto (solo requestId, senza checklistId) -> invalid-argument.
+  it("throws invalid-argument when checklistId is missing", async () => {
+    await expect(
+      createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: checklistId"));
   });
 
   it("throws not-found when the device request does not exist", async () => {
     await expect(
-      createChecklistShareLink.run(buildRequest({ requestId: "missing-request" }, "admin-1"))
+      createChecklistShareLink.run(buildRequest({ requestId: "missing-request", checklistId: CHECKLIST_ID }, "admin-1"))
     ).rejects.toMatchObject(new HttpsError("not-found", "Device request not found"));
   });
 });

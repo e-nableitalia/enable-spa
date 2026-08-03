@@ -12,9 +12,10 @@ const REGION = "europe-west1";
  * aggiunge un item alla checklist di fabbricazione collegata a una
  * `deviceRequest`.
  *
- * Riceve dal consumer `requestId` (non `checklistId`): questo layer
- * risolve il `checklistId` collegato alla richiesta e applica il
- * controllo RBAC (`deviceRequestChecklistAccess.ts`, stesso perimetro di
+ * Riceve dal consumer `requestId` e `checklistId` (EA-131: `checklistId`
+ * esplicito, non più risolto implicitamente): applica il controllo RBAC
+ * e la verifica di appartenenza a `checklistIds`
+ * (`deviceRequestChecklistAccess.ts`, stesso perimetro di
  * `device/changeStatus.ts`) prima di delegare al core Organizer
  * (`organizer/addChecklistItem.ts`).
  */
@@ -29,8 +30,9 @@ export const addDeviceRequestChecklistItem = onCall(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
-    const { requestId, title, type, assignee, quantity, notes } = request.data as {
+    const { requestId, checklistId, title, type, assignee, quantity, notes } = request.data as {
       requestId?: string;
+      checklistId?: string;
       title?: string;
       type?: string;
       assignee?: string;
@@ -41,9 +43,12 @@ export const addDeviceRequestChecklistItem = onCall(
     if (!requestId || typeof requestId !== "string") {
       throw new HttpsError("invalid-argument", "Missing parameter: requestId");
     }
+    if (!checklistId || typeof checklistId !== "string") {
+      throw new HttpsError("invalid-argument", "Missing parameter: checklistId");
+    }
 
     const db = getFirestore();
-    const { checklistId } = await resolveDeviceRequestChecklistAccess(db, uid, requestId);
+    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
 
     const result = (await addChecklistItem.run({
       ...request,
