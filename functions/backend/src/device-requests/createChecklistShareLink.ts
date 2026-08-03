@@ -15,10 +15,12 @@ const SHARE_BASE_URL = "https://app.e-nableitalia.it";
  * `deviceRequest` (Story EA-113, livello famiglia/visibilita' esterna,
  * unico tier di condivisione a link previsto dall'Epic).
  *
- * Riceve dal consumer `requestId` e `checklistId` (EA-131: `checklistId`
- * esplicito, non più risolto implicitamente, stesso cambio di contratto
- * applicato alle 5 Cloud Function del layer): applica lo stesso controllo
- * RBAC e la verifica di appartenenza a `checklistIds`
+ * Riceve dal consumer `requestId` e `checklistId` esplicito (EA-132,
+ * Epic EA-129: un link per checklist, non per richiesta — contratto gia'
+ * esteso qui in via preventiva da EA-131 per non rompere la build, vedi
+ * `docs/FINDINGS.md` F-15; EA-132 lo formalizza a livello di Story con i
+ * propri scenari Gherkin, invariato nel comportamento): applica lo stesso
+ * controllo RBAC e la verifica di appartenenza a `checklistIds`
  * (`deviceRequestChecklistAccess.ts` — admin o volontario assegnato).
  *
  * Il token e' persistito lato server nella collection
@@ -26,10 +28,11 @@ const SHARE_BASE_URL = "https://app.e-nableitalia.it";
  * confermata in refinement EA-108, 2026-07-09): nessuna logica di
  * scadenza/revoca va aggiunta qui.
  *
- * Idempotenza: se un link esiste gia' per la checklist, viene
- * restituito lo stesso token invece di crearne uno nuovo, per evitare
- * di accumulare token multipli validi per la stessa checklist a ogni
- * richiesta di generazione.
+ * Idempotenza: se un link esiste gia' per la checklist (query per
+ * `checklistId`, non per `requestId`), viene restituito lo stesso token
+ * invece di crearne uno nuovo — per costruzione, una richiesta con piu'
+ * checklist puo' quindi avere piu' link indipendenti, uno per checklist
+ * (Scenario 2 EA-132), invece di un unico link per richiesta.
  */
 export const createChecklistShareLink = onCall(
   { region: REGION },

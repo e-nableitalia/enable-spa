@@ -2,6 +2,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 
 const CHECKLIST_ID = "checklist-1";
+const CHECKLIST_ID_2 = "checklist-2";
 const GENERATED_TOKEN = "generated-token-uuid";
 
 jest.mock("crypto", () => ({
@@ -89,6 +90,7 @@ jest.mock("../security/securityLog", () => ({
 }));
 
 import { createChecklistShareLink } from "./createChecklistShareLink";
+import { randomUUID } from "crypto";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "admin-1"): CallableRequest {
   return {
@@ -114,6 +116,10 @@ describe("createChecklistShareLink", () => {
         assignedVolunteers: ["volunteer-1"],
         checklistIds: [CHECKLIST_ID],
       },
+      "req-multi": {
+        assignedVolunteers: ["volunteer-1"],
+        checklistIds: [CHECKLIST_ID, CHECKLIST_ID_2],
+      },
       "req-legacy": {
         assignedVolunteers: ["volunteer-1"],
         checklistId: CHECKLIST_ID,
@@ -121,7 +127,7 @@ describe("createChecklistShareLink", () => {
     };
   });
 
-  // Scenario: Un utente con accesso alla richiesta genera il link di condivisione
+  // Scenario 1 (EA-132): Un admin genera un link per una checklist specifica di una richiesta.
   it("creates a persisted token linked to the checklist and returns a URL usable without auth (admin)", async () => {
     const result = await createChecklistShareLink.run(
       buildRequest({ requestId: "req-1", checklistId: CHECKLIST_ID }, "admin-1")
@@ -156,7 +162,7 @@ describe("createChecklistShareLink", () => {
     expect(shareLinkSetMock).not.toHaveBeenCalled();
   });
 
-  // Scenario 3 (EA-131): checklistId non appartenente a checklistIds -> not-found.
+  // Scenario 3 (EA-131) / Scenario 4 (EA-132): checklistId non appartenente a checklistIds -> not-found.
   it("throws not-found when checklistId does not belong to checklistIds of the request", async () => {
     await expect(
       createChecklistShareLink.run(buildRequest({ requestId: "req-1", checklistId: "other-checklist" }, "admin-1"))
@@ -172,6 +178,37 @@ describe("createChecklistShareLink", () => {
     );
 
     expect(result.token).toBe(GENERATED_TOKEN);
+  });
+
+  // Scenario 2 (EA-132): due checklistId distinti della stessa richiesta,
+  // ciascuno senza link esistente -> due token distinti, indipendenti,
+  // ciascuno legato al proprio checklistId (1 link per checklist, non per richiesta).
+  it("creates two independent tokens, one per checklistId, when generating links for two checklists of the same request", async () => {
+    let uuidCallCount = 0;
+    (randomUUID as jest.Mock).mockImplementation(() => `uuid-${++uuidCallCount}`);
+
+    const firstResult = await createChecklistShareLink.run(
+      buildRequest({ requestId: "req-multi", checklistId: CHECKLIST_ID }, "admin-1")
+    );
+    const secondResult = await createChecklistShareLink.run(
+      buildRequest({ requestId: "req-multi", checklistId: CHECKLIST_ID_2 }, "admin-1")
+    );
+
+    expect(firstResult.token).not.toBe(secondResult.token);
+    expect(shareLinkSetMock).toHaveBeenCalledWith(
+      firstResult.token,
+      expect.objectContaining({ checklistId: CHECKLIST_ID, requestId: "req-multi" })
+    );
+    expect(shareLinkSetMock).toHaveBeenCalledWith(
+      secondResult.token,
+      expect.objectContaining({ checklistId: CHECKLIST_ID_2, requestId: "req-multi" })
+    );
+    expect(shareLinksStore[firstResult.token]).toMatchObject({ checklistId: CHECKLIST_ID });
+    expect(shareLinksStore[secondResult.token]).toMatchObject({ checklistId: CHECKLIST_ID_2 });
+
+    // jest.clearAllMocks() (beforeEach) non ripristina mockImplementation: restore esplicito
+    // per non far trapelare questa implementazione custom ai test successivi dello stesso file.
+    (randomUUID as jest.Mock).mockImplementation(() => GENERATED_TOKEN);
   });
 
   it("reuses the existing token instead of creating a new one when a link already exists for the checklist", async () => {
@@ -204,7 +241,7 @@ describe("createChecklistShareLink", () => {
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: requestId"));
   });
 
-  // Scenario 2 (EA-131): vecchio contratto (solo requestId, senza checklistId) -> invalid-argument.
+  // Scenario 2 (EA-131) / Scenario 3 (EA-132): vecchio contratto (solo requestId, senza checklistId) -> invalid-argument.
   it("throws invalid-argument when checklistId is missing", async () => {
     await expect(
       createChecklistShareLink.run(buildRequest({ requestId: "req-1" }, "admin-1"))

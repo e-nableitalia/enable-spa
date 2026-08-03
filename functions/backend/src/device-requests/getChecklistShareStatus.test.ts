@@ -73,6 +73,12 @@ describe("getChecklistShareStatus", () => {
   });
 
   // Scenario: Chiunque acceda al link vede solo l'avanzamento macro, senza PII o dettagli interni
+  // Scenario 5 (EA-132, non-regressione): la funzione risolve sempre
+  // token -> checklistId -> checklists, mai da requestId (il mock delle
+  // collection non definisce nemmeno "deviceRequests": qualunque
+  // tentativo di risolvere un requestId farebbe fallire il test). Il
+  // comportamento e la risposta (solo percentComplete) restano identici,
+  // nessuna modifica a getChecklistShareStatus.ts in questa Story.
   it("returns only percentComplete for an anonymous request with no auth", async () => {
     checklistsStore = {
       [CHECKLIST_ID]: {
