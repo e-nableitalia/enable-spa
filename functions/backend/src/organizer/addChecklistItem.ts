@@ -3,13 +3,19 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus } from "./checklistItemStatus";
+import {
+  CHECKLIST_ITEM_STATUSES,
+  ChecklistItemStatus,
+  ChecklistItemType,
+  isChecklistItemType,
+} from "./checklistItemStatus";
 
 const REGION = "europe-west1";
 
 interface ChecklistItem {
   id: string;
   title: string;
+  type: ChecklistItemType;
   assignee: string | null;
   quantity: number | null;
   notes: string;
@@ -19,7 +25,9 @@ interface ChecklistItem {
 
 // addChecklistItem: aggiunge un nuovo item alla lista items di un'istanza
 // checklist esistente, con stato iniziale "Assegnare" e flag di
-// completamento a false. Restituisce l'itemId generato al consumer.
+// completamento a false. Richiede un `type` esplicito ('boolean' | 'generic'
+// | 'numeric'), coerentemente con createChecklist (EA-123): nessun default.
+// Restituisce l'itemId generato al consumer.
 export const addChecklistItem = onCall(
   { region: REGION },
   async (request) => {
@@ -31,9 +39,10 @@ export const addChecklistItem = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const { checklistId, title, assignee, quantity, notes } = request.data as {
+      const { checklistId, title, type, assignee, quantity, notes } = request.data as {
         checklistId?: string;
         title?: string;
+        type?: string;
         assignee?: string;
         quantity?: number;
         notes?: string;
@@ -44,6 +53,9 @@ export const addChecklistItem = onCall(
       }
       if (!title || typeof title !== "string" || !title.trim()) {
         throw new HttpsError("invalid-argument", "Missing title");
+      }
+      if (!isChecklistItemType(type)) {
+        throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
       }
       if (assignee !== undefined && assignee !== null && typeof assignee !== "string") {
         throw new HttpsError("invalid-argument", "Item assignee must be a string");
@@ -66,6 +78,7 @@ export const addChecklistItem = onCall(
       const newItem: ChecklistItem = {
         id: crypto.randomUUID(),
         title,
+        type,
         assignee: assignee ?? null,
         quantity: quantity ?? null,
         notes: notes ?? "",
