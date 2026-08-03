@@ -6,7 +6,7 @@ const GENERATED_CHECKLIST_ID = "generated-checklist-id";
 /**
  * Store in-memory minimale che simula le collection Firestore coinvolte:
  * `users` (RBAC), `deviceRequests` (documento principale + back-reference
- * `checklistId`), `publicDeviceRequests` (fallback `devicetype`),
+ * array `checklistIds`), `publicDeviceRequests` (fallback `devicetype`),
  * `templates` (catalogo da cui istanziare) e `checklists` (scrittura
  * delegata al core Organizer).
  */
@@ -20,7 +20,21 @@ const checklistsSetMock = jest.fn((doc: Record<string, unknown>) => {
   return Promise.resolve();
 });
 const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
-  deviceRequestsStore[id] = { ...deviceRequestsStore[id], ...updates };
+  const current = deviceRequestsStore[id] ?? {};
+  const { checklistIds: arrayUnionOp, ...rest } = updates as {
+    checklistIds?: { __op: "arrayUnion"; values: unknown[] };
+    [key: string]: unknown;
+  };
+  const mergedChecklistIds = arrayUnionOp
+    ? Array.from(
+      new Set([...(Array.isArray(current.checklistIds) ? current.checklistIds : []), ...arrayUnionOp.values])
+    )
+    : (current.checklistIds as unknown[] | undefined);
+  deviceRequestsStore[id] = {
+    ...current,
+    ...rest,
+    ...(arrayUnionOp ? { checklistIds: mergedChecklistIds } : {}),
+  };
   return Promise.resolve();
 });
 
@@ -106,7 +120,10 @@ jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
   })),
-  FieldValue: { serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP") },
+  FieldValue: {
+    serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),
+    arrayUnion: jest.fn((...values: unknown[]) => ({ __op: "arrayUnion", values })),
+  },
 }));
 
 jest.mock("../security/securityLog", () => ({
@@ -145,15 +162,21 @@ describe("createDeviceRequestChecklist", () => {
         deviceType: "Guitar Pick",
         assignedVolunteers: [],
       },
-      "req-already-linked": {
+      "req-with-existing-checklist": {
         requestNumber: "REQ-000003",
         deviceType: "Kinetic Hand",
         assignedVolunteers: [],
-        checklistId: "existing-checklist-id",
+        checklistIds: ["existing-checklist-id"],
       },
       "req-no-devicetype": {
         requestNumber: "REQ-000004",
         assignedVolunteers: [],
+      },
+      "req-at-max-checklists": {
+        requestNumber: "REQ-000005",
+        deviceType: "Kinetic Hand",
+        assignedVolunteers: [],
+        checklistIds: ["c-1", "c-2", "c-3", "c-4", "c-5"],
       },
     };
 
@@ -170,7 +193,7 @@ describe("createDeviceRequestChecklist", () => {
     };
   });
 
-  it("instantiates the checklist from the devicetype template and links checklistId to the request (admin)", async () => {
+  it("instantiates the checklist from the devicetype template and links checklistIds to the request (admin)", async () => {
     const result = await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-1" }, "admin-1"));
 
     expect(collectionMock).toHaveBeenCalledWith("templates");
@@ -184,7 +207,7 @@ describe("createDeviceRequestChecklist", () => {
       })
     );
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
-    expect(deviceRequestsStore["req-1"]?.checklistId).toBe(GENERATED_CHECKLIST_ID);
+    expect(deviceRequestsStore["req-1"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
   });
 
   it("creates a blank checklist when no template matches the request's devicetype", async () => {
@@ -199,7 +222,7 @@ describe("createDeviceRequestChecklist", () => {
     const [savedDocument] = checklistsSetMock.mock.calls[0] as [Record<string, unknown>];
     expect(savedDocument).not.toHaveProperty("fromTemplate");
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
-    expect(deviceRequestsStore["req-2"]?.checklistId).toBe(GENERATED_CHECKLIST_ID);
+    expect(deviceRequestsStore["req-2"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
   });
 
   it("falls back to publicDeviceRequests.devicetype when the main document has no deviceType", async () => {
@@ -215,7 +238,7 @@ describe("createDeviceRequestChecklist", () => {
     const result = await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-1" }, "volunteer-1"));
 
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
-    expect(deviceRequestsStore["req-1"]?.checklistId).toBe(GENERATED_CHECKLIST_ID);
+    expect(deviceRequestsStore["req-1"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
   });
 
   it("denies creation to a volunteer not assigned to the request", async () => {
@@ -226,7 +249,7 @@ describe("createDeviceRequestChecklist", () => {
     );
 
     expect(checklistsSetMock).not.toHaveBeenCalled();
-    expect(deviceRequestsStore["req-1"]?.checklistId).toBeUndefined();
+    expect(deviceRequestsStore["req-1"]?.checklistIds).toBeUndefined();
   });
 
   it("denies creation to an authenticated user without a users/{uid} document", async () => {
@@ -255,14 +278,36 @@ describe("createDeviceRequestChecklist", () => {
     expect(checklistsSetMock).not.toHaveBeenCalled();
   });
 
-  it("throws already-exists and does not create another checklist when the request already has a checklistId", async () => {
+  it("adds an additional checklist via arrayUnion when the request already has one, without removing existing ids", async () => {
+    const result = await createDeviceRequestChecklist.run(
+      buildRequest({ requestId: "req-with-existing-checklist" }, "admin-1")
+    );
+
+    expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
+    expect(deviceRequestsStore["req-with-existing-checklist"]?.checklistIds).toEqual([
+      "existing-checklist-id",
+      GENERATED_CHECKLIST_ID,
+    ]);
+  });
+
+  it("throws failed-precondition and does not modify checklistIds when the request already has the maximum number of checklists", async () => {
     await expect(
-      createDeviceRequestChecklist.run(buildRequest({ requestId: "req-already-linked" }, "admin-1"))
+      createDeviceRequestChecklist.run(buildRequest({ requestId: "req-at-max-checklists" }, "admin-1"))
     ).rejects.toMatchObject(
-      new HttpsError("already-exists", "A checklist is already linked to this device request")
+      new HttpsError(
+        "failed-precondition",
+        "This device request already has the maximum number of checklists (5)"
+      )
     );
 
     expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(deviceRequestsStore["req-at-max-checklists"]?.checklistIds).toEqual([
+      "c-1",
+      "c-2",
+      "c-3",
+      "c-4",
+      "c-5",
+    ]);
   });
 
   it("throws invalid-argument when requestId is missing", async () => {
