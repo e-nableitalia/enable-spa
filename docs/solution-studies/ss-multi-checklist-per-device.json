@@ -1,0 +1,153 @@
+{
+  "id": "ss-multi-checklist-per-device",
+  "status": "draft",
+  "request_ref": "requests/ss-multi-checklist-per-device.md",
+  "problem_statement": "Il layer di integrazione device-requests (Epic EA-108) assume oggi ovunque una relazione 1:1 tra una `deviceRequest` e la sua checklist operativa del core Organizer: `deviceRequests/{id}.checklistId` e' un campo singolare, scritto una sola volta da `createDeviceRequestChecklist`/`cloneDeviceRequestChecklist` (entrambe falliscono con `already-exists` se il campo e' gia' valorizzato) e letto come tale da `resolveDeviceRequestChecklistAccess` (usata da `getDeviceRequestChecklist`, `getDeviceRequestChecklistCompleteness`, `addDeviceRequestChecklistItem`, `updateDeviceRequestChecklistItem`, `removeDeviceRequestChecklistItem`), da `createChecklistShareLink`/`getChecklistShareStatus`, e dall'unico pannello `ChecklistPanel.tsx` mostrato in `RequestDetail.tsx`. Il problema di fondo non e' la UI a pannello singolo ne' l'auto-selezione del template (sintomi correlati ma distinti): e' che il modello dati attuale non puo' rappresentare piu' di una checklist indipendente per la stessa richiesta, mentre esistono casi d'uso legittimi in cui un device richiede piu' checklist parallele con owner/scopo diversi (es. fabbricazione + collaudo/qualita', o piu' fasi distinte). Questo studio esplora come rappresentare quella cardinalita' 1:N, trattando la direzione 'campo array su deviceRequest' proposta nella richiesta come una delle opzioni possibili, non come una decisione gia' presa.",
+  "constraints": [
+    "Confine architetturale consolidato (Epic EA-3): il core Organizer non conosce il consumer — `checklistId`, `category`, `templateId` sono valori opachi. Qualunque opzione che facesse scrivere al core campi device-specific (es. `deviceRequestId`, `role` di una checklist) sui documenti `checklists/{id}` violerebbe questo confine gia' rispettato da tutte e 9 le Cloud Function del layer device-requests oggi esistenti.",
+    "Tutte le funzioni del layer device-requests che oggi assumono un `checklistId` singolare via `resolveDeviceRequestChecklistAccess` (getDeviceRequestChecklist, getDeviceRequestChecklistCompleteness, addDeviceRequestChecklistItem, updateDeviceRequestChecklistItem, removeDeviceRequestChecklistItem) e le due funzioni che scrivono il campo (createDeviceRequestChecklist, cloneDeviceRequestChecklist, entrambe con guardia esplicita `if (requestData.checklistId) throw already-exists`) dovranno essere riviste per accettare/produrre piu' di un riferimento.",
+    "`createChecklistShareLink`/`getChecklistShareStatus` (Story EA-113) risolvono oggi requestId -> singolo checklistId senza mai ricevere un checklistId esplicito dal chiamante: il link pubblico e' 1:1 con la richiesta, non con una checklist specifica. Con piu' checklist per richiesta va deciso esplicitamente quale checklist il link condivide (o se servono piu' link), non e' un dettaglio implementativo rimandabile.",
+    "`assignedVolunteers: string[]` e' gia' un campo array su `deviceRequests/{id}` (device/createDeviceRequest.ts), precedente diretto nello stesso documento per un cambio di cardinalita' analogo — usato dal grounding come riferimento di coerenza, non come vincolo tecnico stringente.",
+    "`deviceRequests/{id}/events/{eventId}` e' gia' una sottocollezione esistente sullo stesso documento (device/createDeviceRequest.ts): il repository ha gia' un precedente di modellazione a sottocollezione per dati 1:N legati a una deviceRequest, non solo il precedente ad array (`assignedVolunteers`).",
+    "RBAC di tutte le funzioni del layer device-requests e' oggi decisa leggendo `deviceRequests/{requestId}` (admin, oppure volontario in `assignedVolunteers`) — la stessa lettura del documento padre serve sia per l'array sia per la sottocollezione, quindi il costo RBAC non e' un discriminante tra le opzioni sul modello dati.",
+    "La selezione automatica del primo template candidato per `devicetype` (`createDeviceRequestChecklist`, `templatesSnap.docs[0]`) e' un problema gia' presente nel modello 1:1 attuale, non introdotto da un'eventuale evoluzione a 1:N: la richiesta stessa lo segnala come possibile cambio indipendente, e questo studio lo tratta come tale — la scelta esplicita del template resta una decisione di gate separata, non un criterio di confronto tra le opzioni sotto.",
+    "Non e' noto con certezza se esistano oggi in produzione `deviceRequest` con `checklistId` gia' valorizzato: la richiesta d'origine e' emersa durante validazione su staging (`enableitalia-staging`), che ha dati di checklist reali; lo stato dei dati di produzione non va assunto in un senso o nell'altro."
+  ],
+  "options": [
+    {
+      "id": "opt-a-checklist-ids-array",
+      "name": "Campo array `checklistIds: string[]` su `deviceRequest`, stesso pattern di `assignedVolunteers`",
+      "summary": "Sostituire `deviceRequests/{id}.checklistId` (singolare) con `checklistIds: string[]` sul documento principale, popolato in ordine di creazione/clonazione. `createDeviceRequestChecklist`/`cloneDeviceRequestChecklist` fanno `arrayUnion` invece di assegnare e sostituire il vincolo `already-exists` con un limite di cardinalita' esplicito (o nessun limite). `resolveDeviceRequestChecklistAccess` viene esteso per richiedere anche un `checklistId` esplicito dal chiamante, verificato per appartenenza all'array invece di essere risolto implicitamente. In UI, `RequestDetail.tsx` sostituisce il pannello singolo con una vista a tab (una per checklist), ciascuna che monta `ChecklistPanel` passando il `checklistId` esplicito della tab attiva.",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Risoluzione RBAC per coppia (requestId, checklistId) invece che per solo requestId",
+          "Vista a tab multi-checklist in RequestDetail.tsx",
+          "Percentuale di completamento aggregata su piu' checklist (nuova funzione o calcolo lato client su piu' chiamate a getDeviceRequestChecklistCompleteness)"
+        ]
+      },
+      "pros": [
+        "Nessuna nuova collezione Firestore: estensione naturale di un campo gia' esistente, stesso pattern gia' presente nello stesso documento (`assignedVolunteers`), quindi immediatamente riconoscibile da chi gia' conosce lo schema `deviceRequest`.",
+        "Lettura di tutti i checklistId di una richiesta e' gratuita: arriva nello stesso `get()` del documento padre gia' eseguito da `resolveDeviceRequestChecklistAccess` per il controllo RBAC, senza query aggiuntive.",
+        "Migrazione dati minima: un `checklistId` singolare esistente diventa banalmente `checklistIds: [checklistId]` con uno script di backfill a singola scrittura per documento, oppure lasciato come alias di sola lettura."
+      ],
+      "cons": [
+        "Ogni funzione del layer device-requests che oggi risolve implicitamente 'la' checklist della richiesta deve cambiare firma per richiedere un `checklistId` esplicito: e' una modifica breaking dell'interfaccia callable per 5 funzioni esistenti (getDeviceRequestChecklist, getDeviceRequestChecklistCompleteness, addDeviceRequestChecklistItem, updateDeviceRequestChecklistItem, removeDeviceRequestChecklistItem), non solo un'estensione additiva.",
+        "Nessun posto naturale per metadati per-checklist (es. un'etichetta 'fabbricazione' vs 'collaudo', chi l'ha aggiunta, quando): l'array contiene solo id opachi, qualunque etichetta andrebbe aggiunta come struttura piu' complessa (es. array di oggetti invece di stringhe), snaturando il parallelismo con `assignedVolunteers` che e' il pregio dichiarato di questa opzione.",
+        "`createChecklistShareLink`/`getChecklistShareStatus` restano scoperte: vanno comunque riviste per accettare un `checklistId` esplicito invece di risolverlo da `requestId`, con lo stesso costo di modifica delle altre opzioni — non e' un vantaggio specifico di questa opzione."
+      ],
+      "risks": [
+        "Se il limite di cardinalita' non viene deciso esplicitamente (nessun tetto vs un tetto arbitrario), l'array puo' crescere senza controllo nel tempo su richieste con molte clonazioni ripetute, con impatto sulla dimensione del documento padre (limite Firestore 1 MiB per documento, oggi non un problema ma un rischio silenzioso se non vincolato).",
+        "Il breaking change sulle firme delle 5 Cloud Function esistenti richiede coordinamento con qualunque client gia' in produzione che le invoca con la sola `requestId` — se esistono client mobile/esterni non aggiornabili in lockstep, serve una fase di transizione esplicita, non assunta qui."
+      ],
+      "effort_class": "M",
+      "reversibility": "medium",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Nessun limite di cardinalita' deciso per `checklistIds`",
+          "mitigation": "Decidere esplicitamente al gate se imporre un tetto massimo (es. coerente con un numero finito di 'fasi' previste) o lasciare l'array illimitato, documentando la scelta invece di lasciarla implicita nel codice."
+        },
+        {
+          "severity": "medium",
+          "description": "Cambio di firma breaking su 5 Cloud Function gia' in produzione",
+          "mitigation": "Versionare esplicitamente il rilascio (deploy coordinato frontend+backend, non graduale) dato che Firebase Callable non supporta versioning nativo degli argomenti."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-b-checklist-links-subcollection",
+      "name": "Sottocollezione di riferimenti `deviceRequests/{id}/checklists/{linkId}`, ciascuno con metadati propri",
+      "summary": "Introdurre una sottocollezione di documenti di collegamento (non le checklist stesse, che restano nella collezione `checklists` del core Organizer, rispettando il confine EA-3): ogni documento `deviceRequests/{id}/checklists/{linkId}` contiene `{checklistId, label?, createdAt, createdBy}`, dove `label` e' un metadato opaco al core ma di prima classe nel layer device-requests (es. 'fabbricazione', 'collaudo'). Stesso pattern gia' presente nello stesso documento per `events`. `createDeviceRequestChecklist`/`cloneDeviceRequestChecklist` creano un nuovo documento di collegamento invece di scrivere un campo sul padre; le funzioni di lettura/scrittura item accettano `linkId` (o `checklistId` risolto tramite di esso) per individuare la checklist target.",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Gestione della sottocollezione checklist-link (CRUD sui documenti di collegamento, non sulle checklist stesse)",
+          "Etichettatura per-checklist (label) come concetto di prima classe del layer device-requests",
+          "Vista a tab multi-checklist in RequestDetail.tsx, con etichetta leggibile invece del solo checklistId opaco"
+        ]
+      },
+      "pros": [
+        "Posto naturale per metadati per-checklist (label, createdBy, createdAt) senza forzare l'array del documento padre in una struttura piu' complessa: coerente con il precedente gia' esistente `events` nello stesso documento.",
+        "Il documento padre `deviceRequests/{id}` resta invariato nelle sue dimensioni indipendentemente da quante checklist vengono aggiunte nel tempo, evitando il rischio di crescita del documento padre presente in Option A.",
+        "Elencare le checklist di una richiesta diventa una query di sottocollezione paginabile, utile se in futuro il numero di checklist per richiesta crescesse oltre poche unita'."
+      ],
+      "cons": [
+        "Richiede una query di sottocollezione aggiuntiva (oltre alla lettura del documento padre gia' fatta per RBAC) ovunque serva l'elenco delle checklist di una richiesta, mentre in Option A l'elenco arriva gratis nello stesso `get()`.",
+        "Nessuna transazione atomica nativa tra 'verifica che la richiesta esista/RBAC' (lettura documento padre) e 'crea il documento di collegamento' (scrittura sottocollezione) diversa da quella gia' usata oggi per il singolo campo: va scritta esplicitamente se si vuole evitare collegamenti orfani in caso di errore a meta' tra le due operazioni.",
+        "Stessa esposizione delle 5 Cloud Function esistenti a un cambio di firma breaking di Option A (serve comunque un identificativo esplicito della checklist target), quindi non risparmia quel costo — lo sposta solo su un identificativo diverso (`linkId` invece di `checklistId` diretto)."
+      ],
+      "risks": [
+        "Introduce un livello di indirezione in piu' (`linkId` -> `checklistId` -> documento `checklists/{checklistId}` del core) rispetto a Option A: ogni operazione su un item richiede risolvere prima il link, poi delegare al core, con una lettura Firestore in piu' per chiamata rispetto a oggi.",
+        "Se `label` diventa un campo liberamente editabile senza un enum chiuso, rischia di replicare per un consumer diverso lo stesso problema di 'categoria opaca senza validazione' gia' osservato nel core (nessun controllo di significato applicativo, solo libertà del consumer)."
+      ],
+      "effort_class": "L",
+      "reversibility": "high",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Assenza di transazione atomica tra RBAC sul padre e scrittura del documento di collegamento",
+          "mitigation": "Usare una Firestore transaction esplicita in createDeviceRequestChecklist/cloneDeviceRequestChecklist che legge il padre e scrive il link nello stesso passaggio atomico, invece di due operazioni sequenziali indipendenti."
+        },
+        {
+          "severity": "medium",
+          "description": "Overhead di lettura aggiuntiva per ogni operazione sugli item (risoluzione linkId->checklistId)",
+          "mitigation": "Permettere alle Cloud Function di accettare direttamente checklistId quando gia' noto al chiamante (es. dopo una prima query della lista tab), riservando la risoluzione da linkId solo al primo caricamento della vista."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-c-linked-sibling-requests",
+      "name": "Nessun cambio di cardinalita' checklist: modellare le fasi come `deviceRequest` collegate tra loro (1:1 checklist preservato)",
+      "summary": "Non toccare affatto l'invariante 1:1 checklist<->deviceRequest ne' alcuna delle 9 Cloud Function esistenti del layer device-requests. Introdurre invece un nuovo concetto di collegamento tra `deviceRequest` sorelle (es. `groupId` o `relatedRequestIds: string[]` sul documento principale, stesso pattern precedente di `assignedVolunteers`): una richiesta di 'collaudo' o una fase successiva diventa una nuova `deviceRequest` a se stante, con il proprio stato, i propri volontari assegnati e la propria checklist singola, collegata alla richiesta originaria solo per navigazione/raggruppamento in UI (una sezione 'richieste collegate' in `RequestDetail.tsx`, non tab sulla stessa checklist).",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Relazione di raggruppamento tra deviceRequest (nuovo campo, nuova sezione UI di navigazione tra richieste collegate)",
+          "Duplicazione/collegamento di dati anagrafici (richiedente, destinatario) tra la richiesta originaria e le richieste di fase collegate, per evitare reinserimento manuale"
+        ]
+      },
+      "pros": [
+        "Zero rischio di regressione sulle 9 Cloud Function esistenti del layer device-requests e su `createChecklistShareLink`/`getChecklistShareStatus`: l'invariante 1:1 che tutte assumono resta vero ovunque, nessuna firma cambia.",
+        "Ogni fase (fabbricazione, collaudo, ...) ottiene gratuitamente tutto cio' che oggi esiste solo a livello di deviceRequest: stato/lifecycle proprio, propri `assignedVolunteers`, propria timeline di `events` — utile se le fasi hanno davvero owner e tempistiche indipendenti, non solo checklist indipendenti."
+      ],
+      "cons": [
+        "Risolve un problema diverso da quello descritto nella richiesta: 'piu' checklist sulla stessa richiesta' diventa 'piu' richieste collegate', il che frammenta anche stato, volontari assegnati e timeline — cambio che l'utente potrebbe non volere se l'esigenza reale e' solo organizzare piu' checklist sotto la stessa pratica, non sdoppiare la richiesta stessa.",
+        "Introduce duplicazione o un nuovo meccanismo di condivisione per i dati anagrafici del richiedente (oggi in `deviceRequests/{id}/private/data`, creati una sola volta da `createDeviceRequest`): ogni richiesta 'figlia' avrebbe bisogno di un modo per referenziare o copiare quei dati invece di richiederli di nuovo, funzionalita' che oggi non esiste in nessuna forma.",
+        "Il conteggio sequenziale (`counters/deviceRequests`, `requestNumber` formato REQ-XXXXXX) e le viste amministrative (AdminDashboard, AdminStats) che oggi contano/filtrano per singola deviceRequest andrebbero riviste per non conteggiare le richieste collegate come richieste indipendenti nelle metriche, cosa che oggi non fanno."
+      ],
+      "risks": [
+        "Cambia la semantica di cosa 'e'' una deviceRequest in tutta l'applicazione (dashboard, statistiche, notifiche email/Telegram che oggi scattano per ogni nuova deviceRequest): il rischio non e' isolato al layer checklist come nelle altre due opzioni, si propaga a domini adiacenti gia' stabili (AdminStats, AdminDashboard) fuori dal perimetro dichiarato di questo studio.",
+        "Se l'esigenza reale e' davvero 'checklist multiple sulla stessa pratica' (come descritto nella richiesta) e non 'fasi con owner/stato indipendenti', questa opzione sovra-costruisce una soluzione piu' pesante di quanto serva, spostando il costo dal layer checklist a un concetto nuovo (raggruppamento tra richieste) che nessun'altra parte del sistema oggi conosce."
+      ],
+      "effort_class": "L",
+      "reversibility": "low",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Frammenta stato/volontari/timeline che oggi sono unificati per pratica, con impatto su domini adiacenti (dashboard, statistiche, notifiche) fuori dal perimetro dichiarato device-requests/checklist",
+          "mitigation": "Se questa opzione venisse scelta, andrebbe esplicitamente ri-perimetrata come studio a se' (impatto su AdminDashboard/AdminStats), non decisa nello stesso gate di un cambio di modello dati sulla sola checklist."
+        }
+      ],
+      "spikes": [
+        {
+          "id": "spike-real-use-case-shape",
+          "question": "I casi reali segnalati in staging sono 'piu' checklist sulla stessa pratica con stesso richiedente/stato' o 'fasi con owner e tempistiche davvero indipendenti che meriterebbero uno stato proprio'?",
+          "verification_approach": "Rivedere con chi ha validato il flusso su staging (enableitalia-staging) 2-3 casi concreti di richieste che avrebbero avuto bisogno di piu' checklist, chiedendo se le fasi avrebbero avuto senso come stato/assegnazione indipendenti o no.",
+          "blocking": true,
+          "outcome": null
+        }
+      ]
+    }
+  ],
+  "recommendation": {
+    "option_id": "opt-a-checklist-ids-array",
+    "rationale": "Option C risolve un problema diverso da quello descritto (frammenta la pratica invece di organizzare piu' checklist sotto la stessa pratica) e propaga rischio a domini adiacenti gia' stabili (AdminDashboard/AdminStats, notifiche) fuori dal perimetro device-requests/checklist dichiarato in questo studio: la scarto come prima scelta, e la subordino allo spike bloccante che propongo (verificare con chi ha validato lo staging se i casi reali sono davvero 'fasi indipendenti' prima di considerarla). Tra Option A e Option B la differenza pratica e' minore ma reale: Option B offre un posto piu' pulito per metadati per-checklist (label) sfruttando un pattern di sottocollezione gia' presente nello stesso documento (`events`), ma paga un'indirezione aggiuntiva (linkId->checklistId) e una lettura extra ovunque serva l'elenco, senza risolvere un problema che Option A non abbia gia' (entrambe richiedono comunque il cambio di firma breaking sulle 5 Cloud Function esistenti). Raccomando Option A perche' e' l'estensione piu' diretta di un pattern gia' validato nello stesso documento (`assignedVolunteers`), non introduce indirezioni aggiuntive nelle chiamate piu' frequenti (lettura/scrittura item), e il suo con piu' rilevante — l'assenza di un posto per un'etichetta per-checklist — puo' essere assorbito in un secondo momento passando da `checklistIds: string[]` a un array di oggetti `{checklistId, label}` con una migrazione incrementale, se il bisogno di etichettatura si conferma reale, senza dover ripartire da una sottocollezione. Punti aperti da decidere esplicitamente al gate, non coperti dalla scelta tra le tre opzioni: (1) se e come `createChecklistShareLink`/`getChecklistShareStatus` debbano accettare un checklistId esplicito o restare scoped a un'unica checklist 'principale' per richiesta anche in un modello 1:N; (2) se imporre un limite di cardinalita' a `checklistIds`; (3) la scelta esplicita del template quando ne esistono piu' per lo stesso devicetype, gia' segnalata dalla richiesta come possibile cambio indipendente."
+  },
+  "decision": null
+}
