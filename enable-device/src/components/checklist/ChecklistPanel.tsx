@@ -14,11 +14,23 @@ import { Toast } from "primereact/toast";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 
 const CHECKLIST_ITEM_STATUSES = ["Assegnare", "Da iniziare", "In corso", "Completata"];
-const CHECKLIST_ITEM_TYPES = ["boolean", "generic", "numeric"];
+
+type ChecklistItemType = "boolean" | "generic" | "numeric";
+
+const CHECKLIST_ITEM_TYPE_OPTIONS: { label: string; value: ChecklistItemType }[] = [
+  { label: "Sì/No", value: "boolean" },
+  { label: "Generico", value: "generic" },
+  { label: "Quantità numerica", value: "numeric" },
+];
 
 interface ChecklistItem {
   id: string;
   title: string;
+  /** Discriminante opzionale: gli item creati prima di EA-123 o aggiunti
+   * tramite `addChecklistItem` (che non lo accetta ancora, vedi EA-121)
+   * possono non averlo. In assenza di `type`, la colonna Quantità resta
+   * nascosta (comportamento "fail closed", coerente con 'boolean'/'generic'). */
+  type?: ChecklistItemType;
   assignee: string | null;
   quantity: number | null;
   notes: string;
@@ -35,13 +47,13 @@ interface ChecklistData {
 
 interface NewItemForm {
   title: string;
-  type: string;
+  type: ChecklistItemType | null;
   assignee: string;
   quantity: number | null;
   notes: string;
 }
 
-const EMPTY_NEW_ITEM: NewItemForm = { title: "", type: "generic", assignee: "", quantity: null, notes: "" };
+const EMPTY_NEW_ITEM: NewItemForm = { title: "", type: null, assignee: "", quantity: null, notes: "" };
 
 interface Props {
   /** Id della deviceRequest a cui è collegata la checklist. */
@@ -197,7 +209,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
       await fn({
         requestId,
         title: newItem.title.trim(),
-        type: newItem.type,
+        type: newItem.type ?? undefined,
         assignee: newItem.assignee.trim() || undefined,
         quantity: newItem.quantity ?? undefined,
         notes: newItem.notes.trim() || undefined,
@@ -330,6 +342,9 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
               header="Quantità"
               body={(item: ChecklistItem) => {
                 const draft = getDraft(item);
+                if (draft.type !== "numeric") {
+                  return null;
+                }
                 return (
                   <InputNumber
                     value={draft.quantity ?? null}
@@ -413,7 +428,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
               label="Aggiungi"
               icon="pi pi-plus"
               loading={addingItem}
-              disabled={!newItem.title.trim()}
+              disabled={!newItem.title.trim() || !newItem.type}
               onClick={addItem}
             />
           </div>
@@ -429,15 +444,6 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 4 }}>Tipo</label>
-            <Dropdown
-              value={newItem.type}
-              options={CHECKLIST_ITEM_TYPES}
-              onChange={(e) => setNewItem((f) => ({ ...f, type: e.value }))}
-              style={{ width: "100%" }}
-            />
-          </div>
-          <div>
             <label style={{ display: "block", marginBottom: 4 }}>Assegnatario</label>
             <InputText
               value={newItem.assignee}
@@ -446,14 +452,32 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 4 }}>Quantità</label>
-            <InputNumber
-              value={newItem.quantity}
-              onValueChange={(e) => setNewItem((f) => ({ ...f, quantity: e.value ?? null }))}
-              min={0}
+            <label style={{ display: "block", marginBottom: 4 }}>Tipo</label>
+            <Dropdown
+              value={newItem.type}
+              options={CHECKLIST_ITEM_TYPE_OPTIONS}
+              onChange={(e) =>
+                setNewItem((f) => ({
+                  ...f,
+                  type: e.value,
+                  quantity: e.value === "numeric" ? f.quantity : null,
+                }))
+              }
+              placeholder="Seleziona il tipo"
               style={{ width: "100%" }}
             />
           </div>
+          {newItem.type === "numeric" && (
+            <div>
+              <label style={{ display: "block", marginBottom: 4 }}>Quantità</label>
+              <InputNumber
+                value={newItem.quantity}
+                onValueChange={(e) => setNewItem((f) => ({ ...f, quantity: e.value ?? null }))}
+                min={0}
+                style={{ width: "100%" }}
+              />
+            </div>
+          )}
           <div>
             <label style={{ display: "block", marginBottom: 4 }}>Note</label>
             <InputTextarea
