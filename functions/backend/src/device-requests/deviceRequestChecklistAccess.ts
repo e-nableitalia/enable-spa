@@ -8,9 +8,10 @@ import type { Firestore } from "firebase-admin/firestore";
  * (`getDeviceRequestChecklist`, `getDeviceRequestChecklistCompleteness`,
  * `addDeviceRequestChecklistItem`, `updateDeviceRequestChecklistItem`,
  * `removeDeviceRequestChecklistItem`) oltre che da
- * `createChecklistShareLink` (stesso RBAC, non citata negli scenari
- * Gherkin di EA-131 ma soggetta allo stesso cambio di contratto, vedi
- * `docs/FINDINGS.md` F-14).
+ * `createChecklistShareLink` (stesso RBAC; il cambio di contratto era
+ * gia' stato esteso qui in via preventiva da EA-131 per non rompere la
+ * build, vedi `docs/FINDINGS.md` F-15 — EA-132 formalizza a livello di
+ * Story/scenari Gherkin questo stesso comportamento gia' in vigore).
  *
  * RBAC: stesso perimetro di `device/changeStatus.ts` — admin su
  * qualsiasi richiesta, volontario solo se presente in
