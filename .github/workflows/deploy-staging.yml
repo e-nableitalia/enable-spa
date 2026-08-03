@@ -61,4 +61,4 @@ jobs:
           npm install
           npm run build --if-present
           cd ../..
-          firebase deploy --only functions --project enableitalia-staging
+          firebase deploy --only functions --project enableitalia-staging --force
