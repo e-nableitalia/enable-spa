@@ -49,7 +49,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/cloneChecklist.ts:44-52` — `quantity` sempre presente
   - `functions/backend/src/organizer/checklistCompleteness.ts` — `hasQuantityWhenRelevant` distingue esplicitamente chiave-assente da chiave-null, ramo mai raggiunto dai produttori di item sopra elencati
 - **Story/PR/sessione di provenienza**: rilevato durante il grounding dello studio di soluzione `ss-checklist-item-model`, sessione 2026-07-30. Rilevante per lo studio stesso: qualunque opzione che assuma "un item può oggi non avere quantità" come stato raggiungibile deve prima correggere queste 4 funzioni perché omettano davvero la chiave quando non fornita.
-- **Stato**: da decidere. Proposta: task Jira nell'Epic EA-3, da valutare insieme alla decisione sullo studio `ss-checklist-item-model` (la correzione ha senso solo nel contesto di quale opzione viene scelta, altrimenti è codice morto che nessun consumer esercita oggi).
+- **Stato**: risolto come effetto collaterale di EA-127 (sessione 2026-08-05). Il gate di completezza type-aware (`checklistCompleteness.ts::hasQuantity`, che ha sostituito `hasQuantityWhenRelevant`) controlla `quantity` solo per item `numeric` e tratta chiave-assente e chiave-`null` in modo identico: la distinzione che questo finding segnalava non ha più alcun effetto osservabile sul gate. Confermato dall'operatore: nessun fix separato necessario.
 
 ## F-6: Lo shorthand a stringa per gli item iniziali di `createChecklist` diventa irraggiungibile dopo l'introduzione del `type` obbligatorio (EA-123)
 
@@ -58,7 +58,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/createChecklist.ts` — branch `typeof input === "string"` in `normalizeInitialItem`: `type` resta `undefined`, quindi `isChecklistItemType(type)` è sempre `false` per questo branch
   - `functions/backend/src/organizer/createChecklist.test.ts` — test "throws invalid-argument when an initial item is a bare string (no type)" verifica esplicitamente che questo path sia sempre rifiutato
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-123 (Epic checklist item model), sessione 2026-07-31.
-- **Stato**: da decidere. Proposta: task Jira nell'Epic EA-3 (o nella stessa Epic di EA-123) per decidere se rimuovere esplicitamente il supporto allo shorthand a stringa da `normalizeInitialItem` (semplificando il codice) o se documentarlo come deliberatamente non più supportato, riferimento F-6.
+- **Stato**: deciso (sessione 2026-08-05) — rimuovere lo shorthand a stringa da `normalizeInitialItem`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
 
 ## F-7: Lo stesso shorthand a stringa diventa irraggiungibile anche in `createTemplate`/`updateTemplate` dopo l'introduzione del `type` obbligatorio (EA-125)
 
@@ -68,7 +68,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/updateTemplate.ts` — stesso branch, stessa duplicazione della funzione già presente prima di questa Story
   - `functions/backend/src/organizer/createTemplate.test.ts` e `updateTemplate.test.ts` — test "throws invalid-argument when an item is a bare string (no type)" verificano esplicitamente che questo path sia sempre rifiutato
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-125 (Epic checklist item model), sessione 2026-08-03.
-- **Stato**: da decidere. Proposta: la stessa task Jira proposta per F-6 (Epic EA-3) dovrebbe coprire anche `normalizeTemplateItem` in `createTemplate.ts`/`updateTemplate.ts`, dato che si tratta della stessa funzione duplicata con lo stesso problema; valutare in quell'occasione anche se conviene estrarre `normalizeTemplateItem` in un modulo condiviso (oggi duplicata identicamente nei due file), riferimento F-7.
+- **Stato**: deciso (sessione 2026-08-05), stessa decisione di [[F-6]] — rimuovere lo shorthand a stringa da `normalizeTemplateItem` in `createTemplate.ts`/`updateTemplate.ts`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
 
 ## F-8: `AdminChecklistTemplatesPage.tsx` non inviava mai `type` per gli item di template (EA-125), stesso pattern di [[F-7 EA-124]]
 
@@ -88,7 +88,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/cloneChecklist.ts` — `cloneSourceItem`: stesso pattern
   - `functions/backend/src/organizer/createChecklistFromTemplate.test.ts` e `cloneChecklist.test.ts` — test "defaults type to 'generic' when a legacy ... item has no type"
 - **Story/PR/sessione di provenienza**: rilevato e risolto (con scelta di default, non da Story esplicita) durante l'implementazione della Story Jira EA-126, sessione 2026-08-03.
-- **Stato**: da decidere (conferma umana desiderabile). La scelta del default `"generic"` è stata presa per coerenza con [[F-8]] e per non rompere la clonazione di dati legacy, ma la Story EA-126 non la richiede esplicitamente né la esclude. In alternativa si potrebbe: (a) rifiutare la clonazione di sorgenti con item privi di `type` con `invalid-argument`, o (b) considerare il caso irraggiungibile in produzione (se si conferma che non esistono più checklist/template legacy privi di `type`) e rimuovere la guardia. Proposta: task Jira nell'Epic checklist-item-model per confermare/rivedere questa scelta, riferimento F-9.
+- **Stato**: confermato dall'operatore (sessione 2026-08-05). Il default `"generic"` per item sorgente legacy privi di `type` resta il comportamento voluto, coerente con [[F-10]]. Nessuna azione di codice.
 
 ## F-10: Il gate di completezza type-aware (EA-127) tratta gli item privi di `type` come 'generic': scelta non coperta dagli scenari Gherkin della Story
 
@@ -97,7 +97,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/checklistCompleteness.ts` — `isChecklistItemComplete`: `if (item.type === "boolean") ... if (item.type === "numeric") ... return isGenericItemComplete(item)` (fallback implicito su `generic` per qualunque altro valore, incluso `undefined`)
   - `functions/backend/src/organizer/checklistCompleteness.test.ts` — describe "type assente o non riconosciuto (item legacy pre-EA-123)"
 - **Story/PR/sessione di provenienza**: Story Jira EA-127 "Checklist item: il gate di completezza distingue il calcolo per `type`...", sessione 2026-08-03.
-- **Stato**: da decidere. Proposta: task Jira nell'Epic EA-3 per confermare (o correggere) questa scelta di fallback, valutando anche se serva un backfill del campo `type` sui documenti `checklists/{id}` esistenti in produzione creati prima di EA-123, riferimento F-10.
+- **Stato**: confermato dall'operatore (sessione 2026-08-05), coerente con [[F-9]]. Il fallback a `generic` per `type` assente/non riconosciuto resta il comportamento voluto; nessun backfill deciso per ora. Nessuna azione di codice.
 
 ## F-11: Il ramo `boolean` del gate di completezza type-aware (EA-127) è irraggiungibile in produzione: nessuna funzione scrive mai `completed: true`
 
@@ -107,7 +107,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `grep -rn "completed" functions/backend/src enable-device/src` — nessuna scrittura di `completed: true` in nessun file, in nessun layer
   - `functions/backend/src/organizer/updateChecklistItem.ts` — campi aggiornabili: `title`/`type`/`status`/`assignee`/`quantity`/`notes`, mai `completed`
 - **Story/PR/sessione di provenienza**: rilevato durante la review della Story Jira EA-127 (Epic checklist item model), sessione 2026-08-03.
-- **Stato**: da decidere. Proposta: task Jira nell'Epic checklist-item-model per esporre la scrittura di `completed` (probabilmente in `updateChecklistItem`, simmetrico a come `status` è già aggiornabile) — senza questo, lo Scenario 1 di EA-127 resta un ramo di codice morto silenzioso, riferimento F-11.
+- **Stato**: deciso (sessione 2026-08-05) — esporre `completed` tra i campi aggiornabili di `updateChecklistItem`, simmetrico a `status`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
 
 ## F-12: `type` obbligatorio su `addChecklistItem` (EA-124) rende inutilizzabile in produzione il layer consumer `addDeviceRequestChecklistItem`, che non lo inoltra mai
 
