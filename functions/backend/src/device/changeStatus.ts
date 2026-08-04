@@ -3,6 +3,7 @@ import {getFirestore, FieldValue} from "firebase-admin/firestore";
 import {mapToPublicStatus} from "../utils/mapToPublicStatus";
 import {requireVolunteerConsents} from "../utils/consents";
 import {sendChangeStatusNotifications, NotificaOptions} from "./changeStatusNotifications";
+import {assertVolunteerTransitionAllowed} from "../utils/volunteerTransitions";
 
 export const changeStatus = onCall(
   {
@@ -49,20 +50,13 @@ export const changeStatus = onCall(
     const requestData = requestSnap.data();
     const currentStatus = requestData?.status;
 
-    // --- Controllo ruolo ---
-    if (role === "admin") {
-      // Admin può fare qualsiasi transizione
-    } else if (role === "volunteer") {
-      if (!requestData?.assignedVolunteers?.includes(uid)) {
-        throw new HttpsError("permission-denied", "Not assigned volunteer");
-      }
-
-      if (!isAllowedVolunteerTransition(currentStatus, newStatus)) {
-        throw new HttpsError("permission-denied", "Invalid status transition");
-      }
-    } else {
-      throw new HttpsError("permission-denied", "Invalid role");
-    }
+    assertVolunteerTransitionAllowed(
+      role,
+      uid,
+      requestData?.assignedVolunteers,
+      currentStatus,
+      newStatus
+    );
 
     await db.runTransaction(async (tx) => {
 
@@ -106,14 +100,4 @@ export const changeStatus = onCall(
     return {success: true};
   }
 );
-
-function isAllowedVolunteerTransition(from: string, to: string): boolean {
-  return (
-    (from === "scelta device e dimensionamento" && to === "personalizzazione") ||
-    (from === "personalizzazione" && to === "attesa materiali") ||
-    (from === "attesa materiali" && to === "fabbricazione") ||
-    (from === "fabbricazione" && to === "pronta per spedizione") ||
-    (from === "pronta per spedizione" && to === "spedita")
-  );
-}
 
