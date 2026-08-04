@@ -1,6 +1,6 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
-import {getFirestore, FieldValue} from "firebase-admin/firestore";
-import {mapToPublicStatus} from "../utils/mapToPublicStatus";
+import {getFirestore} from "firebase-admin/firestore";
+import {applyStatusChangeTransaction} from "./applyStatusChangeTransaction";
 import {requireVolunteerConsents} from "../utils/consents";
 import {sendEmailToDeviceAdmins} from "../utils/email";
 import {sendTelegramMessage} from "../utils/telegram";
@@ -72,29 +72,14 @@ export const changeStatus = onCall(
     }
 
     await db.runTransaction(async (tx) => {
-
-      tx.update(requestRef, {
-        status: newStatus,
-        publicStatus: mapToPublicStatus(newStatus),
-        updatedAt: FieldValue.serverTimestamp()
-      });
-
-      tx.set(requestRef.collection("events").doc(), {
-        type: "status_change",
-        fromStatus: currentStatus,
-        toStatus: newStatus,
-        timestamp: FieldValue.serverTimestamp(),
+      applyStatusChangeTransaction(tx, requestRef, {
+        db,
+        requestId,
+        currentStatus,
+        newStatus,
         createdBy: uid,
-        note: note || null
+        note
       });
-
-      tx.set(
-        db.collection("publicDeviceRequests").doc(requestId),
-        {
-          publicStatus: mapToPublicStatus(newStatus)
-        },
-        {merge: true}
-      );
     });
 
     // --- Notifiche opzionali ---
