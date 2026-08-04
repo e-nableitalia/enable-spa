@@ -172,11 +172,66 @@
         }
       ],
       "spikes": []
+    },
+    {
+      "id": "opt-e-flat-items-collection",
+      "name": "Item in una collection di primo livello dedicata, checklists/{id}.items ridotto ad array di riferimenti",
+      "summary": "Introdurre una nuova collection di primo livello `checklistItems/{itemId}` (non una subcollection annidata come opt-a), un documento per item, con `checklistId` come riferimento esplicito al documento padre. Il campo `checklists/{id}.items` smette di contenere gli oggetti item completi e diventa un array di soli `itemId` (riferimenti leggeri), mantenuto dalle stesse 9 funzioni CRUD del core oggi coinvolte. Il core espone `listMyChecklistItems(uid, scope?)` come query diretta e a campo singolo su `checklistItems` (`where('assignee','==', uid)`, opzionalmente `where('category','==', scope)`), senza alcun `collectionGroup` e senza il vincolo dell'indice composito che opt-a richiede per il caso base.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core", "device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "checklistItems: nuova collection di primo livello, un documento per item, con checklistId come riferimento esplicito al documento checklist padre",
+          "checklists/{id}.items ridotto a un array di soli itemId (riferimenti), non piu' oggetti item completi",
+          "listMyChecklistItems: nuova Cloud Function del core, query a campo singolo su checklistItems filtrata per assignee (self-only) e opzionalmente scope/category, nessuna collectionGroup"
+        ]
+      },
+      "pros": [
+        "Realizza la stessa idea di 'pura vista/query, nessuna sincronizzazione' di opt-a, ma con una query a campo singolo su una collection dedicata: il caso base (solo assignee) e' coperto dall'indice automatico che Firestore crea per ogni campo di ogni collection, zero indice composito richiesto - a differenza della query collectionGroup di opt-a, che lo richiede sempre.",
+        "Evita del tutto il rischio strutturale di opt-a legato a collectionGroup: una query collectionGroup su 'items' intercetta per definizione ogni subcollection chiamata 'items' in qualunque punto del database Firestore, presente o futura; una collection di primo livello con nome dedicato (checklistItems) non condivide questo rischio di collisione semantica.",
+        "Stesso vantaggio di scalabilita' di opt-a rispetto a opt-b: il costo della query e' proporzionale agli item effettivamente assegnati all'utente, non al numero totale di checklist nello scope richiesto."
+      ],
+      "cons": [
+        "Stessa ampiezza massima di modifica di opt-a: tutte e 9 le funzioni CRUD del core che oggi leggono/scrivono items come array embedded vanno riscritte per operare sulla nuova collection - nessun risparmio di effort rispetto a opt-a su questo fronte, stesso rischio di regressione su un modulo gia' stabile e appena irrobustito (Epic EA-3 Done, serie EA-121/EA-123/EA-124/EA-125/EA-127).",
+        "deleteChecklist e' impattata in modo peggiore qui che in opt-a: il codice attuale usa gia' `db.recursiveDelete(ref)` per eliminare 'il documento e tutte le sue subcollection (es. items)' (commento esplicito nel file) - un beneficio che opt-a otterrebbe gratuitamente mantenendo items come subcollection. checklistItems e' invece una collection di primo livello, non una subcollection: recursiveDelete non la tocca, quindi deleteChecklist va riscritta esplicitamente per cancellare in batch ogni checklistItems referenziato, con un nuovo rischio concreto di item orfani in caso di bug o di checklist che superano il limite di 500 operazioni per batch di cancellazione Firestore.",
+        "Non risolve di per se' il vincolo sullo scope meglio di opt-a: category resta un campo del documento checklists padre, non del singolo item-documento, anche in questa opzione. Per filtrare la todo-list per scope serve la stessa mitigazione gia' individuata per opt-a (denormalizzare category, o un campo scope dedicato, su ogni item al momento della scrittura): la struttura a collection piatta non offre di per se' alcun vantaggio automatico su questo punto specifico."
+      ],
+      "risks": [
+        "getChecklist e checklistCompleteness oggi leggono `items` come array gia' pronto sul documento; con `items` ridotto a un array di id, ricostruire la lista completa richiede una lettura a due fasi (prima gli id, poi la risoluzione ai documenti reali). Se implementata con una query `in` invece di `db.getAll` sui riferimenti, e' soggetta al limite di 30 valori per query di Firestore su checklist con piu' di 30 item.",
+        "Un bug nella nuova logica di cancellazione esplicita in deleteChecklist (dimenticare di eliminare uno o piu' checklistItems referenziati, o un errore nel chunking del batch) lascia documenti orfani in checklistItems senza alcun segnale automatico che li rilevi - un rischio nuovo, assente sia in opt-a (dove recursiveDelete lo gestisce gratuitamente) sia nel modello ad array attuale (dove non esistono documenti separati da poter orfanizzare)."
+      ],
+      "effort_class": "L",
+      "reversibility": "low",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Stessa eccezione RBAC self-only introdotta per la prima volta nel core, identica nella sostanza a quella di opt-a/opt-b/opt-d (la nuova query forza assignee===uid del chiamante, salvo admin).",
+          "mitigation": "Stessa mitigazione delle altre opzioni: dichiarare esplicitamente l'eccezione, isolarla in questa sola funzione, non toccare il modello di autorizzazione delle 13 funzioni esistenti del core."
+        },
+        {
+          "severity": "high",
+          "description": "deleteChecklist perde la cancellazione automatica delle subcollection oggi fornita gratuitamente da db.recursiveDelete, perche' checklistItems e' una collection di primo livello indipendente e non una subcollection del documento checklist.",
+          "mitigation": "Riscrivere esplicitamente deleteChecklist per interrogare (where checklistId ==) ed eliminare in batch, con chunking se necessario oltre le 500 operazioni, ogni checklistItems corrispondente prima o dopo la cancellazione del documento padre; coprire con test dedicati il caso di checklist con molti item."
+        },
+        {
+          "severity": "medium",
+          "description": "category resta sul documento checklist padre, non sul singolo item-documento: il filtro per scope richiede la stessa denormalizzazione gia' individuata come necessaria per opt-a.",
+          "mitigation": "Denormalizzare esplicitamente category (o un campo scope dedicato) su ogni checklistItems al momento della scrittura, esattamente come mitigato in opt-a."
+        }
+      ],
+      "spikes": [
+        {
+          "question": "Una query su checklistItems con due filtri di sola uguaglianza (assignee == X AND category/scope == Y, nessun range ne' orderBy) viene eseguita da Firestore in questo progetto senza richiedere un indice composito esplicito?",
+          "verification_approach": "Popolare l'emulatore Firestore locale (o un progetto di test) con una manciata di documenti checklistItems ed eseguire la query con entrambi i filtri contemporaneamente; osservare se Firestore la esegue direttamente o restituisce l'errore 'the query requires an index' con link di creazione - verifica di pochi minuti, nessuna funzione da costruire.",
+          "blocking": false,
+          "outcome": null
+        }
+      ]
     }
   ],
   "recommendation": {
-    "option_id": "opt-b-full-scan-category-scoped",
-    "rationale": "Il criterio decisivo qui e' la reversibilita' combinata con l'assenza di dati reali che giustifichino gia' oggi un investimento maggiore: esistono solo 4 checklist di test, quindi una scansione filtrata per category (opzione B) costa oggi, in pratica, quanto qualunque alternativa piu' sofisticata - ma senza pagarne il rischio. Le opzioni A e D toccano rispettivamente 9 funzioni CRUD gia' stabili e appena irrobustite (A) o introducono per la prima volta consistenza eventuale e una logica di diff non banale in un modulo finora sempre sincrono (D); l'opzione C evita di toccare il core ma introduce una doppia fonte di verita' - lo stesso pattern gia' scartato in ss-checklist-item-model per un problema diverso ma con lo stesso rischio strutturale di drift - e obbliga un ipotetico secondo consumer futuro (workshop, gia' citato come vocazione del core) a reimplementare tutto da zero. B e' l'unica delle quattro puramente additiva (una sola nuova funzione, nessuna modifica a codice esistente) e quindi la piu' facile da abbandonare in favore di A o D in futuro, quando/se il volume reale di checklist giustifichera' l'investimento maggiore - a differenza di A, la cui reversibilita' e' bassa proprio perche' richiede riscrivere lo storage primario. Resta pero' un punto che nessuna delle quattro opzioni risolve da sola e che va deciso comunque, prima o insieme alla scelta tra queste opzioni: la promozione di assignee a un riferimento reale a un utente autenticato (uid) non esiste oggi in nessun layer del codice, nonostante fosse gia' stata segnalata come 'responsabilita' del consumer' nello studio ss-checklist-item-model - senza questo prerequisito chiuso, 'assignee == uid dell'utente loggato' resta un'assunzione, non un fatto verificabile nel codice attuale, qualunque opzione di aggregazione venga scelta.\n\nUn secondo punto trasversale da decidere esplicitamente al gate, non legato a una singola opzione: tutte e quattro le opzioni introducono, in forme diverse, una prima eccezione al confine consolidato 'il core Organizer non ha RBAC oltre l'autenticazione' - va confermato che questa eccezione sia accettabile prima di procedere con qualunque opzione, non solo con quella raccomandata."
+    "option_id": "opt-e-flat-items-collection",
+    "rationale": "Con l'introduzione di opt-e la raccomandazione di questo studio cambia rispetto al giro precedente. Opt-e ottiene lo stesso risultato architetturale di opt-a - nessuna doppia fonte di verita', una pura vista/query sugli stessi dati, esattamente l'idea descritta nella richiesta originale - ma rimuove le due debolezze piu' concrete di opt-a: (1) non richiede alcun indice composito per il caso base 'solo assignee' (query a campo singolo su una collection dedicata, coperta dall'indice automatico che Firestore crea per ogni campo), mentre la query collectionGroup di opt-a lo richiede sempre; (2) non condivide il rischio strutturale delle query collectionGroup di intercettare qualunque futura subcollection chiamata 'items' altrove nel database, perche' e' una collection di primo livello con nome dedicato. Rispetto a opt-b, opt-e risolve il limite di scalabilita' (costo proporzionale agli item assegnati, non al numero di checklist nello scope) senza reintrodurre la sovrapposizione concettuale tra 'category come devicetype' e 'category come scope personale' che opt-b lascia irrisolta. Rispetto a opt-c e opt-d, opt-e mantiene una sola fonte di verita' e consistenza immediata, evitando sia il rischio di drift della vista satellite (opt-c, lo stesso pattern gia' scartato in ss-checklist-item-model) sia la consistenza eventuale introdotta per la prima volta nel core (opt-d).\n\nIl costo di questa scelta e' pero' lo stesso di opt-a su un aspetto specifico che va reso esplicito al gate: opt-e tocca la stessa ampiezza massima di superficie tra tutte le opzioni (le 9 funzioni CRUD gia' stabili e appena irrobustite), con effort_class L e reversibilita' bassa, esattamente come opt-a - non e' una scelta 'a basso rischio' nel senso in cui lo era opt-b. In piu' introduce un problema nuovo, specifico di questa opzione e assente in opt-a: deleteChecklist oggi elimina gratuitamente ogni subcollection tramite db.recursiveDelete, un beneficio che non si estende a una collection di primo livello indipendente - va riscritta esplicitamente per evitare checklistItems orfani, con un rischio concreto se questa riscrittura ha un bug o se una checklist supera le 500 operazioni per singolo batch di cancellazione. Infine, ne' opt-a ne' opt-e risolvono lo scope meglio dell'altra: entrambe richiedono la stessa denormalizzazione di category/scope sull'item, perche' in entrambe category resta un campo del documento checklist padre.\n\nAlla luce di questo, la raccomandazione passa da opt-b a opt-e: e' l'unica delle cinque opzioni che risolve il problema nella sua forma finale - non un ripiego a basso investimento come opt-b, ne' una soluzione con doppia fonte di verita' come opt-c, ne' una con consistenza eventuale come opt-d - senza portarsi dietro le due debolezze concrete di indice/collectionGroup di opt-a. Restano validi, trasversali a tutte e cinque le opzioni e da decidere comunque al gate, i due punti gia' emersi nel giro precedente: la promozione di assignee a un riferimento reale a un utente autenticato (uid) non esiste oggi in alcun layer del codice ed e' un prerequisito condiviso da chiudere qualunque opzione venga scelta; e l'eccezione al confine 'core Organizer senza RBAC oltre l'autenticazione' che ogni opzione, in forme diverse, introduce per la prima volta e che va confermata esplicitamente come accettabile. Se il team preferisse comunque non investire subito in una riscrittura di questa ampiezza vista l'assenza di dati reali in produzione, opt-b resta un ripiego legittimo e reversibile, ma va scelto consapevolmente come tale e non come soluzione definitiva."
   },
   "decision": null
 }
