@@ -1,8 +1,11 @@
 import {isProductionLifecycleStatus} from "./productionLifecycle";
 
 export function mapToPublicStatus(status: string): string {
+  const daValidare = [
+    "inviata"
+  ];
+
   const daGestire = [
-    "inviata",
     "famiglia contattata",
     "definizione richiesta",
     "valutazione fattibilità",
@@ -16,6 +19,7 @@ export function mapToPublicStatus(status: string): string {
     "standby"
   ];
 
+  if (daValidare.includes(status)) return "da validare";
   if (daGestire.includes(status)) return "da gestire";
   if (isProductionLifecycleStatus(status)) return "fabbricazione in corso";
   if (status === "completata") return "completati";

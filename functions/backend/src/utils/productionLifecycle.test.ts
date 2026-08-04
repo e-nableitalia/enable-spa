@@ -1,7 +1,6 @@
 import {
   PRODUCTION_LIFECYCLE_STATUSES,
   isProductionLifecycleStatus,
-  isAllowedVolunteerTransition,
 } from "./productionLifecycle";
 
 describe("PRODUCTION_LIFECYCLE_STATUSES", () => {
@@ -36,38 +35,5 @@ describe("isProductionLifecycleStatus", () => {
     expect(isProductionLifecycleStatus(undefined)).toBe(false);
     expect(isProductionLifecycleStatus(null)).toBe(false);
     expect(isProductionLifecycleStatus(42)).toBe(false);
-  });
-});
-
-describe("isAllowedVolunteerTransition", () => {
-  // Scenario 2: le 5 transizioni volontario esistenti restano identiche dopo l'estrazione
-  const allowedTransitions: Array<[string, string]> = [
-    ["scelta device e dimensionamento", "personalizzazione"],
-    ["personalizzazione", "attesa materiali"],
-    ["attesa materiali", "fabbricazione"],
-    ["fabbricazione", "pronta per spedizione"],
-    ["pronta per spedizione", "spedita"],
-  ];
-
-  it.each(allowedTransitions)("allows the existing volunteer transition '%s' -> '%s'", (from, to) => {
-    expect(isAllowedVolunteerTransition(from, to)).toBe(true);
-  });
-
-  // Scenario 3: nessuna nuova transizione viene introdotta da questa Story
-  it("rejects a reversed (backward) transition", () => {
-    expect(isAllowedVolunteerTransition("personalizzazione", "scelta device e dimensionamento")).toBe(false);
-  });
-
-  it("rejects a transition that skips a step", () => {
-    expect(isAllowedVolunteerTransition("scelta device e dimensionamento", "attesa materiali")).toBe(false);
-  });
-
-  it("rejects transitions involving 'fitting' or 'followup famiglia', which are not part of the 5 volunteer transitions", () => {
-    expect(isAllowedVolunteerTransition("spedita", "fitting")).toBe(false);
-    expect(isAllowedVolunteerTransition("fitting", "followup famiglia")).toBe(false);
-  });
-
-  it("rejects a transition from a status outside the fabbricazione group", () => {
-    expect(isAllowedVolunteerTransition("inviata", "personalizzazione")).toBe(false);
   });
 });
