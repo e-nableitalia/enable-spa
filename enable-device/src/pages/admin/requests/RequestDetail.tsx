@@ -17,6 +17,7 @@ import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
 import { REQUEST_STATUSES } from "../../../helpers/requestStatus";
+import { setRequiresAttention } from "../../../helpers/requiresAttention";
 import type { ShippingAddress } from "../../../shared/types/shippingAddress";
 import provinceList from "../../../helpers/province.json";
 
@@ -486,13 +487,9 @@ export default function RequestDetail() {
     if (!id || !attentionNote.trim()) return;
     setSavingAttention(true);
     try {
-      await updateDoc(doc(db, "deviceRequests", id), { requiresAttention: true });
-      const fn = httpsCallable(functions, "changeStatus");
-      await fn({
-        requestId: id,
-        newStatus: request?.status,
-        note: `⚠️ Richiede attenzione: ${attentionNote.trim()}`,
-        notifica: { admin: true, volunteers: attentionNotificaVolontari, telegram: attentionNotificaTelegram },
+      await setRequiresAttention(id, request?.status, true, attentionNote, {
+        volunteers: attentionNotificaVolontari,
+        telegram: attentionNotificaTelegram,
       });
       setRequest((prev: any) => ({ ...prev, requiresAttention: true }));
       toast.current?.show({ severity: "warn", summary: "Flag impostato", detail: "La richiesta è ora segnalata come 'richiede attenzione'.", life: 3000 });
@@ -511,9 +508,7 @@ export default function RequestDetail() {
     if (!id) return;
     setSavingAttention(true);
     try {
-      await updateDoc(doc(db, "deviceRequests", id), { requiresAttention: false });
-      const fn = httpsCallable(functions, "changeStatus");
-      await fn({ requestId: id, newStatus: request?.status, note: "✅ Flag 'richiede attenzione' rimosso." });
+      await setRequiresAttention(id, request?.status, false);
       setRequest((prev: any) => ({ ...prev, requiresAttention: false }));
       toast.current?.show({ severity: "success", summary: "Flag rimosso", detail: "La richiesta non richiede più attenzione.", life: 3000 });
       await loadData();
