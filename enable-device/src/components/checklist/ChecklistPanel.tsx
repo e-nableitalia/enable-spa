@@ -145,7 +145,6 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
   const isDirty = (itemId: string) => Boolean(drafts[itemId]);
 
   const saveItem = async (item: ChecklistItem) => {
-    const draft = getDraft(item);
     setSavingItemId(item.id);
     try {
       const fn = httpsCallable(functions, "updateDeviceRequestChecklistItem");
@@ -153,11 +152,11 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
         requestId,
         checklistId,
         itemId: item.id,
-        title: draft.title,
-        assignee: draft.assignee,
-        quantity: draft.quantity,
-        notes: draft.notes,
-        status: draft.status,
+        title: item.title,
+        assignee: item.assignee,
+        quantity: item.quantity,
+        notes: item.notes,
+        status: item.status,
       });
       toast.current?.show({ severity: "success", summary: "Item aggiornato", life: 2500 });
       await load();
@@ -310,46 +309,43 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
             />
           </div>
 
-          <DataTable value={checklist.items} emptyMessage="Nessun item nella checklist." size="small">
+          <DataTable
+            value={checklist.items.map(getDraft)}
+            emptyMessage="Nessun item nella checklist."
+            size="small"
+          >
             <Column
               header="Titolo"
-              body={(item: ChecklistItem) => {
-                const draft = getDraft(item);
-                return (
-                  <InputText
-                    value={draft.title}
-                    onChange={(e) => setDraftField(item.id, { title: e.target.value })}
-                    style={{ width: "100%" }}
-                  />
-                );
-              }}
+              body={(item: ChecklistItem) => (
+                <InputText
+                  value={item.title}
+                  onChange={(e) => setDraftField(item.id, { title: e.target.value })}
+                  style={{ width: "100%" }}
+                />
+              )}
               style={{ minWidth: 160 }}
             />
             <Column
               header="Assegnatario"
-              body={(item: ChecklistItem) => {
-                const draft = getDraft(item);
-                return (
-                  <InputText
-                    value={draft.assignee ?? ""}
-                    onChange={(e) => setDraftField(item.id, { assignee: e.target.value })}
-                    placeholder="Non assegnato"
-                    style={{ width: "100%" }}
-                  />
-                );
-              }}
+              body={(item: ChecklistItem) => (
+                <InputText
+                  value={item.assignee ?? ""}
+                  onChange={(e) => setDraftField(item.id, { assignee: e.target.value })}
+                  placeholder="Non assegnato"
+                  style={{ width: "100%" }}
+                />
+              )}
               style={{ minWidth: 140 }}
             />
             <Column
               header="Quantità"
               body={(item: ChecklistItem) => {
-                const draft = getDraft(item);
-                if (draft.type !== "numeric") {
+                if (item.type !== "numeric") {
                   return null;
                 }
                 return (
                   <InputNumber
-                    value={draft.quantity ?? null}
+                    value={item.quantity ?? null}
                     onValueChange={(e) => setDraftField(item.id, { quantity: e.value ?? null })}
                     min={0}
                     style={{ width: "100%" }}
@@ -360,33 +356,27 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
             />
             <Column
               header="Note"
-              body={(item: ChecklistItem) => {
-                const draft = getDraft(item);
-                return (
-                  <InputTextarea
-                    value={draft.notes ?? ""}
-                    onChange={(e) => setDraftField(item.id, { notes: e.target.value })}
-                    rows={1}
-                    autoResize
-                    style={{ width: "100%" }}
-                  />
-                );
-              }}
+              body={(item: ChecklistItem) => (
+                <InputTextarea
+                  value={item.notes ?? ""}
+                  onChange={(e) => setDraftField(item.id, { notes: e.target.value })}
+                  rows={1}
+                  autoResize
+                  style={{ width: "100%" }}
+                />
+              )}
               style={{ minWidth: 180 }}
             />
             <Column
               header="Stato"
-              body={(item: ChecklistItem) => {
-                const draft = getDraft(item);
-                return (
-                  <Dropdown
-                    value={draft.status}
-                    options={CHECKLIST_ITEM_STATUSES}
-                    onChange={(e) => setDraftField(item.id, { status: e.value })}
-                    style={{ width: "100%" }}
-                  />
-                );
-              }}
+              body={(item: ChecklistItem) => (
+                <Dropdown
+                  value={item.status}
+                  options={CHECKLIST_ITEM_STATUSES}
+                  onChange={(e) => setDraftField(item.id, { status: e.value })}
+                  style={{ width: "100%" }}
+                />
+              )}
               style={{ minWidth: 150 }}
             />
             <Column
