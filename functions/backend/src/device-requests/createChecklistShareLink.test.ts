@@ -171,13 +171,14 @@ describe("createChecklistShareLink", () => {
     expect(shareLinkSetMock).not.toHaveBeenCalled();
   });
 
-  // Scenario 5 (EA-131): richiesta legacy con solo checklistId singolare -> risolta comunque.
-  it("resolves access for a legacy request with only the singular checklistId field", async () => {
-    const result = await createChecklistShareLink.run(
-      buildRequest({ requestId: "req-legacy", checklistId: CHECKLIST_ID }, "volunteer-1")
-    );
-
-    expect(result.token).toBe(GENERATED_TOKEN);
+  // Scenario 5 (EA-133): nessun dual-read sul vecchio campo singolare
+  // checklistId -> not-found, anche se il campo legacy e' ancora presente.
+  it("throws not-found for a legacy request with only the singular checklistId field, no fallback", async () => {
+    await expect(
+      createChecklistShareLink.run(
+        buildRequest({ requestId: "req-legacy", checklistId: CHECKLIST_ID }, "volunteer-1")
+      )
+    ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this device request"));
   });
 
   // Scenario 2 (EA-132): due checklistId distinti della stessa richiesta,

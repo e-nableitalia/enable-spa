@@ -27,11 +27,10 @@ import type { Firestore } from "firebase-admin/firestore";
  * solo che il `checklistId` passato appartenga effettivamente alla
  * richiesta, con `not-found` altrimenti.
  *
- * Coesistenza dati legacy: se la richiesta non ha ancora `checklistIds`
- * (creata prima dell'Epic EA-129) ma ha il vecchio campo singolare
- * `checklistId`, un chiamante che passa esplicitamente proprio quel
- * valore viene risolto come se fosse presente in `checklistIds` — nessun
- * backfill è necessario, la coesistenza è gestita qui a runtime.
+ * Nessuna coesistenza con il vecchio campo singolare `checklistId`:
+ * confermato (EA-133) che non esistono dati reali dietro quel campo, solo
+ * documenti di test bonificati su staging — nessun dual-read voluto,
+ * vedi `docs/FINDINGS.md` F-14.
  */
 export async function resolveDeviceRequestChecklistAccess(
   db: Firestore,
@@ -67,12 +66,8 @@ export async function resolveDeviceRequestChecklistAccess(
   const checklistIds: unknown[] = Array.isArray(requestData.checklistIds)
     ? requestData.checklistIds
     : [];
-  const legacyChecklistId =
-    typeof requestData.checklistId === "string" ? requestData.checklistId : undefined;
 
-  const belongsToRequest = checklistIds.includes(checklistId) || legacyChecklistId === checklistId;
-
-  if (!belongsToRequest) {
+  if (!checklistIds.includes(checklistId)) {
     throw new HttpsError("not-found", "Checklist not linked to this device request");
   }
 
