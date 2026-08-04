@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-04T23:09:31.149Z",
+  "generated_at": "2026-08-04T23:28:35.645Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -86,8 +86,21 @@
       "type": "solution_study",
       "source_path": "docs/solution-studies/ss-user-todo-list.json",
       "created_at": "2026-08-04T23:09:31.149Z",
-      "updated_at": "2026-08-04T23:09:31.149Z",
+      "updated_at": "2026-08-04T23:28:35.643Z",
       "created_by": "cli:solution-study"
+    },
+    {
+      "id": "ss-user-todo-list-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/ss-user-todo-list-epic-draft.md",
+      "created_at": "2026-08-04T23:28:35.645Z",
+      "updated_at": "2026-08-04T23:28:35.645Z",
+      "created_by": "cli:solution-decide",
+      "status": "draft",
+      "domains": [
+        "process-organizer-core",
+        "device-requests"
+      ]
     }
   ]
 }
