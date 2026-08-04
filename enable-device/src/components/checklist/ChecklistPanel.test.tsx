@@ -221,19 +221,35 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
     );
   });
 
-  // NOTA: non è presente qui un test che clicca il bottone "Salva" (icona
-  // "pi-save") per verificare l'inoltro del checklistId a
-  // updateDeviceRequestChecklistItem. Durante la stesura di questo test è
-  // emerso un bug preesistente e non in scope in questa Story — vedi
-  // docs/FINDINGS.md F-17 — per cui quel bottone non diventa mai cliccabile
-  // da interazione utente in nessun ambiente (jsdom o browser reale): il
-  // memo `BodyCell` di PrimeReact DataTable ignora lo stato locale `drafts`
-  // (esterno a `rowData`), quindi lo stato "dirty" della riga non si
-  // propaga mai al DOM/fiber di React. La modifica di questa Story
-  // sull'inoltro esplicito di `checklistId` nel payload è verificata per
-  // simmetria di codice con `addDeviceRequestChecklistItem` e
-  // `removeDeviceRequestChecklistItem` (stesso pattern, entrambi testati
-  // sotto), oltre che dal typecheck del progetto.
+  // Regressione F-17: modificare un campo deve abilitare "Salva" e il click
+  // deve effettivamente inviare l'update (in precedenza la memoizzazione di
+  // PrimeReact DataTable ignorava lo stato locale "drafts", rendendo il
+  // bottone "Salva" permanentemente disabilitato).
+  it("modificare il titolo abilita 'Salva' e invia l'update con il checklistId esplicito del pannello", async () => {
+    mockChecklistWithId("c42", [
+      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    const row = await rowFor("Verifica batteria");
+
+    const saveButton = row.querySelector(".pi-save")?.closest("button");
+    if (!saveButton) throw new Error("Save button not found");
+    expect(saveButton).toBeDisabled();
+
+    const titleInput = within(row).getByDisplayValue("Verifica batteria");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Verifica batteria (aggiornato)");
+    expect(within(row).getByDisplayValue("Verifica batteria (aggiornato)")).toBeInTheDocument();
+    expect(saveButton).not.toBeDisabled();
+
+    await user.click(saveButton);
+
+    expect(callable).toHaveBeenCalledWith(
+      "updateDeviceRequestChecklistItem",
+      expect.objectContaining({ requestId: "r1", checklistId: "c42", itemId: "i1", title: "Verifica batteria (aggiornato)" })
+    );
+  });
 
   it("la rimozione di un item invia il checklistId esplicito del pannello", async () => {
     mockChecklistWithId("c42", [
