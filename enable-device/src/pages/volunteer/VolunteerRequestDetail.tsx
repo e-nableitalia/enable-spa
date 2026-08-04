@@ -12,7 +12,7 @@ import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
 import RequestTimeline from "../../components/timeline/RequestTimeline";
-import ChecklistPanel from "../../components/checklist/ChecklistPanel";
+import DeviceRequestChecklists from "../../components/checklist/DeviceRequestChecklists";
 import { REQUEST_STATUSES } from "../../helpers/requestStatus";
 
 export default function VolunteerRequestDetail() {
@@ -234,14 +234,17 @@ export default function VolunteerRequestDetail() {
       )}
 
       {/* Checklist di fabbricazione (Organizer) */}
-      {request.checklistId && (
-        <div className="p-panel p-component" style={{ marginBottom: 24 }}>
-          <div className="p-panel-header"><span>Checklist di fabbricazione</span></div>
-          <div className="p-panel-content">
-            <ChecklistPanel requestId={id as string} checklistId={request.checklistId} />
-          </div>
+      <div className="p-panel p-component" style={{ marginBottom: 24 }}>
+        <div className="p-panel-header"><span>Checklist di fabbricazione</span></div>
+        <div className="p-panel-content">
+          <DeviceRequestChecklists
+            requestId={id as string}
+            checklistIds={Array.isArray(request.checklistIds) ? request.checklistIds : []}
+            deviceType={request.deviceType}
+            onChecklistsChanged={loadData}
+          />
         </div>
-      )}
+      </div>
 
       {/* Ultimo evento */}
       <Panel

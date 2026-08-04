@@ -153,17 +153,18 @@ describe("getDeviceRequestChecklistCompleteness", () => {
     ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this device request"));
   });
 
-  // Scenario 5 (EA-131): richiesta legacy con solo checklistId singolare -> risolta comunque.
-  it("resolves access for a legacy request with only the singular checklistId field", async () => {
+  // Scenario 5 (EA-133): nessun dual-read sul vecchio campo singolare
+  // checklistId -> not-found, anche se il campo legacy e' ancora presente.
+  it("throws not-found for a legacy request with only the singular checklistId field, no fallback", async () => {
     checklistsStore = {
       [CHECKLIST_ID]: { items: [{ assignee: "volunteer-1", quantity: 2, status: "Completata" }] },
     };
 
-    const result = await getDeviceRequestChecklistCompleteness.run(
-      buildRequest({ requestId: "req-legacy", checklistId: CHECKLIST_ID }, "volunteer-1")
-    );
-
-    expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: true });
+    await expect(
+      getDeviceRequestChecklistCompleteness.run(
+        buildRequest({ requestId: "req-legacy", checklistId: CHECKLIST_ID }, "volunteer-1")
+      )
+    ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this device request"));
   });
 
   it("throws unauthenticated when there is no auth context", async () => {

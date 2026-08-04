@@ -163,3 +163,109 @@ describe("ChecklistPanel - colonna Quantità condizionale sul type dell'item", (
     expect(addButton).not.toBeDisabled();
   });
 });
+
+describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Function (EA-131/EA-133)", () => {
+  beforeEach(() => {
+    callable.mockReset();
+  });
+
+  function mockChecklistWithId(checklistId: string, items: Array<Record<string, unknown>>) {
+    callable.mockImplementation((name: string) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({ data: { checklistId, title: "Checklist test", category: "cat", items } });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "addDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: { itemId: "new-item" } });
+      }
+      if (name === "updateDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: {} });
+      }
+      if (name === "removeDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: {} });
+      }
+      if (name === "createChecklistShareLink") {
+        return Promise.resolve({ data: { token: "tok", url: "https://example.test/share/tok" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+  }
+
+  it("il caricamento invia il checklistId esplicito del pannello, non un altro", async () => {
+    mockChecklistWithId("c42", []);
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    expect(callable).toHaveBeenCalledWith("getDeviceRequestChecklist", { requestId: "r1", checklistId: "c42" });
+    expect(callable).toHaveBeenCalledWith("getDeviceRequestChecklistCompleteness", { requestId: "r1", checklistId: "c42" });
+  });
+
+  it("l'aggiunta di un item invia il checklistId esplicito del pannello", async () => {
+    mockChecklistWithId("c42", []);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Aggiungi item" }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getAllByRole("textbox")[0], "Verifica dita");
+    const typeTrigger = within(dialog).getByRole("button", { name: "Seleziona il tipo" });
+    await selectDropdownOption(user, typeTrigger, "Generico");
+    await user.click(within(dialog).getByRole("button", { name: "Aggiungi" }));
+
+    expect(callable).toHaveBeenCalledWith(
+      "addDeviceRequestChecklistItem",
+      expect.objectContaining({ requestId: "r1", checklistId: "c42" })
+    );
+  });
+
+  // NOTA: non è presente qui un test che clicca il bottone "Salva" (icona
+  // "pi-save") per verificare l'inoltro del checklistId a
+  // updateDeviceRequestChecklistItem. Durante la stesura di questo test è
+  // emerso un bug preesistente e non in scope in questa Story — vedi
+  // docs/FINDINGS.md F-17 — per cui quel bottone non diventa mai cliccabile
+  // da interazione utente in nessun ambiente (jsdom o browser reale): il
+  // memo `BodyCell` di PrimeReact DataTable ignora lo stato locale `drafts`
+  // (esterno a `rowData`), quindi lo stato "dirty" della riga non si
+  // propaga mai al DOM/fiber di React. La modifica di questa Story
+  // sull'inoltro esplicito di `checklistId` nel payload è verificata per
+  // simmetria di codice con `addDeviceRequestChecklistItem` e
+  // `removeDeviceRequestChecklistItem` (stesso pattern, entrambi testati
+  // sotto), oltre che dal typecheck del progetto.
+
+  it("la rimozione di un item invia il checklistId esplicito del pannello", async () => {
+    mockChecklistWithId("c42", [
+      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    const row = await rowFor("Verifica batteria");
+    // Bottone icon-only (icona "pi-trash"): nessun'etichetta testuale accessibile via role.
+    const removeButton = row.querySelector(".pi-trash")?.closest("button");
+    if (!removeButton) throw new Error("Remove button not found");
+    await user.click(removeButton);
+    const confirmButton = await screen.findByRole("button", { name: "Rimuovi" });
+    fireEvent.click(confirmButton);
+
+    expect(callable).toHaveBeenCalledWith(
+      "removeDeviceRequestChecklistItem",
+      expect.objectContaining({ requestId: "r1", checklistId: "c42", itemId: "i1" })
+    );
+  });
+
+  it("la generazione del link di condivisione invia il checklistId esplicito del pannello", async () => {
+    mockChecklistWithId("c42", []);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Genera link di condivisione" }));
+
+    expect(callable).toHaveBeenCalledWith(
+      "createChecklistShareLink",
+      expect.objectContaining({ requestId: "r1", checklistId: "c42" })
+    );
+  });
+});
