@@ -1,3 +1,5 @@
+import {isProductionLifecycleStatus} from "./productionLifecycle";
+
 export function mapToPublicStatus(status: string): string {
   const daGestire = [
     "inviata",
@@ -5,17 +7,6 @@ export function mapToPublicStatus(status: string): string {
     "definizione richiesta",
     "valutazione fattibilità",
     "attesa volontario"
-  ];
-
-  const fabbricazione = [
-    "scelta device e dimensionamento",
-    "personalizzazione",
-    "attesa materiali",
-    "fabbricazione",
-    "fitting",
-    "pronta per spedizione",
-    "spedita",
-    "followup famiglia"
   ];
 
   const annullate = [
@@ -26,7 +17,7 @@ export function mapToPublicStatus(status: string): string {
   ];
 
   if (daGestire.includes(status)) return "da gestire";
-  if (fabbricazione.includes(status)) return "fabbricazione in corso";
+  if (isProductionLifecycleStatus(status)) return "fabbricazione in corso";
   if (status === "completata") return "completati";
   if (annullate.includes(status)) return "annullate / non completabili";
   return "da gestire";

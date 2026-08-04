@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {getFirestore, FieldValue} from "firebase-admin/firestore";
 import {mapToPublicStatus} from "../utils/mapToPublicStatus";
+import {isAllowedVolunteerTransition} from "../utils/productionLifecycle";
 import {requireVolunteerConsents} from "../utils/consents";
 import {sendEmailToDeviceAdmins} from "../utils/email";
 import {sendTelegramMessage} from "../utils/telegram";
@@ -165,14 +166,4 @@ export const changeStatus = onCall(
     return {success: true};
   }
 );
-
-function isAllowedVolunteerTransition(from: string, to: string): boolean {
-  return (
-    (from === "scelta device e dimensionamento" && to === "personalizzazione") ||
-    (from === "personalizzazione" && to === "attesa materiali") ||
-    (from === "attesa materiali" && to === "fabbricazione") ||
-    (from === "fabbricazione" && to === "pronta per spedizione") ||
-    (from === "pronta per spedizione" && to === "spedita")
-  );
-}
 
