@@ -1,0 +1,182 @@
+{
+  "id": "ss-user-todo-list",
+  "status": "draft",
+  "request_ref": "docs/implementation-requests/user-todo-list-request.md",
+  "problem_statement": "La richiesta propone gia' una soluzione ('todo-list personale per utente') per un problema piu' specifico e verificato nel codice attuale: non esiste oggi alcun modo per un utente di vedere in un unico posto tutti gli item di checklist a lui assegnati, indipendentemente da quale checklist li contiene. Questo per due ragioni concrete, entrambe confermate leggendo il codice (non solo la richiesta): (1) gli item vivono come array embedded su `checklists/{id}.items` (addChecklistItem.ts usa `FieldValue.arrayUnion`, updateChecklistItem/removeChecklistItem riscrivono l'intero array) — non una subcollection ne' una collection propria — e nessuna funzione o query nel repo attraversa oggi piu' documenti `checklists` filtrando per un campo interno a un singolo item (verificato: nessun uso di `collectionGroup` in tutto `functions/backend/src`); l'unico modo per leggere gli item di una checklist e' conoscerne gia' il `checklistId` e chiamare `getChecklist`. (2) Il campo `assignee` e', in ogni punto verificato del codice (core: addChecklistItem.ts; layer device-requests: updateDeviceRequestChecklistItem.ts, relativi test con valori come 'volunteer-1'/'Mario Rossi'; frontend: ChecklistPanel.tsx, campo `<InputText>` a testo libero), una stringa opaca scelta a mano dal consumer, mai risolta a un utente autenticato reale: nessuna funzione in nessun layer valida o risolve `assignee` contro `users/{uid}`. La promozione di `assignee` a riferimento reale era gia' stata segnalata come 'cambio ortogonale, non nel core' nello studio deciso `ss-checklist-item-model` (2026-07-30), ma non e' mai stata implementata in alcun layer: e' quindi un prerequisito reale e non ancora soddisfatto per qualunque forma di todo-list per-utente basata su 'assignee == uid dell'utente loggato', non un dettaglio secondario di una sola opzione. Questo studio esplora come costruire l'aggregazione cross-checklist (il vero problema architetturale), assumendo che la promozione dell'identita' dell'assegnatario sia una precondizione condivisa da chiudere comunque, qualunque opzione venga scelta.",
+  "constraints": [
+    "process-organizer-core e' dichiarato nel domain manifest come modulo generico 'pensato per essere riusato oltre il caso device (es. organizzazione eventi/workshop in futuro)': category, checklistId, templateId sono valori opachi per il core (confine consolidato dell'Epic EA-3).",
+    "Il core non ha oggi alcun controllo RBAC oltre 'autenticato', a eccezione della ownership su deleteChecklist (mai attivabile in pratica, finding F-1: createdBy non viene mai scritto). Ogni RBAC per-consumer (es. 'admin o volontario assegnato') e' deciso interamente dal layer device-requests (deviceRequestChecklistAccess.ts), non dal core. Una capability che risponde 'dammi solo i MIEI item assegnati' introdurrebbe nel core un primo concetto di identita' del chiamante mai esistito finora in nessuna delle 14 funzioni gia' stabili: va trattata come eccezione esplicita da dichiarare, non come estensione naturale.",
+    "Gli item sono array embedded (arrayUnion o riscrittura completa dell'array) su checklists/{id}.items, non una subcollection: nessuna funzione o query esistente nel repo attraversa piu' documenti checklists filtrando su un campo di un singolo item (verificato via grep: zero occorrenze di collectionGroup in functions/backend/src).",
+    "assignee e' oggi, in ogni punto verificato (core, layer device-requests, frontend ChecklistPanel.tsx), una stringa libera non risolta a un uid Firebase reale: nessuna funzione esistente la valida o la collega a users/{uid}. Qualunque opzione che assuma 'assignee == uid dell'utente loggato' gia' funzionante oggi e' scorretta.",
+    "Esistono oggi solo 4 checklist di test create dall'operatore per validare il modello type (nessun dato reale in produzione/staging): rimuove il vincolo di migrazione/dual-read per qualunque opzione che cambi la struttura di storage degli item (a differenza del caso gestito in F-18, dove esistevano dati reali da verificare).",
+    "Nessun file firestore.indexes.json nel repo: gli indici compositi Firestore non sono oggi gestiti come config versionata nel workflow di deploy. Un'opzione che richiede un nuovo indice composito (es. per una query collectionGroup filtrata) introduce un passo operativo di deploy non ancora presente nel progetto.",
+    "Convenzione consolidata (discover-context.json): ogni Cloud Function registra inizio/fine/errore in securityLogs via logSecurityEvent, con invokeId di correlazione. Qualunque nuova capability di aggregazione deve seguirla, come fanno gia' tutte le funzioni del core e del layer device-requests.",
+    "getChecklistShareStatus (Story EA-113, pubblica senza autenticazione) espone esplicitamente solo percentComplete, mai assignee o dettaglio item (confine dc-private-data-separation gia' nel codice): nessuna opzione di questo studio deve introdurre un percorso, diretto o indiretto, che esponga pubblicamente l'assignee risolto o gli item della todo-list personale."
+  ],
+  "options": [
+    {
+      "id": "opt-a-item-subcollection-collectiongroup",
+      "name": "Migrazione degli item a subcollection + query collectionGroup con RBAC self-only nel core",
+      "summary": "Cambiare il modello di storage del core Organizer da array embedded (checklists/{id}.items) a subcollection (checklists/{id}/items/{itemId}), riscrivendo le 9 funzioni CRUD interessate (createChecklist, addChecklistItem, updateChecklistItem, removeChecklistItem, cloneChecklist, createChecklistFromTemplate, getChecklist, deleteChecklist, checklistCompleteness/getChecklistCompleteness). Il core espone una nuova capability `listMyChecklistItems(uid, scope?)` che esegue una query `collectionGroup('items').where('assignee','==', uid)`, con un vincolo di sicurezza nuovo per il core: la query e' sempre forzata sull'uid del chiamante autenticato (o su un uid arbitrario solo se admin). La todo-list diventa una pura vista/query sugli stessi documenti, come suggerito nella richiesta, senza alcuna sincronizzazione separata.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core", "device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "listMyChecklistItems: nuova Cloud Function del core, query collectionGroup su items filtrata per assignee/uid, con self-only RBAC",
+          "Migrazione storage item: da array embedded a subcollection items/{itemId} su tutte le 9 funzioni CRUD del core coinvolte"
+        ]
+      },
+      "pros": [
+        "E' l'unica opzione che realizza alla lettera l'idea proposta nella richiesta: 'una pura vista/query filtrata sugli stessi documenti, senza sincronizzazione bidirezionale ne' copia separata dei dati'.",
+        "Nessuna doppia fonte di verita': un solo luogo di scrittura (la subcollection items) e un solo luogo di lettura (la query collectionGroup), quindi nessun rischio strutturale di drift tra dati primari e vista aggregata.",
+        "Scala correttamente con il volume: il costo della query e' proporzionale agli item effettivamente assegnati all'utente, non al numero totale di checklist esistenti (a differenza delle opzioni che leggono l'intera collection checklists)."
+      ],
+      "cons": [
+        "Superficie di modifica massima tra le opzioni: riscrive 9 funzioni gia' stabili e recentemente irrobustite (Epic EA-3 Done, serie EA-121/EA-123/EA-124/EA-125/EA-127 su type/status appena completata), con rischio concreto di regressione su un modulo che ha gia' attraversato piu' round di hardening.",
+        "Rompe esplicitamente il confine consolidato 'core senza RBAC oltre autenticazione': la nuova capability deve sapere chi e' il chiamante e forzare assignee===uid, un'eccezione architetturale che non ha precedenti nelle 14 funzioni esistenti del core e che va dichiarata, non nascosta dentro una funzione apparentemente generica.",
+        "category vive sul documento checklist padre, non sul singolo item: per rispettare lo 'scope' richiesto (es. filtrare la todo-list per 'richieste device') servirebbe denormalizzare category su ogni item-subdocumento, oppure una query in due passi (prima i checklistId con quella category, poi un filtro 'in' sugli item — limitato a 30 valori da Firestore), aggiungendo un problema di design non banale non presente nella richiesta originale."
+      ],
+      "risks": [
+        "Un bug nella migrazione di una sola delle 9 funzioni (es. cloneChecklist o createChecklistFromTemplate, che oggi azzerano assignee/status per ogni item copiato) puo' propagarsi silenziosamente nella query aggregata cross-checklist, con superficie di impatto molto piu' ampia di un bug nel modello ad array attuale (limitato a una singola checklist).",
+        "Nessun indice composito esiste oggi per collectionGroup query (nessun firestore.indexes.json nel repo): il primo deploy richiede introdurre sia l'indice sia il processo per gestirlo, un costo operativo nuovo per il progetto."
+      ],
+      "effort_class": "L",
+      "reversibility": "low",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "La nuova capability introduce nel core un primo controllo RBAC basato sull'identita' del chiamante (self-only), mai esistito prima in nessuna delle 14 funzioni gia' stabili del core Organizer.",
+          "mitigation": "Documentare esplicitamente questa capability come eccezione dichiarata al confine 'core senza RBAC', isolata in un'unica funzione nuova, senza toccare il modello di autorizzazione delle 13 funzioni esistenti."
+        },
+        {
+          "severity": "medium",
+          "description": "Lo 'scope' (category) non e' oggi disponibile sul singolo item-subdocumento dopo la migrazione a subcollection, complicando il filtro per ambito richiesto esplicitamente nella richiesta originale.",
+          "mitigation": "Denormalizzare esplicitamente category (o un campo scope dedicato) su ogni item al momento della scrittura, accettando la duplicazione controllata invece di una query in due passi con il limite 'in' di Firestore."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-b-full-scan-category-scoped",
+      "name": "Aggregazione on-demand via lettura filtrata per categoria, nessun cambio allo storage del core",
+      "summary": "Non toccare affatto il modello di storage degli item (restano array embedded su checklists/{id}.items, invariate tutte le 9 funzioni CRUD esistenti). Il core espone una singola nuova capability `listChecklistItemsByAssignee(assignee, scope?)` che legge tutti i documenti `checklists` (opzionalmente filtrati server-side per `category === scope`, gia' un campo top-level indicizzato) e filtra in memoria gli item il cui `assignee` corrisponde. Il costo e' proporzionale al numero di checklist nello scope richiesto, non al numero di item assegnati all'utente.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "listChecklistItemsByAssignee: nuova Cloud Function del core, legge checklists (filtrate per category se scope fornito) e filtra items in memoria per assignee"
+        ]
+      },
+      "pros": [
+        "Zero modifiche alle 9 funzioni CRUD gia' stabili e appena irrobustite: nessun rischio di regressione sul modello di storage esistente, nessuna migrazione di dati anche minima.",
+        "Risolve naturalmente la domanda aperta sullo 'scope' riusando category, gia' un campo esistente e indicizzato a livello di singolo campo su checklists (nessun indice composito nuovo richiesto per un filtro a campo singolo).",
+        "Opzione additiva e isolata in un'unica nuova funzione: rimuoverla in futuro (se si sceglie un'altra strategia) non richiede alcun rollback sui dati o sulle funzioni esistenti."
+      ],
+      "cons": [
+        "Non scala oltre le dimensioni attuali: il costo di ogni chiamata cresce con il numero totale di checklist nello scope, non con gli item effettivamente assegnati all'utente — accettabile con le 4 checklist di test odierne, ma un limite strutturale se il volume crescesse, e la scelta andrebbe rivalutata a quel punto (non e' una soluzione definitiva, ma un primo passo deliberatamente a basso costo).",
+        "category conflagra due usi potenzialmente diversi: oggi rappresenta il devicetype per il catalogo template (uso gia' esistente), e diventerebbe anche il meccanismo di scoping della todo-list personale — un cambio futuro nella tassonomia dei devicetype cambierebbe silenziosamente anche le opzioni di scoping disponibili per la todo-list, un accoppiamento non esplicito nella richiesta originale.",
+        "Introduce comunque, seppure in una sola funzione isolata, la stessa eccezione al confine RBAC descritta per l'opzione A (self-only assignee===uid salvo admin): il costo architetturale di quella eccezione non si evita scegliendo questa opzione, solo la sua estensione e' minore."
+      ],
+      "risks": [
+        "Se il numero di checklist in uno scope crescesse in modo significativo senza che nessuno rivaluti la scelta, la funzione degrada silenziosamente in latenza senza un segnale esplicito che inviti a migrare verso una struttura piu' scalabile."
+      ],
+      "effort_class": "S",
+      "reversibility": "high",
+      "critical_concerns": [
+        {
+          "severity": "medium",
+          "description": "category viene riusata per due scopi concettualmente diversi (categorizzazione devicetype vs scoping personale della todo-list), senza che questo accoppiamento sia esplicito o documentato altrove.",
+          "mitigation": "Documentare esplicitamente il doppio uso di category al momento dell'implementazione; se in futuro i due usi divergono, introdurre un campo scope indipendente invece di continuare a sovraccaricare category."
+        },
+        {
+          "severity": "high",
+          "description": "Anche questa opzione introduce nel core un'eccezione al confine 'nessun RBAC oltre autenticazione' (self-only assignee===uid), sebbene isolata in un'unica funzione.",
+          "mitigation": "Stessa mitigazione dell'opzione A: dichiarare esplicitamente l'eccezione, isolarla in questa sola funzione, non toccare il modello di autorizzazione delle funzioni esistenti."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-c-consumer-materialized-view",
+      "name": "Vista materializzata per-utente mantenuta dal layer device-requests, core Organizer invariato",
+      "summary": "Non toccare in alcun modo il core Organizer (ne' lo storage ne' l'RBAC). Il layer device-requests, che gia' oggi risolve requestId->checklistId con RBAC (deviceRequestChecklistAccess.ts) e gia' possiede/possiedera' il riferimento reale all'utente (assignedVolunteers su deviceRequests e' gia' un array di uid), introduce una collection satellite di sua proprieta' (es. `userTodoItems/{uid}/{itemId}`) mantenuta in sync a ogni chiamata delle funzioni gia' esistenti addDeviceRequestChecklistItem/updateDeviceRequestChecklistItem/removeDeviceRequestChecklistItem, scrivendo nella stessa transazione Firestore sia l'item nel core (via delega, come oggi) sia la sua proiezione nella vista personale. Lo 'scope' e' un'etichetta libera decisa interamente dal consumer al momento della scrittura (es. 'richieste device'), del tutto indipendente da category.",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "userTodoItems: collection satellite di proprieta' device-requests, sincronizzata a ogni add/update/remove item",
+          "listMyTodoItems: nuova Cloud Function del layer device-requests che legge solo userTodoItems/{uid}, nessuna query sul core"
+        ]
+      },
+      "pros": [
+        "Il core Organizer resta interamente invariato: zero rischio di regressione sulle 14 funzioni gia' stabili, coerente alla lettera con il confine 'core senza RBAC, opaco al consumer' senza bisogno di dichiarare alcuna eccezione.",
+        "Risponde alla domanda aperta sullo 'scope' nel modo piu' diretto: e' un'etichetta libera del tutto posseduta dal consumer, senza riusare o sovraccaricare category (nessun accoppiamento con la tassonomia devicetype).",
+        "L'identita' reale dell'utente (uid) e' gia' un concetto nativo del layer device-requests (assignedVolunteers), quindi la promozione di assignee a riferimento reale si colloca esattamente dove il codice gia' oggi gestisce identita' e RBAC, senza introdurla per la prima volta altrove."
+      ],
+      "cons": [
+        "Introduce una seconda fonte di verita' (item nel core + proiezione in userTodoItems) da mantenere sincronizzata per itemId: lo stesso pattern gia' segnalato come rischioso nello studio deciso ss-checklist-item-model (opzione scartata li' per lo stesso motivo, sebbene in un contesto diverso - metadato type, non aggregazione).",
+        "Se in futuro un secondo consumer del core (es. un ipotetico modulo workshop, gia' menzionato come vocazione dichiarata di process-organizer-core) volesse la stessa funzionalita' di todo-list personale, dovrebbe reimplementare da zero la stessa logica di sincronizzazione, invece di riusare una capability del core.",
+        "Nessuna funzione di ricostruzione/riparazione esiste oggi per rigenerare userTodoItems da zero se la sincronizzazione si disallinea (es. per un errore parziale in una transazione): senza un job di backfill dedicato, un disallineamento silenzioso puo' persistere indefinitamente."
+      ],
+      "risks": [
+        "Un bug futuro in una sola delle 3 funzioni di sincronizzazione (add/update/removeDeviceRequestChecklistItem) puo' disallineare silenziosamente la vista personale rispetto ai dati reali nel core, senza che nulla nel sistema lo segnali automaticamente."
+      ],
+      "effort_class": "M",
+      "reversibility": "medium",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Doppia fonte di verita' tra item nel core e proiezione in userTodoItems, con rischio di disallineamento silenzioso se le due scritture non restano sempre nella stessa transazione.",
+          "mitigation": "Wrappare ogni sincronizzazione in un'unica transazione Firestore che scrive entrambi i lati atomicamente, mai due chiamate separate dal frontend; prevedere fin da subito, anche se non nella prima versione, un job di verifica/ricostruzione della vista personale."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-d-core-trigger-flat-index",
+      "name": "Indice piatto generico mantenuto da trigger Firestore nel core, storage primario invariato",
+      "summary": "Non toccare le 9 funzioni CRUD esistenti del core (restano scritte esattamente come oggi, array embedded). Aggiungere nel core Organizer un trigger Firestore (`onDocumentWritten` su checklists/{id}) che, confrontando l'array items prima/dopo per id, mantiene sincronizzata una collection piatta di sola lettura (`checklistItemsIndex/{itemId}` con checklistId, category, assignee, status, type denormalizzati). Il core espone `listMyChecklistItems(uid, scope?)` come semplice query a campo singolo su questa collection (where assignee, where category), senza collectionGroup ne' scan della collection primaria. E' una capability generica del core (non del layer device-requests), quindi riusabile da un futuro secondo consumer senza reimplementazione.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Trigger onDocumentWritten su checklists/{id} che diffa l'array items e mantiene checklistItemsIndex in sync",
+          "listMyChecklistItems: query a campo singolo su checklistItemsIndex, nessuna collectionGroup ne' scan della collection primaria"
+        ]
+      },
+      "pros": [
+        "Nessuna modifica alle 9 funzioni CRUD esistenti (a differenza dell'opzione A): il trigger e' codice aggiuntivo, non una riscrittura del percorso di scrittura gia' stabile.",
+        "E' una capability del core, non del consumer: un futuro secondo consumer (workshop, gia' citato come vocazione dichiarata di process-organizer-core) la riuserebbe direttamente, a differenza dell'opzione C.",
+        "Query di lettura economiche (campo singolo, nessun collectionGroup, nessun indice composito nuovo necessario) e scalabili indipendentemente dal numero totale di checklist esistenti."
+      ],
+      "cons": [
+        "Introduce consistenza eventuale (i trigger Firestore sono asincroni): un utente che aggiunge un item e apre subito la propria todo-list potrebbe non vederlo per una finestra di tempo breve ma non nulla — un comportamento nuovo per un modulo che oggi e' sempre stato letto/scritto in modo sincrono e immediatamente coerente.",
+        "Il diff dell'array items prima/dopo (per capire quali item sono stati aggiunti/modificati/rimossi a ogni scrittura, dato che l'array viene riscritto per intero e non esiste un diff nativo Firestore) e' logica non banale, interamente nuova per questo modulo e da mantenere nel tempo.",
+        "Stessa eccezione RBAC delle opzioni A e B (self-only assignee===uid nella nuova query), con l'aggiunta di un secondo componente (il trigger stesso) che scrive dati derivati senza un chiamante autenticato diretto da verificare - un pattern di scrittura server-to-server non ancora presente nel core Organizer."
+      ],
+      "risks": [
+        "Un errore nella logica di diff del trigger (es. su un caso limite come la rimozione simultanea di piu' item, o una riscrittura completa dell'array da cloneChecklist) puo' lasciare checklistItemsIndex silenziosamente disallineato, senza segnali automatici, esattamente come nel rischio di drift dell'opzione C ma qui interno al core invece che al consumer."
+      ],
+      "effort_class": "M",
+      "reversibility": "high",
+      "critical_concerns": [
+        {
+          "severity": "medium",
+          "description": "Consistenza eventuale introdotta per la prima volta in un modulo del core finora sempre sincrono: un item appena scritto potrebbe non comparire immediatamente nella todo-list personale.",
+          "mitigation": "Documentare esplicitamente il comportamento come eventualmente consistente lato frontend (es. messaggio 'aggiornamento in corso'), oppure, se inaccettabile per il prodotto, scartare questa opzione a favore di una a consistenza immediata (A, B, C)."
+        },
+        {
+          "severity": "high",
+          "description": "La logica di diff dell'array items a ogni scrittura e' nuova, non banale, e priva di precedenti nel codice attuale del core.",
+          "mitigation": "Coprire il diff con test dedicati sui casi limite gia' noti nel modulo (creazione, add, update parziale, remove, clone che azzera tutto, istanziazione da template) prima di considerarla pronta."
+        }
+      ],
+      "spikes": []
+    }
+  ],
+  "recommendation": {
+    "option_id": "opt-b-full-scan-category-scoped",
+    "rationale": "Il criterio decisivo qui e' la reversibilita' combinata con l'assenza di dati reali che giustifichino gia' oggi un investimento maggiore: esistono solo 4 checklist di test, quindi una scansione filtrata per category (opzione B) costa oggi, in pratica, quanto qualunque alternativa piu' sofisticata - ma senza pagarne il rischio. Le opzioni A e D toccano rispettivamente 9 funzioni CRUD gia' stabili e appena irrobustite (A) o introducono per la prima volta consistenza eventuale e una logica di diff non banale in un modulo finora sempre sincrono (D); l'opzione C evita di toccare il core ma introduce una doppia fonte di verita' - lo stesso pattern gia' scartato in ss-checklist-item-model per un problema diverso ma con lo stesso rischio strutturale di drift - e obbliga un ipotetico secondo consumer futuro (workshop, gia' citato come vocazione del core) a reimplementare tutto da zero. B e' l'unica delle quattro puramente additiva (una sola nuova funzione, nessuna modifica a codice esistente) e quindi la piu' facile da abbandonare in favore di A o D in futuro, quando/se il volume reale di checklist giustifichera' l'investimento maggiore - a differenza di A, la cui reversibilita' e' bassa proprio perche' richiede riscrivere lo storage primario. Resta pero' un punto che nessuna delle quattro opzioni risolve da sola e che va deciso comunque, prima o insieme alla scelta tra queste opzioni: la promozione di assignee a un riferimento reale a un utente autenticato (uid) non esiste oggi in nessun layer del codice, nonostante fosse gia' stata segnalata come 'responsabilita' del consumer' nello studio ss-checklist-item-model - senza questo prerequisito chiuso, 'assignee == uid dell'utente loggato' resta un'assunzione, non un fatto verificabile nel codice attuale, qualunque opzione di aggregazione venga scelta.\n\nUn secondo punto trasversale da decidere esplicitamente al gate, non legato a una singola opzione: tutte e quattro le opzioni introducono, in forme diverse, una prima eccezione al confine consolidato 'il core Organizer non ha RBAC oltre l'autenticazione' - va confermato che questa eccezione sia accettabile prima di procedere con qualunque opzione, non solo con quella raccomandata."
+  },
+  "decision": null
+}
