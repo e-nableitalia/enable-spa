@@ -1,8 +1,11 @@
+import { HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 
-const VALID_CONSENTS = {
-  privacy: { accepted: true, version: "2026-03" },
-  codeOfConduct: { accepted: true, version: "2026-03" },
+const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
+const CONSENT_VERSION = "2026-03";
+const ACCEPTED_CONSENTS = {
+  privacy: { accepted: true, version: CONSENT_VERSION },
+  codeOfConduct: { accepted: true, version: CONSENT_VERSION },
 };
 
 /**
@@ -121,22 +124,21 @@ jest.mock("firebase-admin/firestore", () => ({
     runTransaction: (updateFn: (tx: unknown) => Promise<void>) => runTransactionMock(updateFn),
   })),
   FieldValue: {
-    serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),
+    serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
   },
 }));
 
-// "../utils/telegram" importa il modulo ESM-only "jose": va mockato per
-// evitare che ts-jest tenti di trasformare il suo albero di dipendenze
-// (non e' invocato in questi scenari, notifica non e' passata in input).
-jest.mock("../utils/telegram", () => ({
-  sendTelegramMessage: jest.fn(),
+const sendChangeStatusNotificationsMock = jest.fn().mockResolvedValue(undefined);
+
+jest.mock("./changeStatusNotifications", () => ({
+  sendChangeStatusNotifications: (...args: unknown[]) => sendChangeStatusNotificationsMock(...args),
 }));
 
 import { changeStatus } from "./changeStatus";
 
-function buildRequest(data: Record<string, unknown>, uid: string | null = "admin-1"): CallableRequest {
+function buildRequest(data: Record<string, unknown>, uid: string | null): CallableRequest {
   return {
-    auth: uid ? ({ uid } as CallableRequest["auth"]) : undefined,
+    auth: uid ? ({ uid, token: { email: "user@example.com" } } as CallableRequest["auth"]) : undefined,
     data,
     rawRequest: { headers: {} } as CallableRequest["rawRequest"],
   } as CallableRequest;
@@ -148,15 +150,103 @@ describe("changeStatus", () => {
     forcePublicWriteFailure = false;
 
     usersStore = {
-      "admin-1": { role: "admin", consents: VALID_CONSENTS },
+      "admin-1": { role: "admin", consents: ACCEPTED_CONSENTS },
+      "volunteer-1": { role: "volunteer", consents: ACCEPTED_CONSENTS },
+      "volunteer-2": { role: "volunteer", consents: ACCEPTED_CONSENTS },
+      "organizer-1": { role: "organizer", consents: ACCEPTED_CONSENTS },
     };
 
     deviceRequestsStore = {
-      "req-1": { status: "personalizzazione", assignedVolunteers: [] },
+      "req-1": {
+        status: "scelta device e dimensionamento",
+        assignedVolunteers: ["volunteer-1"],
+      },
     };
 
     eventsStore = {};
-    publicStore = { "req-1": { publicStatus: "fabbricazione in corso" } };
+    publicStore = {};
+  });
+
+  // Scenario 1 (EA-103): admin può eseguire qualsiasi transizione
+  it("allows admin to perform any transition without additional RBAC checks", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-1", newStatus: "spedita" }, "admin-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "spedita" });
+  });
+
+  // Scenario 2 (EA-103): volontario assegnato può eseguire una delle 5 transizioni consentite
+  it("allows an assigned volunteer to perform one of the 5 allowed transitions", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "volunteer-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "personalizzazione" });
+  });
+
+  // Scenario 3 (EA-103): volontario tenta una transizione non consentita
+  it("rejects an assigned volunteer attempting a transition not among the 5 allowed", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "spedita" }, "volunteer-1"))
+    ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid status transition"));
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 4 (EA-103): volontario non assegnato viene rifiutato indipendentemente dalla transizione
+  it("rejects a volunteer not assigned to the request regardless of the target status", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "volunteer-2"))
+    ).rejects.toMatchObject(new HttpsError("permission-denied", "Not assigned volunteer"));
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+  });
+
+  // Regression (EA-103): ruolo diverso da admin/volunteer resta rifiutato come da comportamento pre-refactoring
+  it("rejects a role other than admin or volunteer", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "organizer-1"))
+    ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid role"));
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 1 (EA-104): nessuna notifica se il parametro notifica è omesso
+  it("sends no notification when notifica is omitted", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "admin-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(sendChangeStatusNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2 (EA-104): notifica presente -> delega al modulo estratto con lo stato transizionato
+  it("delegates to the extracted notifications module with the transitioned status when notifica is provided", async () => {
+    await changeStatus.run(
+      buildRequest(
+        {
+          requestId: "req-1",
+          newStatus: "personalizzazione",
+          note: "presa in carico",
+          notifica: { admin: true, volunteers: true, telegram: true },
+        },
+        "admin-1"
+      )
+    );
+
+    expect(sendChangeStatusNotificationsMock).toHaveBeenCalledTimes(1);
+    const [params] = sendChangeStatusNotificationsMock.mock.calls[0];
+    expect(params).toMatchObject({
+      requestId: "req-1",
+      currentStatus: "scelta device e dimensionamento",
+      newStatus: "personalizzazione",
+      note: "presa in carico",
+      notifica: { admin: true, volunteers: true, telegram: true },
+    });
   });
 
   // Scenario "la transazione aggiorna atomicamente i tre documenti" (EA-106,
@@ -171,15 +261,15 @@ describe("changeStatus", () => {
     expect(deviceRequestsStore["req-1"]).toMatchObject({
       status: "attesa materiali",
       publicStatus: "fabbricazione in corso",
-      updatedAt: "SERVER_TIMESTAMP",
+      updatedAt: SERVER_TIMESTAMP_SENTINEL,
     });
 
     expect(eventsStore["req-1"]).toHaveLength(1);
     expect(eventsStore["req-1"][0]).toEqual({
       type: "status_change",
-      fromStatus: "personalizzazione",
+      fromStatus: "scelta device e dimensionamento",
       toStatus: "attesa materiali",
-      timestamp: "SERVER_TIMESTAMP",
+      timestamp: SERVER_TIMESTAMP_SENTINEL,
       createdBy: "admin-1",
       note: "avanti",
     });
@@ -198,10 +288,10 @@ describe("changeStatus", () => {
     ).rejects.toThrow("Simulated Firestore write failure");
 
     expect(deviceRequestsStore["req-1"]).toEqual({
-      status: "personalizzazione",
-      assignedVolunteers: [],
+      status: "scelta device e dimensionamento",
+      assignedVolunteers: ["volunteer-1"],
     });
     expect(eventsStore["req-1"]).toBeUndefined();
-    expect(publicStore["req-1"]).toEqual({ publicStatus: "fabbricazione in corso" });
+    expect(publicStore["req-1"]).toBeUndefined();
   });
 });
