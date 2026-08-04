@@ -19,7 +19,10 @@
       "name": "Migrazione degli item a subcollection + query collectionGroup con RBAC self-only nel core",
       "summary": "Cambiare il modello di storage del core Organizer da array embedded (checklists/{id}.items) a subcollection (checklists/{id}/items/{itemId}), riscrivendo le 9 funzioni CRUD interessate (createChecklist, addChecklistItem, updateChecklistItem, removeChecklistItem, cloneChecklist, createChecklistFromTemplate, getChecklist, deleteChecklist, checklistCompleteness/getChecklistCompleteness). Il core espone una nuova capability `listMyChecklistItems(uid, scope?)` che esegue una query `collectionGroup('items').where('assignee','==', uid)`, con un vincolo di sicurezza nuovo per il core: la query e' sempre forzata sull'uid del chiamante autenticato (o su un uid arbitrario solo se admin). La todo-list diventa una pura vista/query sugli stessi documenti, come suggerito nella richiesta, senza alcuna sincronizzazione separata.",
       "domain_impact": {
-        "existing_domains_touched": ["process-organizer-core", "device-requests"],
+        "existing_domains_touched": [
+          "process-organizer-core",
+          "device-requests"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "listMyChecklistItems: nuova Cloud Function del core, query collectionGroup su items filtrata per assignee/uid, con self-only RBAC",
@@ -61,7 +64,9 @@
       "name": "Aggregazione on-demand via lettura filtrata per categoria, nessun cambio allo storage del core",
       "summary": "Non toccare affatto il modello di storage degli item (restano array embedded su checklists/{id}.items, invariate tutte le 9 funzioni CRUD esistenti). Il core espone una singola nuova capability `listChecklistItemsByAssignee(assignee, scope?)` che legge tutti i documenti `checklists` (opzionalmente filtrati server-side per `category === scope`, gia' un campo top-level indicizzato) e filtra in memoria gli item il cui `assignee` corrisponde. Il costo e' proporzionale al numero di checklist nello scope richiesto, non al numero di item assegnati all'utente.",
       "domain_impact": {
-        "existing_domains_touched": ["process-organizer-core"],
+        "existing_domains_touched": [
+          "process-organizer-core"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "listChecklistItemsByAssignee: nuova Cloud Function del core, legge checklists (filtrate per category se scope fornito) e filtra items in memoria per assignee"
@@ -101,7 +106,9 @@
       "name": "Vista materializzata per-utente mantenuta dal layer device-requests, core Organizer invariato",
       "summary": "Non toccare in alcun modo il core Organizer (ne' lo storage ne' l'RBAC). Il layer device-requests, che gia' oggi risolve requestId->checklistId con RBAC (deviceRequestChecklistAccess.ts) e gia' possiede/possiedera' il riferimento reale all'utente (assignedVolunteers su deviceRequests e' gia' un array di uid), introduce una collection satellite di sua proprieta' (es. `userTodoItems/{uid}/{itemId}`) mantenuta in sync a ogni chiamata delle funzioni gia' esistenti addDeviceRequestChecklistItem/updateDeviceRequestChecklistItem/removeDeviceRequestChecklistItem, scrivendo nella stessa transazione Firestore sia l'item nel core (via delega, come oggi) sia la sua proiezione nella vista personale. Lo 'scope' e' un'etichetta libera decisa interamente dal consumer al momento della scrittura (es. 'richieste device'), del tutto indipendente da category.",
       "domain_impact": {
-        "existing_domains_touched": ["device-requests"],
+        "existing_domains_touched": [
+          "device-requests"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "userTodoItems: collection satellite di proprieta' device-requests, sincronizzata a ogni add/update/remove item",
@@ -137,7 +144,9 @@
       "name": "Indice piatto generico mantenuto da trigger Firestore nel core, storage primario invariato",
       "summary": "Non toccare le 9 funzioni CRUD esistenti del core (restano scritte esattamente come oggi, array embedded). Aggiungere nel core Organizer un trigger Firestore (`onDocumentWritten` su checklists/{id}) che, confrontando l'array items prima/dopo per id, mantiene sincronizzata una collection piatta di sola lettura (`checklistItemsIndex/{itemId}` con checklistId, category, assignee, status, type denormalizzati). Il core espone `listMyChecklistItems(uid, scope?)` come semplice query a campo singolo su questa collection (where assignee, where category), senza collectionGroup ne' scan della collection primaria. E' una capability generica del core (non del layer device-requests), quindi riusabile da un futuro secondo consumer senza reimplementazione.",
       "domain_impact": {
-        "existing_domains_touched": ["process-organizer-core"],
+        "existing_domains_touched": [
+          "process-organizer-core"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "Trigger onDocumentWritten su checklists/{id} che diffa l'array items e mantiene checklistItemsIndex in sync",
@@ -178,7 +187,10 @@
       "name": "Item in una collection di primo livello dedicata, checklists/{id}.items ridotto ad array di riferimenti",
       "summary": "Introdurre una nuova collection di primo livello `checklistItems/{itemId}` (non una subcollection annidata come opt-a), un documento per item, con `checklistId` come riferimento esplicito al documento padre. Il campo `checklists/{id}.items` smette di contenere gli oggetti item completi e diventa un array di soli `itemId` (riferimenti leggeri), mantenuto dalle stesse 9 funzioni CRUD del core oggi coinvolte. Il core espone `listMyChecklistItems(uid, scope?)` come query diretta e a campo singolo su `checklistItems` (`where('assignee','==', uid)`, opzionalmente `where('category','==', scope)`), senza alcun `collectionGroup` e senza il vincolo dell'indice composito che opt-a richiede per il caso base.",
       "domain_impact": {
-        "existing_domains_touched": ["process-organizer-core", "device-requests"],
+        "existing_domains_touched": [
+          "process-organizer-core",
+          "device-requests"
+        ],
         "new_domains_proposed": [],
         "new_capabilities_sketch": [
           "checklistItems: nuova collection di primo livello, un documento per item, con checklistId come riferimento esplicito al documento checklist padre",
@@ -224,7 +236,8 @@
           "question": "Una query su checklistItems con due filtri di sola uguaglianza (assignee == X AND category/scope == Y, nessun range ne' orderBy) viene eseguita da Firestore in questo progetto senza richiedere un indice composito esplicito?",
           "verification_approach": "Popolare l'emulatore Firestore locale (o un progetto di test) con una manciata di documenti checklistItems ed eseguire la query con entrambi i filtri contemporaneamente; osservare se Firestore la esegue direttamente o restituisce l'errore 'the query requires an index' con link di creazione - verifica di pochi minuti, nessuna funzione da costruire.",
           "blocking": false,
-          "outcome": null
+          "outcome": null,
+          "id": "spike-composite-index-assignee-scope"
         }
       ]
     }
