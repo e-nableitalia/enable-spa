@@ -8,11 +8,52 @@ const ACCEPTED_CONSENTS = {
   codeOfConduct: { accepted: true, version: CONSENT_VERSION },
 };
 
+/**
+ * Store in-memory minimale che simula le collection Firestore coinvolte:
+ * `users` (RBAC + consensi volontario), `deviceRequests` (documento
+ * principale + sottocollezione `events`) e `publicDeviceRequests`
+ * (sincronizzazione di `publicStatus`, convenzione `dc-public-status`).
+ */
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
+let eventsStore: Record<string, Array<Record<string, unknown>>>;
+let publicStore: Record<string, Record<string, unknown> | undefined>;
 
-const txUpdateMock = jest.fn();
-const txSetMock = jest.fn();
+// Consente ai test di far fallire la write su publicDeviceRequests per
+// verificare che la transazione non produca scritture parziali.
+let forcePublicWriteFailure = false;
+
+type WriteRef =
+  | { __kind: "deviceRequest"; __id: string }
+  | { __kind: "event"; __id: string }
+  | { __kind: "public"; __id: string };
+
+interface QueuedWrite {
+  ref: WriteRef;
+  data: Record<string, unknown>;
+  options?: { merge?: boolean };
+}
+
+function buildDeviceRequestRef(id: string) {
+  return {
+    __kind: "deviceRequest" as const,
+    __id: id,
+    get: jest.fn(() =>
+      Promise.resolve({
+        exists: deviceRequestsStore[id] !== undefined,
+        data: () => deviceRequestsStore[id],
+      })
+    ),
+    collection: jest.fn((sub: string) => {
+      if (sub !== "events") {
+        throw new Error(`Unexpected subcollection ${sub}`);
+      }
+      return {
+        doc: jest.fn(() => ({ __kind: "event" as const, __id: id })),
+      };
+    }),
+  };
+}
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -29,28 +70,11 @@ function buildCollection(name: string) {
   }
 
   if (name === "deviceRequests") {
-    return {
-      doc: jest.fn((id: string) => ({
-        get: jest.fn(() =>
-          Promise.resolve({
-            exists: deviceRequestsStore[id] !== undefined,
-            data: () => deviceRequestsStore[id],
-          })
-        ),
-        collection: jest.fn((sub: string) => {
-          if (sub === "events") {
-            return { doc: jest.fn(() => ({ id: `event-${id}` })) };
-          }
-          throw new Error(`Unexpected subcollection ${sub}`);
-        }),
-      })),
-    };
+    return { doc: jest.fn((id: string) => buildDeviceRequestRef(id)) };
   }
 
   if (name === "publicDeviceRequests") {
-    return {
-      doc: jest.fn((id: string) => ({ id: `public-${id}` })),
-    };
+    return { doc: jest.fn((id: string) => ({ __kind: "public" as const, __id: id })) };
   }
 
   throw new Error(`Unexpected collection ${name}`);
@@ -58,13 +82,46 @@ function buildCollection(name: string) {
 
 const collectionMock = jest.fn((name: string) => buildCollection(name));
 
+// Simula l'atomicita' di Firestore: le write vengono accodate durante
+// l'esecuzione della callback e "committate" sugli store solo se la
+// callback arriva in fondo senza eccezioni. Se una write fallisce, nessuno
+// degli store viene toccato.
+const runTransactionMock = jest.fn(
+  async (updateFn: (tx: { update: jest.Mock; set: jest.Mock }) => Promise<void> | void) => {
+    const writes: QueuedWrite[] = [];
+    const tx = {
+      update: jest.fn((ref: WriteRef, data: Record<string, unknown>) => {
+        writes.push({ ref, data });
+      }),
+      set: jest.fn((ref: WriteRef, data: Record<string, unknown>, options?: { merge?: boolean }) => {
+        if (forcePublicWriteFailure && ref.__kind === "public") {
+          throw new Error("Simulated Firestore write failure");
+        }
+        writes.push({ ref, data, options });
+      }),
+    };
+
+    await updateFn(tx);
+
+    for (const w of writes) {
+      if (w.ref.__kind === "deviceRequest") {
+        deviceRequestsStore[w.ref.__id] = { ...(deviceRequestsStore[w.ref.__id] ?? {}), ...w.data };
+      } else if (w.ref.__kind === "event") {
+        eventsStore[w.ref.__id] = eventsStore[w.ref.__id] ?? [];
+        eventsStore[w.ref.__id].push(w.data);
+      } else if (w.ref.__kind === "public") {
+        publicStore[w.ref.__id] = w.options?.merge
+          ? { ...(publicStore[w.ref.__id] ?? {}), ...w.data }
+          : w.data;
+      }
+    }
+  }
+);
+
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
-    runTransaction: jest.fn(async (fn: (tx: unknown) => Promise<void>) => {
-      const tx = { update: txUpdateMock, set: txSetMock };
-      await fn(tx);
-    }),
+    runTransaction: (updateFn: (tx: unknown) => Promise<void>) => runTransactionMock(updateFn),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -90,6 +147,7 @@ function buildRequest(data: Record<string, unknown>, uid: string | null): Callab
 describe("changeStatus", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    forcePublicWriteFailure = false;
 
     usersStore = {
       "admin-1": { role: "admin", consents: ACCEPTED_CONSENTS },
@@ -104,6 +162,9 @@ describe("changeStatus", () => {
         assignedVolunteers: ["volunteer-1"],
       },
     };
+
+    eventsStore = {};
+    publicStore = {};
   });
 
   // Scenario 1 (EA-103): admin può eseguire qualsiasi transizione
@@ -113,10 +174,7 @@ describe("changeStatus", () => {
     );
 
     expect(result).toEqual({ success: true });
-    expect(txUpdateMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ status: "spedita" })
-    );
+    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "spedita" });
   });
 
   // Scenario 2 (EA-103): volontario assegnato può eseguire una delle 5 transizioni consentite
@@ -126,10 +184,7 @@ describe("changeStatus", () => {
     );
 
     expect(result).toEqual({ success: true });
-    expect(txUpdateMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ status: "personalizzazione" })
-    );
+    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "personalizzazione" });
   });
 
   // Scenario 3 (EA-103): volontario tenta una transizione non consentita
@@ -138,7 +193,7 @@ describe("changeStatus", () => {
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "spedita" }, "volunteer-1"))
     ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid status transition"));
 
-    expect(txUpdateMock).not.toHaveBeenCalled();
+    expect(runTransactionMock).not.toHaveBeenCalled();
   });
 
   // Scenario 4 (EA-103): volontario non assegnato viene rifiutato indipendentemente dalla transizione
@@ -147,7 +202,7 @@ describe("changeStatus", () => {
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "volunteer-2"))
     ).rejects.toMatchObject(new HttpsError("permission-denied", "Not assigned volunteer"));
 
-    expect(txUpdateMock).not.toHaveBeenCalled();
+    expect(runTransactionMock).not.toHaveBeenCalled();
   });
 
   // Regression (EA-103): ruolo diverso da admin/volunteer resta rifiutato come da comportamento pre-refactoring
@@ -156,7 +211,7 @@ describe("changeStatus", () => {
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "organizer-1"))
     ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid role"));
 
-    expect(txUpdateMock).not.toHaveBeenCalled();
+    expect(runTransactionMock).not.toHaveBeenCalled();
   });
 
   // Scenario 1 (EA-104): nessuna notifica se il parametro notifica è omesso
@@ -192,5 +247,51 @@ describe("changeStatus", () => {
       note: "presa in carico",
       notifica: { admin: true, volunteers: true, telegram: true },
     });
+  });
+
+  // Scenario "la transazione aggiorna atomicamente i tre documenti" (EA-106,
+  // fonte changeStatus.ts righe 74-98).
+  it("updates status/publicStatus/updatedAt, writes the event and syncs publicDeviceRequests in a single transaction", async () => {
+    await changeStatus.run(
+      buildRequest({ requestId: "req-1", newStatus: "attesa materiali", note: "avanti" }, "admin-1")
+    );
+
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+
+    expect(deviceRequestsStore["req-1"]).toMatchObject({
+      status: "attesa materiali",
+      publicStatus: "fabbricazione in corso",
+      updatedAt: SERVER_TIMESTAMP_SENTINEL,
+    });
+
+    expect(eventsStore["req-1"]).toHaveLength(1);
+    expect(eventsStore["req-1"][0]).toEqual({
+      type: "status_change",
+      fromStatus: "scelta device e dimensionamento",
+      toStatus: "attesa materiali",
+      timestamp: SERVER_TIMESTAMP_SENTINEL,
+      createdBy: "admin-1",
+      note: "avanti",
+    });
+
+    expect(publicStore["req-1"]).toEqual({ publicStatus: "fabbricazione in corso" });
+  });
+
+  // Scenario "fallimento della transazione non produce scritture parziali"
+  // (non regressione, EA-106): se una delle tre write fallisce, nessuno dei
+  // tre documenti viene modificato.
+  it("leaves all three documents untouched when one of the transaction writes fails", async () => {
+    forcePublicWriteFailure = true;
+
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "attesa materiali" }, "admin-1"))
+    ).rejects.toThrow("Simulated Firestore write failure");
+
+    expect(deviceRequestsStore["req-1"]).toEqual({
+      status: "scelta device e dimensionamento",
+      assignedVolunteers: ["volunteer-1"],
+    });
+    expect(eventsStore["req-1"]).toBeUndefined();
+    expect(publicStore["req-1"]).toBeUndefined();
   });
 });
