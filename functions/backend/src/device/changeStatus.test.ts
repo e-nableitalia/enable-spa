@@ -71,8 +71,10 @@ jest.mock("firebase-admin/firestore", () => ({
   },
 }));
 
-jest.mock("../utils/telegram", () => ({
-  sendTelegramMessage: jest.fn(),
+const sendChangeStatusNotificationsMock = jest.fn().mockResolvedValue(undefined);
+
+jest.mock("./changeStatusNotifications", () => ({
+  sendChangeStatusNotifications: (...args: unknown[]) => sendChangeStatusNotificationsMock(...args),
 }));
 
 import { changeStatus } from "./changeStatus";
@@ -104,7 +106,7 @@ describe("changeStatus", () => {
     };
   });
 
-  // Scenario 1: admin può eseguire qualsiasi transizione
+  // Scenario 1 (EA-103): admin può eseguire qualsiasi transizione
   it("allows admin to perform any transition without additional RBAC checks", async () => {
     const result = await changeStatus.run(
       buildRequest({ requestId: "req-1", newStatus: "spedita" }, "admin-1")
@@ -117,7 +119,7 @@ describe("changeStatus", () => {
     );
   });
 
-  // Scenario 2: volontario assegnato può eseguire una delle 5 transizioni consentite
+  // Scenario 2 (EA-103): volontario assegnato può eseguire una delle 5 transizioni consentite
   it("allows an assigned volunteer to perform one of the 5 allowed transitions", async () => {
     const result = await changeStatus.run(
       buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "volunteer-1")
@@ -130,7 +132,7 @@ describe("changeStatus", () => {
     );
   });
 
-  // Scenario 3: volontario tenta una transizione non consentita
+  // Scenario 3 (EA-103): volontario tenta una transizione non consentita
   it("rejects an assigned volunteer attempting a transition not among the 5 allowed", async () => {
     await expect(
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "spedita" }, "volunteer-1"))
@@ -139,7 +141,7 @@ describe("changeStatus", () => {
     expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
-  // Scenario 4: volontario non assegnato viene rifiutato indipendentemente dalla transizione
+  // Scenario 4 (EA-103): volontario non assegnato viene rifiutato indipendentemente dalla transizione
   it("rejects a volunteer not assigned to the request regardless of the target status", async () => {
     await expect(
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "volunteer-2"))
@@ -148,12 +150,47 @@ describe("changeStatus", () => {
     expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
-  // Regression: ruolo diverso da admin/volunteer resta rifiutato come da comportamento pre-refactoring
+  // Regression (EA-103): ruolo diverso da admin/volunteer resta rifiutato come da comportamento pre-refactoring
   it("rejects a role other than admin or volunteer", async () => {
     await expect(
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "organizer-1"))
     ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid role"));
 
     expect(txUpdateMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 1 (EA-104): nessuna notifica se il parametro notifica è omesso
+  it("sends no notification when notifica is omitted", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "admin-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(sendChangeStatusNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2 (EA-104): notifica presente -> delega al modulo estratto con lo stato transizionato
+  it("delegates to the extracted notifications module with the transitioned status when notifica is provided", async () => {
+    await changeStatus.run(
+      buildRequest(
+        {
+          requestId: "req-1",
+          newStatus: "personalizzazione",
+          note: "presa in carico",
+          notifica: { admin: true, volunteers: true, telegram: true },
+        },
+        "admin-1"
+      )
+    );
+
+    expect(sendChangeStatusNotificationsMock).toHaveBeenCalledTimes(1);
+    const [params] = sendChangeStatusNotificationsMock.mock.calls[0];
+    expect(params).toMatchObject({
+      requestId: "req-1",
+      currentStatus: "scelta device e dimensionamento",
+      newStatus: "personalizzazione",
+      note: "presa in carico",
+      notifica: { admin: true, volunteers: true, telegram: true },
+    });
   });
 });
