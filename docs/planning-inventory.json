@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-04T22:50:36.201Z",
+  "generated_at": "2026-08-04T23:09:31.149Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -80,6 +80,14 @@
         "process-organizer-core",
         "device-requests"
       ]
+    },
+    {
+      "id": "ss-user-todo-list",
+      "type": "solution_study",
+      "source_path": "docs/solution-studies/ss-user-todo-list.json",
+      "created_at": "2026-08-04T23:09:31.149Z",
+      "updated_at": "2026-08-04T23:09:31.149Z",
+      "created_by": "cli:solution-study"
     }
   ]
 }
