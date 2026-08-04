@@ -1,3 +1,5 @@
+import {isProductionLifecycleStatus} from "./productionLifecycle";
+
 export function mapToPublicStatus(status: string): string {
   const daValidare = [
     "inviata"
@@ -10,17 +12,6 @@ export function mapToPublicStatus(status: string): string {
     "attesa volontario"
   ];
 
-  const fabbricazione = [
-    "scelta device e dimensionamento",
-    "personalizzazione",
-    "attesa materiali",
-    "fabbricazione",
-    "fitting",
-    "pronta per spedizione",
-    "spedita",
-    "followup famiglia"
-  ];
-
   const annullate = [
     "followup famiglia ko",
     "followup famiglia troppo piccolo",
@@ -30,7 +21,7 @@ export function mapToPublicStatus(status: string): string {
 
   if (daValidare.includes(status)) return "da validare";
   if (daGestire.includes(status)) return "da gestire";
-  if (fabbricazione.includes(status)) return "fabbricazione in corso";
+  if (isProductionLifecycleStatus(status)) return "fabbricazione in corso";
   if (status === "completata") return "completati";
   if (annullate.includes(status)) return "annullate / non completabili";
   return "da gestire";
