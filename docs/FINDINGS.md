@@ -58,7 +58,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/createChecklist.ts` — branch `typeof input === "string"` in `normalizeInitialItem`: `type` resta `undefined`, quindi `isChecklistItemType(type)` è sempre `false` per questo branch
   - `functions/backend/src/organizer/createChecklist.test.ts` — test "throws invalid-argument when an initial item is a bare string (no type)" verifica esplicitamente che questo path sia sempre rifiutato
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-123 (Epic checklist item model), sessione 2026-07-31.
-- **Stato**: deciso (sessione 2026-08-05) — rimuovere lo shorthand a stringa da `normalizeInitialItem`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
+- **Stato**: risolto (Story EA-143, sessione 2026-08-05) — rimosso il ramo `typeof input === "string"` da `normalizeInitialItem`; l'input stringa cade ora nel ramo `else` esistente (`invalid-argument`: "Each item must be a string or an object with a title").
 
 ## F-7: Lo stesso shorthand a stringa diventa irraggiungibile anche in `createTemplate`/`updateTemplate` dopo l'introduzione del `type` obbligatorio (EA-125)
 
@@ -68,7 +68,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/updateTemplate.ts` — stesso branch, stessa duplicazione della funzione già presente prima di questa Story
   - `functions/backend/src/organizer/createTemplate.test.ts` e `updateTemplate.test.ts` — test "throws invalid-argument when an item is a bare string (no type)" verificano esplicitamente che questo path sia sempre rifiutato
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-125 (Epic checklist item model), sessione 2026-08-03.
-- **Stato**: deciso (sessione 2026-08-05), stessa decisione di [[F-6]] — rimuovere lo shorthand a stringa da `normalizeTemplateItem` in `createTemplate.ts`/`updateTemplate.ts`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
+- **Stato**: risolto dalla Story Jira EA-144 (Epic EA-135), sessione 2026-08-05. Il ramo `typeof input === "string"` è stato rimosso da `normalizeTemplateItem`; un item-stringa cade ora nel ramo `else` esistente, rifiutato con `invalid-argument: "Each item must be a string or an object with a title"` invece del precedente (sempre vero) "must have a valid type". Colto anche il suggerimento non vincolante di EA-144 sulla duplicazione (vedi anche [[F-8]]): `normalizeTemplateItem`/`TemplateItem` sono state estratte nel modulo condiviso `functions/backend/src/organizer/templateItem.ts`, riusato identicamente da `createTemplate.ts` e `updateTemplate.ts`, eliminando la duplicazione.
 
 ## F-8: `AdminChecklistTemplatesPage.tsx` non inviava mai `type` per gli item di template (EA-125), stesso pattern di [[F-7 EA-124]]
 
@@ -107,7 +107,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `grep -rn "completed" functions/backend/src enable-device/src` — nessuna scrittura di `completed: true` in nessun file, in nessun layer
   - `functions/backend/src/organizer/updateChecklistItem.ts` — campi aggiornabili: `title`/`type`/`status`/`assignee`/`quantity`/`notes`, mai `completed`
 - **Story/PR/sessione di provenienza**: rilevato durante la review della Story Jira EA-127 (Epic checklist item model), sessione 2026-08-03.
-- **Stato**: deciso (sessione 2026-08-05) — esporre `completed` tra i campi aggiornabili di `updateChecklistItem`, simmetrico a `status`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
+- **Stato**: risolto (Story Jira EA-145, 2026-08-05). `updateChecklistItem.ts` accetta ora `completed: boolean` come campo opzionale aggiornabile (invalid-argument se fornito non booleano, invariato se omesso); `updateDeviceRequestChecklistItem.ts` lo inoltra al core senza introdurre nuova logica RBAC. Il ramo `isBooleanItemComplete` di `checklistCompleteness.ts` (EA-127) e' ora raggiungibile da un percorso applicativo reale; `checklistCompleteness.ts` non e' stato modificato.
 
 ## F-12: `type` obbligatorio su `addChecklistItem` (EA-124) rende inutilizzabile in produzione il layer consumer `addDeviceRequestChecklistItem`, che non lo inoltra mai
 

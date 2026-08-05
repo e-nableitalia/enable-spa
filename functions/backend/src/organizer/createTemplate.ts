@@ -2,64 +2,9 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
+import { TemplateItem, normalizeTemplateItem } from "./templateItem";
 
 const REGION = "europe-west1";
-
-interface TemplateItem {
-  title: string;
-  type: ChecklistItemType;
-  quantity: number | null;
-}
-
-/**
- * Normalizza un item di template ricevuto dal consumer in un `TemplateItem`.
- * Un item può essere una semplice stringa (il titolo) o un oggetto con
- * `title`, `type` e, opzionalmente, `quantity`.
- *
- * `type` è obbligatorio ed è validato tramite il modulo condiviso
- * `checklistItemStatus`, coerentemente con la propagazione che avverrà in
- * `createChecklistFromTemplate` (Story successiva di questa Epic): non
- * esiste un default, quindi lo shorthand a stringa (privo di type) è
- * sintatticamente accettato ma fallisce sempre la validazione del type.
- *
- * Un template è un catalogo di riferimento, non un'istanza: gli item non
- * hanno stato, assegnatario né flag di completamento.
- */
-function normalizeTemplateItem(input: unknown): TemplateItem {
-  let title: unknown;
-  let type: unknown;
-  let quantity: unknown;
-
-  if (typeof input === "string") {
-    title = input;
-  } else if (typeof input === "object" && input !== null) {
-    const raw = input as Record<string, unknown>;
-    title = raw.title;
-    type = raw.type;
-    quantity = raw.quantity;
-  } else {
-    throw new HttpsError("invalid-argument", "Each item must be a string or an object with a title");
-  }
-
-  if (typeof title !== "string" || title.trim() === "") {
-    throw new HttpsError("invalid-argument", "Each item must have a non-empty title");
-  }
-
-  if (!isChecklistItemType(type)) {
-    throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
-  }
-
-  if (quantity !== undefined && quantity !== null && typeof quantity !== "number") {
-    throw new HttpsError("invalid-argument", "Item quantity must be a number");
-  }
-
-  return {
-    title,
-    type,
-    quantity: (quantity as number | undefined) ?? null,
-  };
-}
 
 /**
  * Cloud Function callable per la creazione di un nuovo template di

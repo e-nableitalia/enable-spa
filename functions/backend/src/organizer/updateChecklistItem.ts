@@ -23,12 +23,15 @@ interface ChecklistItem {
 }
 
 // updateChecklistItem: aggiorna in modo parziale i campi (titolo, type,
-// stato, assegnatario, quantità, note) di un item esistente all'interno
-// della lista items di una checklist. Aggiorna solo i campi esplicitamente
-// presenti nella richiesta, lasciando invariati tutti gli altri campi
-// dell'item (incluso `completed`). `type`, se fornito, è validato tramite
-// il modulo condiviso checklistItemStatus (EA-122); se omesso, il type
-// esistente dell'item resta invariato.
+// stato, assegnatario, quantità, note, completed) di un item esistente
+// all'interno della lista items di una checklist. Aggiorna solo i campi
+// esplicitamente presenti nella richiesta, lasciando invariati tutti gli
+// altri campi dell'item. `type`, se fornito, è validato tramite il modulo
+// condiviso checklistItemStatus (EA-122); se omesso, il type esistente
+// dell'item resta invariato. `completed`, se fornito, deve essere un
+// booleano (EA-145): rende per la prima volta raggiungibile da un
+// percorso applicativo reale il ramo isBooleanItemComplete del gate di
+// completezza type-aware (checklistCompleteness.ts, EA-127).
 export const updateChecklistItem = onCall(
   { region: REGION },
   async (request) => {
@@ -40,7 +43,7 @@ export const updateChecklistItem = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const { checklistId, itemId, title, type, status, assignee, quantity, notes } = request.data as {
+      const { checklistId, itemId, title, type, status, assignee, quantity, notes, completed } = request.data as {
         checklistId?: string;
         itemId?: string;
         title?: string;
@@ -49,6 +52,7 @@ export const updateChecklistItem = onCall(
         assignee?: string | null;
         quantity?: number | null;
         notes?: string | null;
+        completed?: boolean;
       };
 
       if (!checklistId || typeof checklistId !== "string") {
@@ -64,8 +68,9 @@ export const updateChecklistItem = onCall(
       const hasAssignee = assignee !== undefined;
       const hasQuantity = quantity !== undefined;
       const hasNotes = notes !== undefined;
+      const hasCompleted = completed !== undefined;
 
-      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes) {
+      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes && !hasCompleted) {
         throw new HttpsError("invalid-argument", "At least one field to update must be provided");
       }
 
@@ -86,6 +91,9 @@ export const updateChecklistItem = onCall(
       }
       if (hasNotes && notes !== null && typeof notes !== "string") {
         throw new HttpsError("invalid-argument", "Item notes must be a string");
+      }
+      if (hasCompleted && typeof completed !== "boolean") {
+        throw new HttpsError("invalid-argument", "Item completed must be a boolean");
       }
 
       const db = getFirestore();
@@ -122,6 +130,9 @@ export const updateChecklistItem = onCall(
       }
       if (hasNotes) {
         updatedItem.notes = notes ?? "";
+      }
+      if (hasCompleted) {
+        updatedItem.completed = completed as boolean;
       }
 
       const updatedItems = [...items];
