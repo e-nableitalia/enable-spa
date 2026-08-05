@@ -68,7 +68,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/updateTemplate.ts` — stesso branch, stessa duplicazione della funzione già presente prima di questa Story
   - `functions/backend/src/organizer/createTemplate.test.ts` e `updateTemplate.test.ts` — test "throws invalid-argument when an item is a bare string (no type)" verificano esplicitamente che questo path sia sempre rifiutato
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-125 (Epic checklist item model), sessione 2026-08-03.
-- **Stato**: deciso (sessione 2026-08-05), stessa decisione di [[F-6]] — rimuovere lo shorthand a stringa da `normalizeTemplateItem` in `createTemplate.ts`/`updateTemplate.ts`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
+- **Stato**: risolto dalla Story Jira EA-144 (Epic EA-135), sessione 2026-08-05. Il ramo `typeof input === "string"` è stato rimosso da `normalizeTemplateItem`; un item-stringa cade ora nel ramo `else` esistente, rifiutato con `invalid-argument: "Each item must be a string or an object with a title"` invece del precedente (sempre vero) "must have a valid type". Colto anche il suggerimento non vincolante di EA-144 sulla duplicazione (vedi anche [[F-8]]): `normalizeTemplateItem`/`TemplateItem` sono state estratte nel modulo condiviso `functions/backend/src/organizer/templateItem.ts`, riusato identicamente da `createTemplate.ts` e `updateTemplate.ts`, eliminando la duplicazione.
 
 ## F-8: `AdminChecklistTemplatesPage.tsx` non inviava mai `type` per gli item di template (EA-125), stesso pattern di [[F-7 EA-124]]
 
