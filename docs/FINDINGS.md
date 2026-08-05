@@ -58,7 +58,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/organizer/createChecklist.ts` — branch `typeof input === "string"` in `normalizeInitialItem`: `type` resta `undefined`, quindi `isChecklistItemType(type)` è sempre `false` per questo branch
   - `functions/backend/src/organizer/createChecklist.test.ts` — test "throws invalid-argument when an initial item is a bare string (no type)" verifica esplicitamente che questo path sia sempre rifiutato
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-123 (Epic checklist item model), sessione 2026-07-31.
-- **Stato**: deciso (sessione 2026-08-05) — rimuovere lo shorthand a stringa da `normalizeInitialItem`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
+- **Stato**: risolto (Story EA-143, sessione 2026-08-05) — rimosso il ramo `typeof input === "string"` da `normalizeInitialItem`; l'input stringa cade ora nel ramo `else` esistente (`invalid-argument`: "Each item must be a string or an object with a title").
 
 ## F-7: Lo stesso shorthand a stringa diventa irraggiungibile anche in `createTemplate`/`updateTemplate` dopo l'introduzione del `type` obbligatorio (EA-125)
 
