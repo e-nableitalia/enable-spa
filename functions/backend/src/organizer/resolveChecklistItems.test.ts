@@ -70,6 +70,11 @@ describe("resolveChecklistItems", () => {
 
     const result = await resolveChecklistItems(db, ["item-1", "missing-item"]);
 
+    // toEqual da solo non basta: ignora gli elementi `undefined` in un array a
+    // qualunque posizione, quindi non fallirebbe se il filtro su snap.exists
+    // venisse rimosso e result diventasse [{id:"item-1"}, undefined]. toHaveLength
+    // rende l'asserzione capace di fallire su quella regressione.
+    expect(result).toHaveLength(1);
     expect(result).toEqual([{ id: "item-1" }]);
   });
 });
