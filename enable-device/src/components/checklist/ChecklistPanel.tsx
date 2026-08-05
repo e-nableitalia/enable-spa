@@ -8,6 +8,7 @@ import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import { InputNumber } from "primereact/inputnumber";
 import { InputTextarea } from "primereact/inputtextarea";
+import { Checkbox } from "primereact/checkbox";
 import { Dropdown } from "primereact/dropdown";
 import { Tag } from "primereact/tag";
 import { Toast } from "primereact/toast";
@@ -157,6 +158,7 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
         quantity: item.quantity,
         notes: item.notes,
         status: item.status,
+        completed: item.completed,
       });
       toast.current?.show({ severity: "success", summary: "Item aggiornato", life: 2500 });
       await load();
@@ -349,6 +351,21 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
                     onValueChange={(e) => setDraftField(item.id, { quantity: e.value ?? null })}
                     min={0}
                     style={{ width: "100%" }}
+                  />
+                );
+              }}
+              style={{ minWidth: 100 }}
+            />
+            <Column
+              header="Completato"
+              body={(item: ChecklistItem) => {
+                if (item.type !== "boolean") {
+                  return null;
+                }
+                return (
+                  <Checkbox
+                    checked={item.completed}
+                    onChange={(e) => setDraftField(item.id, { completed: Boolean(e.checked) })}
                   />
                 );
               }}
