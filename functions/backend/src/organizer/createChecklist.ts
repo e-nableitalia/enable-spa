@@ -1,6 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import {
@@ -12,8 +11,7 @@ import {
 
 const REGION = "europe-west1";
 
-interface ChecklistItem {
-  id: string;
+interface NormalizedInitialItem {
   title: string;
   type: ChecklistItemType;
   assignee: string | null;
@@ -23,10 +21,17 @@ interface ChecklistItem {
   completed: boolean;
 }
 
+interface ChecklistOrigin {
+  type: string;
+  id: string;
+}
+
 /**
  * Normalizza un item iniziale ricevuto dal consumer in un `ChecklistItem`
- * completo. Un item iniziale può essere una semplice stringa (il titolo) o
- * un oggetto con `title`, `type` e, opzionalmente, `quantity`/`notes`.
+ * completo. Un item iniziale deve essere un oggetto con `title`, `type` e,
+ * opzionalmente, `quantity`/`notes` (lo shorthand a stringa semplice è
+ * stato rimosso: da quando `type` è obbligatorio non poteva più produrre
+ * un item valido - EA-143, finding F-6).
  *
  * `type` è obbligatorio ed è validato tramite il modulo condiviso
  * `checklistItemStatus`: non esiste un default, coerentemente con la
@@ -35,17 +40,18 @@ interface ChecklistItem {
  *
  * Assegnatario, stato e flag di completamento NON sono accettati in input:
  * una checklist appena creata parte sempre con item non assegnati e nello
- * stato iniziale, coerentemente con il fatto che è una nuova istanza.
+ * stato iniziale, coerentemente con il fatto che è una nuova istanza. Non
+ * include ancora `id`/`checklistId`/`category`: valorizzati dal chiamante
+ * al momento della scrittura del documento `checklistItems` (EA-137, la
+ * riscrittura in collection di primo livello sostituisce l'array embedded).
  */
-function normalizeInitialItem(input: unknown): ChecklistItem {
+function normalizeInitialItem(input: unknown): NormalizedInitialItem {
   let title: unknown;
   let type: unknown;
   let quantity: unknown;
   let notes: unknown;
 
-  if (typeof input === "string") {
-    title = input;
-  } else if (typeof input === "object" && input !== null) {
+  if (typeof input === "object" && input !== null) {
     const raw = input as Record<string, unknown>;
     title = raw.title;
     type = raw.type;
@@ -72,7 +78,6 @@ function normalizeInitialItem(input: unknown): ChecklistItem {
   }
 
   return {
-    id: crypto.randomUUID(),
     title,
     type,
     assignee: null,
@@ -81,6 +86,33 @@ function normalizeInitialItem(input: unknown): ChecklistItem {
     status: CHECKLIST_ITEM_STATUSES[0],
     completed: false,
   };
+}
+
+/**
+ * Normalizza il campo opzionale `origin` (navigabilità bidirezionale
+ * checklist → entità proprietaria, es. `{ type: "deviceRequest", id:
+ * "<requestId>" }`). Restituisce `undefined` se il consumer non lo
+ * fornisce, in modo che il chiamante possa omettere del tutto la chiave dal
+ * documento invece di scriverla valorizzata a `undefined`.
+ */
+function normalizeOrigin(input: unknown): ChecklistOrigin | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  if (typeof input !== "object" || input === null) {
+    throw new HttpsError("invalid-argument", "origin must be an object with type and id");
+  }
+
+  const raw = input as Record<string, unknown>;
+  if (
+    typeof raw.type !== "string" || raw.type.trim() === "" ||
+    typeof raw.id !== "string" || raw.id.trim() === ""
+  ) {
+    throw new HttpsError("invalid-argument", "origin must be an object with type and id");
+  }
+
+  return { type: raw.type, id: raw.id };
 }
 
 /**
@@ -94,9 +126,16 @@ function normalizeInitialItem(input: unknown): ChecklistItem {
  * - `items` (opzionale): elenco di item iniziali con cui popolare la
  *   checklist; se omesso la checklist viene creata senza item. Ogni item
  *   richiede un `type` esplicito ('boolean' | 'generic' | 'numeric').
+ * - `origin` (opzionale): `{ type, id }` dell'entità proprietaria della
+ *   checklist (es. una `deviceRequest`), per navigabilità bidirezionale
+ *   (EA-137). Se omesso, il documento non contiene il campo.
  *
- * Crea un documento in `checklists/{checklistId}` e restituisce il
- * `checklistId` generato al consumer.
+ * Crea un documento in `checklists/{checklistId}` — il cui campo `items` è
+ * ora il solo elenco degli `itemId` — e un documento distinto in
+ * `checklistItems/{itemId}` per ciascun item iniziale, con `checklistId` e
+ * `category` denormalizzata dalla checklist padre (EA-137: gli item
+ * smettono di essere un array embedded). Restituisce il `checklistId`
+ * generato al consumer.
  */
 export const createChecklist = onCall(
   { region: REGION },
@@ -111,7 +150,7 @@ export const createChecklist = onCall(
       const uid = request.auth.uid;
 
       const data = request.data ?? {};
-      const { category, title, items } = data;
+      const { category, title, items, origin } = data;
 
       if (!category || typeof category !== "string") {
         console.log("[createChecklist] KO: Missing or invalid category");
@@ -128,19 +167,37 @@ export const createChecklist = onCall(
         throw new HttpsError("invalid-argument", "items must be an array");
       }
 
-      const normalizedItems: ChecklistItem[] = (items ?? []).map(normalizeInitialItem);
+      const normalizedItems: NormalizedInitialItem[] = (items ?? []).map(normalizeInitialItem);
+      const normalizedOrigin = normalizeOrigin(origin);
 
       const db = getFirestore();
       const checklistRef = db.collection("checklists").doc();
+      const itemRefs = normalizedItems.map(() => db.collection("checklistItems").doc());
 
       console.log(`[createChecklist] Creating checklist document ${checklistRef.id}`);
-      await checklistRef.set({
+      const batch = db.batch();
+      batch.set(checklistRef, {
         category,
         title,
-        items: normalizedItems,
+        items: itemRefs.map((itemRef) => itemRef.id),
         createdBy: uid,
         createdAt: FieldValue.serverTimestamp(),
+        ...(normalizedOrigin ? { origin: normalizedOrigin } : {}),
       });
+
+      itemRefs.forEach((itemRef, index) => {
+        batch.set(itemRef, {
+          id: itemRef.id,
+          checklistId: checklistRef.id,
+          category,
+          ...normalizedItems[index],
+          creationDate: FieldValue.serverTimestamp(),
+          dueDate: null,
+          completionDate: null,
+        });
+      });
+
+      await batch.commit();
 
       await logSecurityEvent({
         type: "system",

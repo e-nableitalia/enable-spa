@@ -7,12 +7,31 @@ const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemIdCounter = 0;
 
 const checklistUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
-  const items = (updates.items as { items: unknown[] })?.items ?? checklistsStore[id]?.items;
-  checklistsStore[id] = { ...checklistsStore[id], items };
+  checklistsStore[id] = { ...checklistsStore[id], ...updates };
   return Promise.resolve();
 });
+const checklistItemSetMock = jest.fn((id: string, data: Record<string, unknown>) => {
+  checklistItemsStore[id] = data;
+});
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
+function applyArrayFieldValue(current: unknown, value: unknown): unknown {
+  if (value && typeof value === "object" && "__type" in (value as Record<string, unknown>)) {
+    const sentinel = value as { __type: string; items: unknown[] };
+    const existing = Array.isArray(current) ? current : [];
+    if (sentinel.__type === "arrayUnion") {
+      return [...existing, ...sentinel.items];
+    }
+    if (sentinel.__type === "arrayRemove") {
+      return existing.filter((item) => !sentinel.items.includes(item));
+    }
+  }
+  return value;
+}
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -44,6 +63,8 @@ function buildCollection(name: string) {
   if (name === "checklists") {
     return {
       doc: jest.fn((id: string) => ({
+        id,
+        _collection: "checklists",
         get: jest.fn(() =>
           Promise.resolve({
             exists: checklistsStore[id] !== undefined,
@@ -55,6 +76,24 @@ function buildCollection(name: string) {
     };
   }
 
+  if (name === "checklistItems") {
+    return {
+      doc: jest.fn((id?: string) => {
+        const docId = id ?? `generated-item-id-${++checklistItemIdCounter}`;
+        return {
+          id: docId,
+          _collection: "checklistItems",
+          get: jest.fn(() =>
+            Promise.resolve({
+              exists: checklistItemsStore[docId] !== undefined,
+              data: () => checklistItemsStore[docId],
+            })
+          ),
+        };
+      }),
+    };
+  }
+
   throw new Error(`Unexpected collection ${name}`);
 }
 
@@ -63,6 +102,23 @@ const collectionMock = jest.fn((name: string) => buildCollection(name));
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    batch: jest.fn(() => ({
+      set: jest.fn((ref: { id: string; _collection: string }, data: Record<string, unknown>) => {
+        if (ref._collection === "checklistItems") {
+          checklistItemSetMock(ref.id, data);
+        }
+      }),
+      update: jest.fn((ref: { id: string; _collection: string }, updates: Record<string, unknown>) => {
+        if (ref._collection === "checklists") {
+          const resolved = { ...updates };
+          if ("items" in resolved) {
+            resolved.items = applyArrayFieldValue(checklistsStore[ref.id]?.items, resolved.items);
+          }
+          checklistUpdateMock(ref.id, resolved);
+        }
+      }),
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -106,8 +162,10 @@ describe("addDeviceRequestChecklistItem", () => {
     };
 
     checklistsStore = {
-      [CHECKLIST_ID]: { items: [] },
+      [CHECKLIST_ID]: { category: "devicetype-mano", items: [] },
     };
+    checklistItemsStore = {};
+    checklistItemIdCounter = 0;
   });
 
   it("adds an item to the checklist linked to the request (admin)", async () => {
@@ -121,11 +179,16 @@ describe("addDeviceRequestChecklistItem", () => {
     expect(result).toHaveProperty("itemId");
     expect(typeof result.itemId).toBe("string");
 
-    const [updatePayload] = checklistUpdateMock.mock.calls[0].slice(1) as [
-      { items: { items: unknown[] } }
-    ];
-    const [newItem] = updatePayload.items.items;
-    expect(newItem).toMatchObject({ title: "Prepara stampante", type: "numeric", quantity: 2, status: "Assegnare", completed: false });
+    const newItem = checklistItemsStore[result.itemId];
+    expect(newItem).toMatchObject({
+      checklistId: CHECKLIST_ID,
+      title: "Prepara stampante",
+      type: "numeric",
+      quantity: 2,
+      status: "Assegnare",
+      completed: false,
+    });
+    expect(checklistsStore[CHECKLIST_ID]?.items).toEqual([result.itemId]);
   });
 
   it("allows a volunteer assigned to the request to add an item", async () => {
