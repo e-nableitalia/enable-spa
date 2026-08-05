@@ -4,28 +4,53 @@ const CHECKLIST_ID = "checklist-1";
 const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: jest.fn((name: string) => {
-      if (name !== "checklists") {
-        throw new Error(`Unexpected collection ${name}`);
+      if (name === "checklists") {
+        return {
+          doc: jest.fn((id: string) => ({
+            get: jest.fn(() =>
+              Promise.resolve({
+                exists: checklistsStore[id] !== undefined,
+                data: () => checklistsStore[id],
+              })
+            ),
+          })),
+        };
       }
-      return {
-        doc: jest.fn((id: string) => ({
-          get: jest.fn(() =>
-            Promise.resolve({
-              exists: checklistsStore[id] !== undefined,
-              data: () => checklistsStore[id],
-            })
-          ),
-          update: jest.fn((updates: Record<string, unknown>) => {
-            checklistsStore[id] = { ...checklistsStore[id], items: updates.items };
-            return Promise.resolve();
-          }),
-        })),
-      };
+
+      if (name === "checklistItems") {
+        return {
+          doc: jest.fn((id: string) => ({
+            id,
+            get: jest.fn(() =>
+              Promise.resolve({
+                exists: checklistItemsStore[id] !== undefined,
+                data: () => checklistItemsStore[id],
+              })
+            ),
+            update: jest.fn((updates: Record<string, unknown>) => {
+              checklistItemsStore[id] = { ...checklistItemsStore[id], ...updates };
+              return Promise.resolve();
+            }),
+          })),
+        };
+      }
+
+      throw new Error(`Unexpected collection ${name}`);
     }),
+    getAll: jest.fn((...refs: { id: string }[]) =>
+      Promise.resolve(
+        refs.map((ref) => ({
+          id: ref.id,
+          exists: checklistItemsStore[ref.id] !== undefined,
+          data: () => checklistItemsStore[ref.id],
+        }))
+      )
+    ),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -47,23 +72,25 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "user-
   } as CallableRequest;
 }
 
-describe("updateChecklistItem + getChecklistCompleteness (integration EA-145)", () => {
+describe("updateChecklistItem + getChecklistCompleteness (integration EA-145/EA-138)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     checklistsStore = {
       [CHECKLIST_ID]: {
-        items: [
-          {
-            id: "item-1",
-            title: "Verifica dispositivo",
-            type: "boolean",
-            assignee: "Mario Rossi",
-            quantity: null,
-            notes: "",
-            status: "Assegnare",
-            completed: false,
-          },
-        ],
+        items: ["item-1"],
+      },
+    };
+    checklistItemsStore = {
+      "item-1": {
+        id: "item-1",
+        checklistId: CHECKLIST_ID,
+        title: "Verifica dispositivo",
+        type: "boolean",
+        assignee: "Mario Rossi",
+        quantity: null,
+        notes: "",
+        status: "Assegnare",
+        completed: false,
       },
     };
   });
@@ -71,15 +98,12 @@ describe("updateChecklistItem + getChecklistCompleteness (integration EA-145)", 
   // EA-145 Scenario: il gate di completezza rileva un item boolean completato
   // dopo l'aggiornamento via updateChecklistItem.
   //
-  // Skip temporaneo (EA-137, F-24): questo test mocka solo la collection
-  // `checklists` con `items` come array embedded. Dopo EA-137,
-  // updateChecklistItem scrive invece su `checklistItems/{itemId}` (nuova
-  // collection di primo livello), mentre getChecklistCompleteness non e'
-  // stato ancora aggiornato a leggerla (fuori scope di questa Story, per
-  // design - vedi F-24). Il round-trip qui testato tornera' valido quando
-  // la Story di lettura pianificata (EA-138) aggiornera' anche
-  // getChecklistCompleteness a leggere da checklistItems.
-  it.skip("reports the checklist as complete after updateChecklistItem sets completed=true on the only boolean item", async () => {
+  // Round-trip di regressione per EA-138: updateChecklistItem scrive su
+  // `checklistItems/{itemId}` (collection di primo livello, EA-137) e
+  // getChecklistCompleteness risolve lo stesso documento (resolveChecklistItems,
+  // EA-138) prima di applicare il gate — riattivato dopo essere rimasto
+  // temporaneamente skippato da EA-137 (F-24) in attesa di questa Story.
+  it("reports the checklist as complete after updateChecklistItem sets completed=true on the only boolean item", async () => {
     const before = await getChecklistCompleteness.run(buildRequest({ checklistId: CHECKLIST_ID }));
     expect(before).toEqual({ checklistId: CHECKLIST_ID, complete: false });
 
