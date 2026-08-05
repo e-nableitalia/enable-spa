@@ -310,17 +310,69 @@ describe("updateChecklistItem", () => {
       expect(updatePayload).not.toHaveProperty("completionDate");
     });
 
-    // Dipendenza nota EA-134/EA-135: `completed` non è scrivibile da updateChecklistItem in questa
-    // Story, quindi il ramo boolean del gate resta sempre irraggiungibile
-    it("never sets completionDate for a boolean item, since 'completed' is not writable by this function yet", async () => {
+    // EA-137 + EA-145: 'completed' e' ora scrivibile da questa funzione, quindi il ramo
+    // boolean del gate e' raggiungibile (prima di EA-145 restava sempre irraggiungibile).
+    it("sets completionDate for a boolean item when completed becomes true and assignee is already set", async () => {
+      setItem({ type: "boolean", assignee: "Mario Rossi", completed: false, status: "Assegnare" });
+
+      await updateChecklistItem.run(
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, completed: true })
+      );
+
+      expect(itemUpdateMock).toHaveBeenCalledWith({
+        completed: true,
+        completionDate: SERVER_TIMESTAMP_SENTINEL,
+        updatedAt: SERVER_TIMESTAMP_SENTINEL,
+      });
+    });
+
+    it("does not set completionDate for a boolean item that becomes completed without an assignee", async () => {
       setItem({ type: "boolean", assignee: null, completed: false, status: "Assegnare" });
 
       await updateChecklistItem.run(
-        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, assignee: "Mario Rossi", status: "Completata" })
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, completed: true })
       );
 
       const [updatePayload] = itemUpdateMock.mock.calls[0];
       expect(updatePayload).not.toHaveProperty("completionDate");
     });
+  });
+
+  // EA-145 Scenario: aggiornamento di completed su un item boolean esistente
+  it("updates only the completed field on the checklistItems document, without touching other fields", async () => {
+    setItem({ type: "boolean", assignee: "Mario Rossi", completed: false });
+
+    await updateChecklistItem.run(
+      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, completed: true })
+    );
+
+    expect(itemUpdateMock).toHaveBeenCalledTimes(1);
+    expect(itemUpdateMock).toHaveBeenCalledWith({
+      completed: true,
+      completionDate: SERVER_TIMESTAMP_SENTINEL,
+      updatedAt: SERVER_TIMESTAMP_SENTINEL,
+    });
+  });
+
+  // EA-145 Scenario: completed omesso dalla richiesta - aggiornamento parziale preservato
+  it("does not include completed in the update payload when completed is omitted from the request", async () => {
+    await updateChecklistItem.run(
+      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, notes: "Nota aggiornata" })
+    );
+
+    const [updatePayload] = itemUpdateMock.mock.calls[0];
+    expect(updatePayload).not.toHaveProperty("completed");
+    expect(updatePayload).toMatchObject({ notes: "Nota aggiornata" });
+  });
+
+  // EA-145 Scenario: completed con valore non booleano viene rifiutato
+  it("throws invalid-argument and does not modify the item when completed is not a boolean", async () => {
+    await expect(
+      updateChecklistItem.run(
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, completed: "yes" })
+      )
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Item completed must be a boolean"));
+
+    expect(itemUpdateMock).not.toHaveBeenCalled();
   });
 });

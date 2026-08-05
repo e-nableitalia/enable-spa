@@ -27,9 +27,11 @@ interface ChecklistOrigin {
 }
 
 /**
- * Normalizza un item iniziale ricevuto dal consumer. Un item iniziale può
- * essere una semplice stringa (il titolo) o un oggetto con `title`, `type`
- * e, opzionalmente, `quantity`/`notes`.
+ * Normalizza un item iniziale ricevuto dal consumer in un `ChecklistItem`
+ * completo. Un item iniziale deve essere un oggetto con `title`, `type` e,
+ * opzionalmente, `quantity`/`notes` (lo shorthand a stringa semplice è
+ * stato rimosso: da quando `type` è obbligatorio non poteva più produrre
+ * un item valido - EA-143, finding F-6).
  *
  * `type` è obbligatorio ed è validato tramite il modulo condiviso
  * `checklistItemStatus`: non esiste un default, coerentemente con la
@@ -49,9 +51,7 @@ function normalizeInitialItem(input: unknown): NormalizedInitialItem {
   let quantity: unknown;
   let notes: unknown;
 
-  if (typeof input === "string") {
-    title = input;
-  } else if (typeof input === "object" && input !== null) {
+  if (typeof input === "object" && input !== null) {
     const raw = input as Record<string, unknown>;
     title = raw.title;
     type = raw.type;

@@ -13,26 +13,27 @@ import { isChecklistItemComplete, ChecklistItemLike } from "./checklistCompleten
 const REGION = "europe-west1";
 
 // updateChecklistItem: aggiorna in modo parziale i campi (titolo, type,
-// stato, assegnatario, quantità, note) del documento `checklistItems/{itemId}`
-// corrispondente (EA-137: non più un elemento dell'array embedded
-// `checklists/{id}.items`, ma un documento distinto). Aggiorna solo i campi
-// esplicitamente presenti nella richiesta, lasciando invariati tutti gli
-// altri campi dell'item (incluso `completed`, `creationDate`, `dueDate`).
-// `type`, se fornito, è validato tramite il modulo condiviso
+// stato, assegnatario, quantità, note, completed) del documento
+// `checklistItems/{itemId}` corrispondente (EA-137: non più un elemento
+// dell'array embedded `checklists/{id}.items`, ma un documento distinto).
+// Aggiorna solo i campi esplicitamente presenti nella richiesta, lasciando
+// invariati tutti gli altri campi dell'item (incluso `creationDate`,
+// `dueDate`). `type`, se fornito, è validato tramite il modulo condiviso
 // checklistItemStatus (EA-122); se omesso, il type esistente dell'item
-// resta invariato.
+// resta invariato. `completed`, se fornito, deve essere un booleano
+// (EA-145): rende raggiungibile da un percorso applicativo reale il ramo
+// isBooleanItemComplete del gate di completezza type-aware
+// (checklistCompleteness.ts, EA-127).
 //
 // `completionDate` non è un campo accettato in input dal consumer: è
 // valorizzato automaticamente da questa stessa funzione (EA-137) quando
 // l'esito del gate di completezza (`isChecklistItemComplete`,
 // `checklistCompleteness.ts`) transita da non completo a completo per
-// effetto dei campi aggiornati in questa chiamata. Se l'item era già
+// effetto dei campi aggiornati in questa chiamata, incluso `completed`
+// quando fornito (EA-145 è mergiata prima di questa Story: il ramo
+// `boolean` del gate è quindi già raggiungibile). Se l'item era già
 // completo prima della chiamata, `completionDate` resta invariato (non
-// viene ri-valorizzato a ogni update mentre l'item resta completo). Il
-// ramo `boolean` del gate non è raggiungibile finché `completed` non è
-// scrivibile da questa funzione (dipendenza nota da EA-135, oggi in
-// Backlog): per gli item `boolean`, `completionDate` non viene quindi mai
-// valorizzato in questa Story.
+// viene ri-valorizzato a ogni update mentre l'item resta completo).
 export const updateChecklistItem = onCall(
   { region: REGION },
   async (request) => {
@@ -44,7 +45,7 @@ export const updateChecklistItem = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const { checklistId, itemId, title, type, status, assignee, quantity, notes } = request.data as {
+      const { checklistId, itemId, title, type, status, assignee, quantity, notes, completed } = request.data as {
         checklistId?: string;
         itemId?: string;
         title?: string;
@@ -53,6 +54,7 @@ export const updateChecklistItem = onCall(
         assignee?: string | null;
         quantity?: number | null;
         notes?: string | null;
+        completed?: boolean;
       };
 
       if (!checklistId || typeof checklistId !== "string") {
@@ -68,8 +70,9 @@ export const updateChecklistItem = onCall(
       const hasAssignee = assignee !== undefined;
       const hasQuantity = quantity !== undefined;
       const hasNotes = notes !== undefined;
+      const hasCompleted = completed !== undefined;
 
-      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes) {
+      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes && !hasCompleted) {
         throw new HttpsError("invalid-argument", "At least one field to update must be provided");
       }
 
@@ -90,6 +93,9 @@ export const updateChecklistItem = onCall(
       }
       if (hasNotes && notes !== null && typeof notes !== "string") {
         throw new HttpsError("invalid-argument", "Item notes must be a string");
+      }
+      if (hasCompleted && typeof completed !== "boolean") {
+        throw new HttpsError("invalid-argument", "Item completed must be a boolean");
       }
 
       const db = getFirestore();
@@ -120,7 +126,7 @@ export const updateChecklistItem = onCall(
         assignee: hasAssignee ? (assignee ?? null) : beforeState.assignee,
         quantity: hasQuantity ? (quantity ?? null) : beforeState.quantity,
         status: hasStatus ? (status as ChecklistItemStatus) : beforeState.status,
-        completed: beforeState.completed,
+        completed: hasCompleted ? (completed as boolean) : beforeState.completed,
       };
 
       const updatePayload: Record<string, unknown> = {
@@ -146,6 +152,9 @@ export const updateChecklistItem = onCall(
       }
       if (!isChecklistItemComplete(beforeState) && isChecklistItemComplete(afterState)) {
         updatePayload.completionDate = FieldValue.serverTimestamp();
+      }
+      if (hasCompleted) {
+        updatePayload.completed = completed as boolean;
       }
 
       await itemRef.update(updatePayload);

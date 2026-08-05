@@ -185,8 +185,8 @@ describe("createChecklist", () => {
     expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
-  // Scenario 2: anche lo shorthand a stringa non porta un type esplicito, quindi è rifiutato
-  it("throws invalid-argument when an initial item is a bare string (no type)", async () => {
+  // Scenario: lo shorthand a stringa è stato rimosso, l'input cade nel ramo else
+  it("throws invalid-argument when an initial item is a bare string (shorthand removed)", async () => {
     await expect(
       createChecklist.run(
         buildRequest({
@@ -196,7 +196,7 @@ describe("createChecklist", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must be a string or an object with a title")
     );
 
     expect(batchCommitMock).not.toHaveBeenCalled();

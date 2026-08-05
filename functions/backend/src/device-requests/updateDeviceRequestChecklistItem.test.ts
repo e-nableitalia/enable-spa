@@ -176,6 +176,30 @@ describe("updateDeviceRequestChecklistItem", () => {
     expect(checklistItemsStore["item-1"]).toMatchObject({ type: "numeric" });
   });
 
+  // EA-145 Scenario: updateDeviceRequestChecklistItem inoltra completed al core
+  it("forwards and persists completed when a volunteer assigned to the request updates a boolean item", async () => {
+    checklistItemsStore["item-1"] = {
+      ...checklistItemsStore["item-1"],
+      type: "boolean",
+      assignee: "volunteer-1",
+    };
+
+    const result = await updateDeviceRequestChecklistItem.run(
+      buildRequest(
+        {
+          requestId: "req-1",
+          checklistId: CHECKLIST_ID,
+          itemId: "item-1",
+          completed: true,
+        },
+        "volunteer-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ completed: true });
+  });
+
   it("allows a volunteer assigned to the request to update an item", async () => {
     const result = await updateDeviceRequestChecklistItem.run(
       buildRequest(
