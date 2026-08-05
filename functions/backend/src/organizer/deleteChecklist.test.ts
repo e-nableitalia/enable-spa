@@ -43,10 +43,19 @@ const collectionMock = jest.fn((name: string) =>
   name === "users" ? { doc: userDocMock } : { doc: checklistsDocMock }
 );
 
+// EA-137: createChecklist (usato dai test di "creator authorization" per costruire un
+// fixture reale invece di impostare createdBy a mano) scrive ora via db.batch().set(...)
+// sulla collection checklists, non più con doc(id).set(...) diretto.
+const batchSetMock = jest.fn((ref: { id: string }, data: Record<string, unknown>) => {
+  checklistsStore[ref.id] = data;
+});
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
     recursiveDelete: (ref: { id: string }) => recursiveDeleteMock(ref),
+    batch: jest.fn(() => ({ set: batchSetMock, commit: batchCommitMock })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
