@@ -119,6 +119,18 @@ const collectionMock = jest.fn((name: string) => buildCollection(name));
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    // createChecklist (organizer core, EA-137) scrive la checklist via
+    // db.batch() invece di un `.set()` diretto sul documento: qui il batch
+    // delega semplicemente al `.set()` già esposto dal doc mock, dato che
+    // in questo layer di integrazione `items` è sempre `[]` (nessun item
+    // iniziale passato da createDeviceRequestChecklist), quindi non viene
+    // mai coinvolta la collection `checklistItems`.
+    batch: jest.fn(() => ({
+      set: jest.fn((ref: { set: (data: Record<string, unknown>) => Promise<void> }, data: Record<string, unknown>) =>
+        ref.set(data)
+      ),
+      commit: jest.fn().mockResolvedValue(undefined),
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),
