@@ -6,6 +6,7 @@ const CHECKLIST_ID = "checklist-1";
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -47,14 +48,30 @@ function buildCollection(name: string) {
     };
   }
 
+  if (name === "checklistItems") {
+    return {
+      doc: jest.fn((id: string) => ({ id })),
+    };
+  }
+
   throw new Error(`Unexpected collection ${name}`);
 }
 
 const collectionMock = jest.fn((name: string) => buildCollection(name));
+const getAllMock = jest.fn((...refs: { id: string }[]) =>
+  Promise.resolve(
+    refs.map((ref) => ({
+      id: ref.id,
+      exists: checklistItemsStore[ref.id] !== undefined,
+      data: () => checklistItemsStore[ref.id],
+    }))
+  )
+);
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    getAll: (...refs: { id: string }[]) => getAllMock(...refs),
   })),
 }));
 
@@ -92,17 +109,17 @@ describe("getDeviceRequestChecklistCompleteness", () => {
         checklistId: CHECKLIST_ID,
       },
     };
+
+    checklistItemsStore = {};
   });
 
   // EA-127: calcolo type-aware, item senza `type` trattati come 'generic'
-  // (completo solo con status 'Completata').
+  // (completo solo con status 'Completata'). EA-138: gli item sono ora
+  // risolti da `checklistItems` a partire dagli itemId referenziati.
   it("returns complete=true when all items of the checklist are complete", async () => {
-    checklistsStore = {
-      [CHECKLIST_ID]: {
-        items: [
-          { assignee: "volunteer-1", quantity: 2, status: "Completata" },
-        ],
-      },
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1"] } };
+    checklistItemsStore = {
+      "item-1": { assignee: "volunteer-1", quantity: 2, status: "Completata" },
     };
 
     const result = await getDeviceRequestChecklistCompleteness.run(
@@ -114,13 +131,10 @@ describe("getDeviceRequestChecklistCompleteness", () => {
 
   // EA-127 (fix del bug): un item generic ancora 'In corso' non è completo.
   it("returns complete=false when at least one item is still incomplete", async () => {
-    checklistsStore = {
-      [CHECKLIST_ID]: {
-        items: [
-          { assignee: "volunteer-1", quantity: 2, status: "In corso" },
-          { assignee: null, quantity: null, status: "Assegnare" },
-        ],
-      },
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-2"] } };
+    checklistItemsStore = {
+      "item-1": { assignee: "volunteer-1", quantity: 2, status: "In corso" },
+      "item-2": { assignee: null, quantity: null, status: "Assegnare" },
     };
 
     const result = await getDeviceRequestChecklistCompleteness.run(
@@ -156,8 +170,9 @@ describe("getDeviceRequestChecklistCompleteness", () => {
   // Scenario 5 (EA-133): nessun dual-read sul vecchio campo singolare
   // checklistId -> not-found, anche se il campo legacy e' ancora presente.
   it("throws not-found for a legacy request with only the singular checklistId field, no fallback", async () => {
-    checklistsStore = {
-      [CHECKLIST_ID]: { items: [{ assignee: "volunteer-1", quantity: 2, status: "Completata" }] },
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1"] } };
+    checklistItemsStore = {
+      "item-1": { assignee: "volunteer-1", quantity: 2, status: "Completata" },
     };
 
     await expect(

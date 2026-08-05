@@ -6,12 +6,15 @@ const CHECKLIST_ID = "checklist-1";
 /**
  * Store in-memory minimale che simula le collection Firestore coinvolte:
  * `users` (RBAC), `deviceRequests` (risoluzione `requestId` ->
- * `checklistId` + `assignedVolunteers`) e `checklists` (lettura delegata
- * al core Organizer `getChecklist`).
+ * `checklistId` + `assignedVolunteers`), `checklists` (lettura delegata al
+ * core Organizer `getChecklist`) e `checklistItems` (EA-137/EA-138:
+ * `checklists/{id}.items` è ora un array di soli `itemId`, risolto da
+ * `getChecklist` con una lettura batch `db.getAll` sui documenti reali).
  */
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -53,14 +56,30 @@ function buildCollection(name: string) {
     };
   }
 
+  if (name === "checklistItems") {
+    return {
+      doc: jest.fn((id: string) => ({ id })),
+    };
+  }
+
   throw new Error(`Unexpected collection ${name}`);
 }
 
 const collectionMock = jest.fn((name: string) => buildCollection(name));
+const getAllMock = jest.fn((...refs: { id: string }[]) =>
+  Promise.resolve(
+    refs.map((ref) => ({
+      id: ref.id,
+      exists: checklistItemsStore[ref.id] !== undefined,
+      data: () => checklistItemsStore[ref.id],
+    }))
+  )
+);
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    getAll: (...refs: { id: string }[]) => getAllMock(...refs),
   })),
 }));
 
@@ -103,19 +122,21 @@ describe("getDeviceRequestChecklist", () => {
       [CHECKLIST_ID]: {
         category: "Kinetic Hand",
         title: "Checklist di fabbricazione",
-        items: [
-          {
-            id: "item-1",
-            title: "Prepara stampante",
-            assignee: null,
-            quantity: 2,
-            notes: "",
-            status: "Assegnare",
-            completed: false,
-          },
-        ],
+        items: ["item-1"],
         createdAt: { seconds: 1, nanoseconds: 0 },
         updatedAt: { seconds: 2, nanoseconds: 0 },
+      },
+    };
+
+    checklistItemsStore = {
+      "item-1": {
+        id: "item-1",
+        title: "Prepara stampante",
+        assignee: null,
+        quantity: 2,
+        notes: "",
+        status: "Assegnare",
+        completed: false,
       },
     };
   });
@@ -130,7 +151,7 @@ describe("getDeviceRequestChecklist", () => {
       checklistId: CHECKLIST_ID,
       category: "Kinetic Hand",
       title: "Checklist di fabbricazione",
-      items: checklistsStore[CHECKLIST_ID]?.items,
+      items: [checklistItemsStore["item-1"]],
       createdAt: checklistsStore[CHECKLIST_ID]?.createdAt,
       updatedAt: checklistsStore[CHECKLIST_ID]?.updatedAt,
     });
