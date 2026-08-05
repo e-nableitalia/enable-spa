@@ -212,4 +212,51 @@ describe("updateChecklistItem", () => {
 
     expect(updateMock).not.toHaveBeenCalled();
   });
+
+  // EA-145 Scenario: aggiornamento di completed su un item boolean esistente
+  it("updates the completed field, leaving title, type, assignee, quantity, notes and status unchanged", async () => {
+    const booleanItem = { ...ORIGINAL_ITEM, type: "boolean" as const, assignee: "Mario Rossi", completed: false };
+    getMock.mockResolvedValue(buildChecklistSnapshot([booleanItem, { ...OTHER_ITEM }]));
+
+    await updateChecklistItem.run(
+      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, completed: true })
+    );
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    const [updatePayload] = updateMock.mock.calls[0];
+    const updatedItem = updatePayload.items.find((item: { id: string }) => item.id === ITEM_ID);
+
+    expect(updatedItem).toEqual({
+      ...booleanItem,
+      completed: true,
+    });
+    expect(updatePayload.updatedAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+  });
+
+  // EA-145 Scenario: completed omesso dalla richiesta - aggiornamento parziale preservato
+  it("preserves the existing completed value when completed is omitted from the request", async () => {
+    await updateChecklistItem.run(
+      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, notes: "Nota aggiornata" })
+    );
+
+    const [updatePayload] = updateMock.mock.calls[0];
+    const updatedItem = updatePayload.items.find((item: { id: string }) => item.id === ITEM_ID);
+
+    expect(updatedItem).toEqual({
+      ...ORIGINAL_ITEM,
+      notes: "Nota aggiornata",
+    });
+    expect(updatedItem.completed).toBe(false);
+  });
+
+  // EA-145 Scenario: completed con valore non booleano viene rifiutato
+  it("throws invalid-argument and does not modify the item when completed is not a boolean", async () => {
+    await expect(
+      updateChecklistItem.run(
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, completed: "yes" })
+      )
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Item completed must be a boolean"));
+
+    expect(updateMock).not.toHaveBeenCalled();
+  });
 });

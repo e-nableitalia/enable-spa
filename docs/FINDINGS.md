@@ -107,7 +107,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `grep -rn "completed" functions/backend/src enable-device/src` — nessuna scrittura di `completed: true` in nessun file, in nessun layer
   - `functions/backend/src/organizer/updateChecklistItem.ts` — campi aggiornabili: `title`/`type`/`status`/`assignee`/`quantity`/`notes`, mai `completed`
 - **Story/PR/sessione di provenienza**: rilevato durante la review della Story Jira EA-127 (Epic checklist item model), sessione 2026-08-03.
-- **Stato**: deciso (sessione 2026-08-05) — esporre `completed` tra i campi aggiornabili di `updateChecklistItem`, simmetrico a `status`. In attesa di implementazione, vedi request `docs/implementation-requests/checklist-type-model-cleanup-request.md`.
+- **Stato**: risolto (Story Jira EA-145, 2026-08-05). `updateChecklistItem.ts` accetta ora `completed: boolean` come campo opzionale aggiornabile (invalid-argument se fornito non booleano, invariato se omesso); `updateDeviceRequestChecklistItem.ts` lo inoltra al core senza introdurre nuova logica RBAC. Il ramo `isBooleanItemComplete` di `checklistCompleteness.ts` (EA-127) e' ora raggiungibile da un percorso applicativo reale; `checklistCompleteness.ts` non e' stato modificato.
 
 ## F-12: `type` obbligatorio su `addChecklistItem` (EA-124) rende inutilizzabile in produzione il layer consumer `addDeviceRequestChecklistItem`, che non lo inoltra mai
 
