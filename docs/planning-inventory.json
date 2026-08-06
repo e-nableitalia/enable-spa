@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-06T14:16:44.099Z",
+  "generated_at": "2026-08-06T14:22:24.318Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -120,8 +120,20 @@
       "type": "solution_study",
       "source_path": "docs/solution-studies/ss-device-request-macro-status.json",
       "created_at": "2026-08-06T10:54:45.893Z",
-      "updated_at": "2026-08-06T14:16:44.099Z",
+      "updated_at": "2026-08-06T14:22:24.317Z",
       "created_by": "cli:solution-study"
+    },
+    {
+      "id": "ss-device-request-macro-status-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/ss-device-request-macro-status-epic-draft.md",
+      "created_at": "2026-08-06T14:22:24.318Z",
+      "updated_at": "2026-08-06T14:22:24.318Z",
+      "created_by": "cli:solution-decide",
+      "status": "draft",
+      "domains": [
+        "device-requests"
+      ]
     }
   ]
 }
