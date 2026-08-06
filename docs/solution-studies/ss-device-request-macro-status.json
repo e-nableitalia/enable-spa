@@ -1,0 +1,175 @@
+{
+  "id": "ss-device-request-macro-status",
+  "status": "draft",
+  "request_ref": "docs/implementation-requests/device-request-macro-status-reduction-request.md",
+  "problem_statement": "La richiesta e' gia' formulata come soluzione ('ridurre gli stati interni delegando il dettaglio di fabbricazione all'Organizer'), ripresa testualmente dall'obiettivo dichiarato dell'Epic Jira EA-2. Il problema di fondo, verificato nel codice attuale e non solo nella descrizione dell'Epic, e' che il campo `deviceRequests.status` fa oggi doppio lavoro con un'unica rappresentazione: (1) segna la fase macro del ciclo di vita della richiesta (triage, produzione, spedizione, chiusura), rilevante per le viste admin/volontario e per il pubblico (`publicStatus`); (2) codifica anche, tramite 8 dei 19 valori (`PRODUCTION_LIFECYCLE_STATUSES`, gia' isolati in `functions/backend/src/utils/productionLifecycle.ts` da EA-107 ma non ancora sostituiti), il progresso granulare interno della fabbricazione — esattamente il tipo di tracciamento che il core Organizer (Epic EA-3, Done) e il layer di integrazione device-requests (Epic EA-108 e le Story successive EA-129/130/131/133/137/138/141, gia' Done) offrono gia' come capability generica riusabile (checklist con item assegnabili, stato, gate di completezza). Le due responsabilita' convivono oggi nello stesso enum gestito da `device/changeStatus.ts`, duplicando concettualmente cio' che l'Organizer fa gia' altrove nello stesso codice per lo stesso caso d'uso: la UI mostra gia' entrambe le rappresentazioni fianco a fianco nella stessa schermata (`RequestDetail.tsx` monta sia il pannello 'Checklist di fabbricazione' — `DeviceRequestChecklists.tsx`, gia' funzionante, una tab per checklist collegata — sia, poco sotto, il pannello 'Ultimo evento' guidato dal campo `status`). Il problema che questo studio esplora e' quindi: come eliminare questa duplicazione concettuale — smettere di rappresentare il progresso granulare di fabbricazione come valori dell'enum `status` e affidarlo interamente al meccanismo di checklist gia' esistente — preservando i 5 gruppi di `publicStatus`, l'event sourcing, la sincronizzazione della proiezione pubblica e un controllo RBAC del volontario equivalente a quello odierno, e gestendo esplicitamente le richieste gia' oggi in produzione con `status` valorizzato in uno degli 8 stati granulari: a differenza dello studio deciso `ss-user-todo-list`, qui non si puo' assumere un dataset di solo test, per esplicita indicazione della richiesta stessa.",
+  "constraints": [
+    "5 gruppi di `publicStatus` invariati nell'interfaccia pubblica (`da validare`, `da gestire`, `fabbricazione in corso`, `completati`, `annullate / non completabili`), vincolo esplicito della richiesta: nessuna opzione puo' cambiare il comportamento osservabile da admin/volontari/richiedenti su questo fronte, anche se la rappresentazione interna cambia.",
+    "Event sourcing invariato: ogni transizione deve continuare a produrre un documento in `deviceRequests/{id}/events/{eventId}` con la stessa struttura (`applyStatusChangeTransaction.ts`, gia' il punto di scrittura unico condiviso da tutte le transizioni odierne), e la sincronizzazione atomica di `publicDeviceRequests/{id}.publicStatus` (stesso file) deve restare invariata per ogni cambio di stato, qualunque sia il trigger che lo origina.",
+    "Perimetro esplicito della riduzione, come dichiarato dalla sezione 'Vincoli noti' della richiesta: solo gli 8 stati di produzione granulare (`PRODUCTION_LIFECYCLE_STATUSES`) sono oggetto di delega all'Organizer. Gli 11 stati 'macro' rimanenti (8 di triage + 3 terminali/speciali: `completata`, `annullata`, `standby`) non sono nello scope di riduzione di questo studio: nessuna delle opzioni li tocca. Resta pero' aperta, trasversale a tutte le opzioni, la domanda esplicita della richiesta se i 3 stati terminali debbano restare guidati manualmente (default assunto qui) o diventare derivati dal completamento della checklist — decisione di prodotto da confermare al gate, non differenziante tra le opzioni.",
+    "`deviceRequests.checklistIds` e' oggi un array (fino a `MAX_CHECKLISTS_PER_REQUEST = 5`, introdotto da EA-130/EA-133), non un campo singolare come nella formulazione originaria di EA-108: la premessa della richiesta ('la checklist di fabbricazione collegata alla deviceRequest', 'riusando createDeviceRequestChecklist') riflette il modello 1:1 gia' superato. Il commento in `functions/backend/src/device-requests/createDeviceRequestChecklist.ts` anticipa esplicitamente scenari con piu' checklist coesistenti sulla stessa richiesta ('fabbricazione, collaudo/qualita', piu' margine'): ogni opzione deve dichiarare esplicitamente come identifica, tra le checklist collegate, quella che rappresenta/guida il progresso di produzione.",
+    "RBAC oggi asimmetrico tra i due meccanismi coinvolti: `isAllowedVolunteerTransition` (`utils/volunteerTransitions.ts`) applica 5 transizioni ordinate a coppie fisse (`from`->`to`), mentre il RBAC gia' esistente sugli item di checklist (`updateDeviceRequestChecklistItem` via `deviceRequestChecklistAccess.ts`) ammette qualunque admin o volontario assegnato a modificare qualunque item, senza alcun vincolo di ordine o dipendenza tra item. Spostare il controllo di avanzamento sul completamento di item di checklist perde, salvo nuovo lavoro esplicito non incluso in nessuna capability oggi esistente, il vincolo di sequenza garantito oggi da `isAllowedVolunteerTransition`.",
+    "`getDeviceRequestChecklistCompleteness` (Epic EA-3/EA-108) espone solo un booleano aggregato per un singolo `checklistId` per chiamata — nessun dettaglio per-item, nessuna aggregazione su piu' checklist collegate alla stessa richiesta. E' una capability gia' pronta ma, per stessa ammissione del grounding (`docs/cognitive-workspace/domains/process-organizer-core.json`, 'il consumer decide come usare l'esito'), oggi non consumata da nessuna funzione o vista del repository.",
+    "`enable-device/src/components/layout/AdminLayout.tsx` (righe 157-163) filtra oggi le viste admin `AdminProduction`/`AdminShipping` non solo per `publicStatus` (come le altre viste) ma, per `AdminShipping`, con un filtro letterale su due valori specifici di `status`: `['pronta per spedizione', 'spedita']`, distinti dal resto del gruppo pubblico 'fabbricazione in corso'. E' una dipendenza funzionale reale e concreta, non solo simbolica, che qualunque opzione deve rispettare o sostituire esplicitamente con un meccanismo equivalente.",
+    "Dati reali gia' in produzione con `status` in uno degli 8 stati granulari, non un dataset di solo test come nel caso gia' gestito da `ss-user-todo-list`: qualunque opzione che cambi il dominio di valori di `status` richiede un passo di migrazione esplicito, coerente con il pattern gia' presente nel repo per operazioni di questo tipo (`AdminMaintenanceRequests.tsx`, es. 'Migra volontari': migrazione idempotente in batch Firestore, eseguita da un tool admin dedicato), non un'operazione manuale una tantum.",
+    "Fuori scope per esplicita indicazione della richiesta: validazione/anonimizzazione (`cap-request-validation`), Security Rules, infrastruttura di notifica, nuovi stati pubblici, UI volontario (`/volunteer/*`) oltre a quanto strettamente necessario per riflettere il nuovo modello. Le modifiche a viste admin (es. `AdminShipping.tsx`) non rientrano in questa esclusione, che riguarda solo il perimetro `/volunteer/*`."
+  ],
+  "options": [
+    {
+      "id": "opt-a-full-collapse-single-production-status",
+      "name": "Collasso totale a un solo stato macro 'fabbricazione in corso'; AdminShipping e le transizioni volontario riscritte per leggere la checklist",
+      "summary": "Gli 8 stati granulari di produzione collassano in un unico valore interno di `status` (coincidente con il nome del gruppo pubblico 'fabbricazione in corso'), eliminando `PRODUCTION_LIFECYCLE_STATUSES` e `isAllowedVolunteerTransition` dal codice. La checklist di produzione viene auto-istanziata (riusando `createDeviceRequestChecklist`) alla transizione verso questo unico stato, e il suo dettaglio (item con titoli corrispondenti agli attuali 8 passi) diventa l'unica rappresentazione del progresso interno. Poiche' `AdminShipping.tsx` dipende oggi da due valori letterali di `status` per distinguere 'pronta per spedizione' da 'spedita', questa opzione introduce due campi booleani denormalizzati su `deviceRequests` (`readyToShip`, `shipped`), aggiornati transazionalmente al completamento dei due item di checklist corrispondenti, e riscrive il filtro di `AdminShipping`/`AdminLayout.tsx` per leggerli al posto di `status`.",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Rimozione di PRODUCTION_LIFECYCLE_STATUSES/isAllowedVolunteerTransition, sostituiti dal RBAC gia' esistente su updateDeviceRequestChecklistItem",
+          "Denormalizzazione readyToShip/shipped (booleani) su deviceRequests, aggiornati transazionalmente al completamento dei corrispondenti item della checklist di produzione, per evitare letture N+1 nelle viste admin che oggi filtrano in memoria su un array gia' caricato",
+          "Script di migrazione one-shot (pattern AdminMaintenanceRequests) per le richieste gia' negli 8 stati granulari: status -> valore macro unico, seed della checklist con gli item fino alla posizione raggiunta marcati completati"
+        ]
+      },
+      "pros": [
+        "Realizza alla lettera l'obiettivo dichiarato dall'Epic EA-2: un solo valore interno per l'intera fase di produzione, la massima riduzione possibile del dominio di `status`.",
+        "Elimina completamente `productionLifecycle.ts`/`volunteerTransitions.ts` come meccanismo dedicato: nessun doppio sistema di tracciamento del progresso di fabbricazione resta nel codice dopo questa opzione.",
+        "Rende la checklist l'unica fonte di verita' per il dettaglio di fabbricazione, coerente con la vocazione dichiarata dell'Organizer come motore generico gia' pensato per essere riusato oltre il caso device."
+      ],
+      "cons": [
+        "Costringe a riscrivere `AdminShipping.tsx` e il suo filtro in `AdminLayout.tsx`, introducendo una denormalizzazione (`readyToShip`/`shipped`) mai esistita prima sul documento `deviceRequests`, con un nuovo rischio di drift se l'aggiornamento del flag e il completamento dell'item checklist corrispondente non restano nella stessa transazione.",
+        "Perde il vincolo di sequenza oggi garantito da `isAllowedVolunteerTransition` (5 transizioni ordinate): il RBAC checklist esistente (admin o volontario assegnato) non impedisce di completare un item successivo prima di uno precedente.",
+        "Migrazione con perdita di granularita' reale e irreversibile: per una richiesta oggi, ad esempio, in `fitting`, non e' ricostruibile chi abbia completato i passi precedenti ne' quando — solo la posizione lineare raggiunta e' nota, quindi gli item precedenti alla posizione vanno marcati completati con assignee/timestamp sintetici, non i dati storici reali. Una perdita di fedelta' da accettare esplicitamente al gate."
+      ],
+      "risks": [
+        "Un bug nella sincronizzazione readyToShip/shipped puo' far sparire silenziosamente richieste dalla vista AdminShipping (falso negativo) o farle apparire premature (falso positivo), senza alcun segnale visibile finche' un admin non nota l'incongruenza.",
+        "Ampiezza di modifica massima delle tre opzioni (RBAC backend + migrazione dati + nuovo pattern di query in almeno due viste admin): la superficie di regressione e' la piu' ampia."
+      ],
+      "effort_class": "L",
+      "reversibility": "low",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Perdita del vincolo di sequenza sulle 5 transizioni oggi garantito da isAllowedVolunteerTransition: il RBAC checklist esistente non conosce dipendenze tra item.",
+          "mitigation": "Se il vincolo di sequenza e' un requisito di prodotto non negoziabile, va introdotta una validazione esplicita nel layer device-requests (non nel core, che resta agnostico) che verifichi le dipendenze tra item prima di permetterne il completamento — costo aggiuntivo da preventivare esplicitamente, non incluso nel semplice riuso del RBAC esistente."
+        },
+        {
+          "severity": "high",
+          "description": "La denormalizzazione readyToShip/shipped introduce una seconda fonte di verita' (item di checklist completato + flag sul documento deviceRequest) mai esistita prima per questo dato.",
+          "mitigation": "Aggiornare il flag nella stessa transazione Firestore del completamento dell'item checklist rilevante, mai in due scritture separate; prevedere un job di verifica/riparazione se il drift si rivela un problema concreto in produzione."
+        },
+        {
+          "severity": "medium",
+          "description": "Identificazione di quale checklist, tra le fino a 5 collegate alla stessa richiesta, rappresenti il progresso di produzione da collassare.",
+          "mitigation": "Introdurre un marcatore esplicito (es. campo purpose: 'production', scritto solo dal flusso di auto-istanziazione alla transizione in produzione), distinto da checklist create successivamente per altri scopi (es. collaudo/qualita')."
+        }
+      ],
+      "spikes": [
+        {
+          "question": "Quante deviceRequest esistono oggi nel Firestore di produzione reale (non staging/test) con status in uno degli 8 valori di PRODUCTION_LIFECYCLE_STATUSES?",
+          "verification_approach": "Eseguire una singola query di sola lettura (where('status','in', PRODUCTION_LIFECYCLE_STATUSES), conteggio) contro il progetto Firestore di produzione, pochi minuti, nessuna funzione da costruire. Il risultato dimensiona anche lo sforzo di migrazione/backfill delle opzioni b e c, non solo di questa.",
+          "blocking": false,
+          "outcome": null,
+          "id": "spike-production-status-count"
+        }
+      ]
+    },
+    {
+      "id": "opt-b-milestone-preserving-partial-collapse",
+      "name": "Collasso parziale a 3 macro-stati di produzione (in produzione / pronta per spedizione / spedita), checklist solo per il dettaglio pre-spedizione",
+      "summary": "Solo i 5 stati pre-spedizione (`scelta device e dimensionamento`, `personalizzazione`, `attesa materiali`, `fabbricazione`, `fitting`) collassano in un unico valore `in produzione`. `pronta per spedizione` e `spedita` restano valori di `status` letterali distinti, esattamente come oggi: `AdminShipping.tsx` non viene toccato. Il dettaglio dei 5 passi collassati diventa una checklist auto-istanziata (`createDeviceRequestChecklist`, riusando il matching per `devicetype` gia' esistente) alla transizione `attesa volontario` -> `in produzione`, con 5 item pre-popolati da un template dedicato. Le transizioni volontario si riducono da 5 a 2: `in produzione` -> `pronta per spedizione`, gated sul completamento della checklist di produzione tramite `getDeviceRequestChecklistCompleteness` (primo consumo reale di questa capability, oggi costruita ma inutilizzata), e `pronta per spedizione` -> `spedita`, invariata rispetto a oggi.",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Riduzione di PRODUCTION_LIFECYCLE_STATUSES da 8 a 3 valori macro (in produzione, pronta per spedizione, spedita); isAllowedVolunteerTransition riscritta da 5 a 2 coppie",
+          "Gate reale sulla transizione 'in produzione' -> 'pronta per spedizione' tramite getDeviceRequestChecklistCompleteness, primo consumatore effettivo di questa capability gia' esistente",
+          "Auto-istanziazione della checklist di produzione (5 item, template dedicato per devicetype) alla transizione in 'in produzione', riusando createDeviceRequestChecklist",
+          "Script di migrazione one-shot per le richieste gia' in uno dei 5 stati pre-spedizione collassati: status -> 'in produzione', seed checklist con item fino alla posizione marcati completati; le richieste gia' in 'pronta per spedizione'/'spedita' non richiedono alcuna modifica"
+        ]
+      },
+      "pros": [
+        "AdminShipping.tsx e il filtro pendingRequests/productionRequests in AdminLayout.tsx (righe 153-163) restano interamente invariati: nessuna riscrittura di query/filtro esistente, nessuna denormalizzazione nuova sul documento deviceRequests.",
+        "Da' finalmente uno scopo concreto a getDeviceRequestChecklistCompleteness: capability gia' costruita nell'Epic EA-3 ed esposta dal layer device-requests, ma mai consumata da nessuna funzione o vista oggi esistente nel repository.",
+        "Migrazione a impatto ridotto rispetto a opt-a: solo le richieste nei 5 stati pre-spedizione (non tutte e 8) richiedono un cambio di status; quelle gia' in 'pronta per spedizione'/'spedita' restano semanticamente identiche a oggi."
+      ],
+      "cons": [
+        "Non realizza la riduzione 'alla lettera' quanto opt-a: restano 3 stati di produzione invece di 1, una lettura piu' conservativa del testo dell'Epic ('un insieme ristretto', non necessariamente 'un solo stato').",
+        "Il vincolo di sequenza tra i 5 passi ora dentro la checklist resta comunque perso (stesso problema di opt-a, in scala minore): il RBAC esistente su updateDeviceRequestChecklistItem non conosce dipendenze tra item.",
+        "Introduce un nuovo accoppiamento sincrono, per un solo gate, tra la Cloud Function changeStatus e la lettura della checklist collegata prima di autorizzare la transizione 'in produzione' -> 'pronta per spedizione': un tipo di dipendenza cross-modulo mai presente prima nei cambi di stato."
+      ],
+      "risks": [
+        "Se non esiste ancora un template dedicato per un devicetype (nessun template con category corrispondente), createDeviceRequestChecklist crea oggi una checklist vuota (comportamento gia' esistente, non un bug nuovo introdotto da questa opzione): un volontario davanti a una checklist vuota per 'in produzione' non avrebbe alcun item da completare, e getDeviceRequestChecklistCompleteness restituirebbe vacuamente true (checklist senza item = completa secondo il gate gia' esistente), permettendo un avanzamento a 'pronta per spedizione' senza alcun lavoro realmente tracciato — un caso limite da coprire esplicitamente con un template di default per ogni devicetype attivo prima del deploy."
+      ],
+      "effort_class": "M",
+      "reversibility": "medium",
+      "critical_concerns": [
+        {
+          "severity": "medium",
+          "description": "Perdita del vincolo di sequenza tra i 5 passi ora rappresentati come item di checklist.",
+          "mitigation": "Stessa mitigazione di opt-a in scala minore: se il prodotto richiede un ordine stretto tra i 5 item, va aggiunta validazione esplicita nel layer device-requests; altrimenti va accettato esplicitamente come cambio di comportamento minore (i 5 passi diventano paralleli/liberi, non piu' sequenziali)."
+        },
+        {
+          "severity": "medium",
+          "description": "Una checklist vuota per un devicetype senza template dedicato rende il gate di completezza vacuamente vero, permettendo un avanzamento senza item realmente tracciati.",
+          "mitigation": "Richiedere un template di produzione per ogni devicetype attivo prima del deploy, oppure far si' che la transizione 'in produzione' -> 'pronta per spedizione' rifiuti esplicitamente se la checklist collegata non ha item, invece di accettare vacuamente il gate."
+        },
+        {
+          "severity": "medium",
+          "description": "Identificazione della checklist di produzione tra le fino a 5 collegate alla stessa richiesta.",
+          "mitigation": "Stessa mitigazione di opt-a: marcatore esplicito (es. purpose: 'production') scritto solo dal flusso di auto-istanziazione."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-c-status-as-computed-view",
+      "name": "status invariato nel dominio di valori, ma calcolato dal completamento della checklist invece che impostato manualmente dal volontario",
+      "summary": "Non si riduce il numero di valori di `status`: tutti i 19, inclusi gli 8 di produzione, restano validi e presenti in ogni vista/dropdown/filtro esistente, senza alcuna migrazione di dati. Cambia invece chi decide la transizione tra gli 8 stati di produzione: il volontario smette di chiamare `changeStatus` con un `newStatus` esplicito per questi 8 valori, e interagisce solo con la checklist (`updateDeviceRequestChecklistItem`, gia' RBAC-controllato). Una nuova funzione di mappatura, interna al layer device-requests, calcola deterministicamente quale dei 5 stati granulari corrisponde al pattern di item completati nella checklist di produzione e, se diverso dallo status corrente, invoca `applyStatusChangeTransaction` per allinearlo — chiamata sincrona dalla stessa Cloud Function `updateDeviceRequestChecklistItem`, non un trigger Firestore asincrono. `isAllowedVolunteerTransition` smette di essere invocata per queste transizioni; l'admin mantiene la possibilita' di forzare direttamente qualunque stato via `changeStatus`, esattamente come oggi.",
+      "domain_impact": {
+        "existing_domains_touched": ["device-requests"],
+        "new_domains_proposed": [],
+        "new_capabilities_sketch": [
+          "Funzione di mappatura checklist->status (nuova, nel layer device-requests): dato il pattern di item completati nella checklist di produzione, determina lo stato granulare corrispondente tra i cinque attuali",
+          "updateDeviceRequestChecklistItem esteso per invocare, dopo l'aggiornamento dell'item, la stessa transazione di cambio stato (applyStatusChangeTransaction) se il nuovo pattern di completamento implica un avanzamento",
+          "Nessuna migrazione del campo status: solo un backfill della checklist di produzione per le richieste gia' in uno degli 8 stati, cosi' che i futuri completamenti di item si allineino correttamente alla posizione gia' raggiunta"
+        ]
+      },
+      "pros": [
+        "Zero migrazione di dati sul campo status: tutti i 19 valori restano validi, tutte le viste admin (AdminShipping, AdminProduction, dropdown REQUEST_STATUSES, Kanban) restano interamente invariate — la superficie di regressione piu' piccola delle tre opzioni.",
+        "Rimuove comunque la duplicazione concettuale al centro del problema: isAllowedVolunteerTransition (5 regole hardcoded) smette di essere il meccanismo con cui il volontario avanza la produzione, sostituito dal RBAC generico gia' esistente sugli item di checklist.",
+        "Reversibilita' massima tra le tre opzioni: tornare indietro significa disattivare la chiamata alla funzione di mappatura e ripristinare le chiamate dirette a changeStatus lato frontend, senza alcuna pulizia di dati necessaria, perche' nessun valore di status e' mai cambiato di dominio."
+      ],
+      "cons": [
+        "Non realizza la richiesta esplicita dell'Epic EA-2 di 'ridurre i 19 stati interni a un insieme ristretto': il numero di valori interni resta identico a oggi, l'unica cosa che cambia e' il meccanismo di transizione — va reso esplicito al gate che questa opzione risolve la duplicazione di meccanismo ma non l'obiettivo letterale di riduzione del conteggio enum.",
+        "Introduce un accoppiamento sincrono nuovo e mai esistito tra updateDeviceRequestChecklistItem (oggi funzione pura del layer device-requests, semplice delega al core) e la logica di transizione di stato di device/changeStatus.ts (applyStatusChangeTransaction): un cambiamento di responsabilita' architetturale, non solo di codice, che rende updateDeviceRequestChecklistItem consapevole per la prima volta del concetto di 'stato della richiesta', rompendo la separazione oggi netta tra 'gestione checklist' e 'gestione stato'.",
+        "Il pattern di item completati deve mappare deterministicamente a uno dei 5 stati senza ambiguita': se il volontario completa gli item fuori ordine (nessun vincolo di sequenza nel RBAC checklist, stesso problema di opt-a/opt-b), la funzione di mappatura deve decidere quale stato assegnare a un pattern parziale e non lineare (es. item 1 e 3 completati, 2 no) — un caso che il modello lineare attuale di status non ha mai dovuto gestire."
+      ],
+      "risks": [
+        "Un bug nella funzione di mappatura checklist->status puo' scrivere uno status incoerente (es. retrocedere silenziosamente lo stato se un item viene corretto da completato a non completato) senza che nessun controllo esistente lo impedisca: device/changeStatus.ts oggi non valida che lo stato possa solo avanzare, quindi questo comportamento sarebbe nuovo ma non impedito da nulla nel codice attuale."
+      ],
+      "effort_class": "M",
+      "reversibility": "high",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Il completamento fuori ordine degli item (nessun vincolo di sequenza) rende ambiguo il calcolo deterministico dello stato granulare corrispondente.",
+          "mitigation": "Definire esplicitamente la regola di mappatura per pattern non lineari (es. 'stato = fase del primo item non ancora completato'), documentarla e coprirla con test dedicati prima del deploy — non e' una scelta ovvia e va decisa esplicitamente, non lasciata implicita nell'implementazione."
+        },
+        {
+          "severity": "medium",
+          "description": "Non realizza l'obiettivo letterale di riduzione del conteggio di stati dichiarato dall'Epic EA-2.",
+          "mitigation": "Va portata esplicitamente al gate come scelta consapevole: risolve la duplicazione di meccanismo di transizione, non il conteggio degli stati; se il conteggio e' un requisito non negoziabile dell'Epic, questa opzione va scartata a favore di opt-a o opt-b."
+        },
+        {
+          "severity": "medium",
+          "description": "Identificazione della checklist di produzione tra le fino a 5 collegate alla stessa richiesta.",
+          "mitigation": "Stessa mitigazione di opt-a/opt-b: marcatore esplicito (es. purpose: 'production') scritto solo dal flusso di auto-istanziazione."
+        }
+      ],
+      "spikes": []
+    }
+  ],
+  "recommendation": {
+    "option_id": "opt-b-milestone-preserving-partial-collapse",
+    "rationale": "Tra le tre opzioni, opt-b e' quella che bilancia meglio l'obiettivo dichiarato dall'Epic EA-2 (un 'insieme ristretto' di stati macro, non necessariamente un solo valore) con il rispetto delle dipendenze funzionali reali gia' verificate nel codice. A differenza di opt-a, non richiede di riscrivere AdminShipping.tsx ne' di introdurre la denormalizzazione readyToShip/shipped (con il relativo rischio di drift tra due fonti di verita' mai esistito prima su questo documento): le richieste gia' in 'pronta per spedizione' o 'spedita' restano semanticamente identiche a oggi, riducendo sia la superficie di migrazione sia il rischio di regressione su una vista amministrativa gia' in uso. A differenza di opt-c, realizza effettivamente una riduzione del dominio di `status` (da 8 a 3 valori di produzione), coerente con il testo esplicito dell'Epic, invece di limitarsi a spostare il meccanismo di transizione senza toccare il conteggio degli stati. In piu', opt-b e' l'unica delle tre a dare per la prima volta uno scopo concreto a getDeviceRequestChecklistCompleteness: una capability gia' costruita nell'Epic EA-3 e gia' esposta dal layer device-requests, ma che il grounding documenta esplicitamente come mai consumata da alcuna funzione o vista oggi esistente — usarla come gate reale su una singola transizione e' un investimento gia' pagato che nessuna delle altre due opzioni sfrutta.\n\nQuesta raccomandazione non risolve pero' tre punti trasversali, comuni a tutte e tre le opzioni e da confermare esplicitamente al gate indipendentemente da quale venga scelta: (1) il vincolo di sequenza tra i passi di produzione, oggi garantito rigidamente da isAllowedVolunteerTransition, non ha equivalente nel RBAC di checklist gia' esistente (updateDeviceRequestChecklistItem) — se e' un requisito di prodotto non negoziabile, tutte e tre le opzioni richiedono lo stesso lavoro aggiuntivo esplicito, non incluso in nessuna delle stime effort_class indicate; (2) l'identificazione di 'quale' checklist tra le fino a 5 collegate rappresenti il progresso di produzione richiede un marcatore esplicito (es. purpose: 'production'), assente da qualunque capability oggi esistente nel core o nel layer device-requests; (3) i 3 stati terminali/speciali (completata, annullata, standby) sono stati trattati come fuori scope da questo studio, coerentemente con l'assenza di indicazioni contrarie nella sezione 'Vincoli noti' della richiesta, ma la domanda aperta esplicita se debbano invece diventare condizioni derivate dal completamento della checklist resta da confermare al gate.\n\nLo spike proposto in opt-a (conteggio reale delle deviceRequest oggi in produzione con status in uno degli 8 stati granulari) e' rilevante per dimensionare lo sforzo di migrazione anche per opt-b, non solo per opt-a: va eseguito prima di impegnarsi sulla stima effort_class = M qui indicata, che assume un volume di dati moderato coerente con quanto osservato finora nel repository (nessuna evidenza di un volume elevato, ma nemmeno confermato). Se il team preferisse la massima reversibilita' e il minimo rischio di regressione a scapito della fedelta' letterale all'obiettivo di riduzione dell'Epic, opt-c resta un'alternativa legittima da considerare esplicitamente, non solo un ripiego."
+  },
+  "decision": null
+}
