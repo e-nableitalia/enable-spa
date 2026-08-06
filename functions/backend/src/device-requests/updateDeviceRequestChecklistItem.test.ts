@@ -7,9 +7,10 @@ const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
-const checklistUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
-  checklistsStore[id] = { ...checklistsStore[id], items: updates.items };
+const checklistItemUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
+  checklistItemsStore[id] = { ...checklistItemsStore[id], ...updates };
   return Promise.resolve();
 });
 
@@ -49,7 +50,20 @@ function buildCollection(name: string) {
             data: () => checklistsStore[id],
           })
         ),
-        update: jest.fn((updates: Record<string, unknown>) => checklistUpdateMock(id, updates)),
+      })),
+    };
+  }
+
+  if (name === "checklistItems") {
+    return {
+      doc: jest.fn((id: string) => ({
+        get: jest.fn(() =>
+          Promise.resolve({
+            exists: checklistItemsStore[id] !== undefined,
+            data: () => checklistItemsStore[id],
+          })
+        ),
+        update: jest.fn((updates: Record<string, unknown>) => checklistItemUpdateMock(id, updates)),
       })),
     };
   }
@@ -105,18 +119,18 @@ describe("updateDeviceRequestChecklistItem", () => {
     };
 
     checklistsStore = {
-      [CHECKLIST_ID]: {
-        items: [
-          {
-            id: "item-1",
-            title: "Prepara stampante",
-            assignee: null,
-            quantity: null,
-            notes: "",
-            status: "Assegnare",
-            completed: false,
-          },
-        ],
+      [CHECKLIST_ID]: { items: ["item-1"] },
+    };
+    checklistItemsStore = {
+      "item-1": {
+        id: "item-1",
+        checklistId: CHECKLIST_ID,
+        title: "Prepara stampante",
+        assignee: null,
+        quantity: null,
+        notes: "",
+        status: "Assegnare",
+        completed: false,
       },
     };
   });
@@ -138,8 +152,7 @@ describe("updateDeviceRequestChecklistItem", () => {
     );
 
     expect(result).toEqual({ success: true });
-    const updatedItems = checklistsStore[CHECKLIST_ID]?.items as Record<string, unknown>[];
-    expect(updatedItems[0]).toMatchObject({
+    expect(checklistItemsStore["item-1"]).toMatchObject({
       assignee: "volunteer-1",
       quantity: 3,
       notes: "Materiale pronto",
@@ -159,8 +172,7 @@ describe("updateDeviceRequestChecklistItem", () => {
     );
 
     expect(result).toEqual({ success: true });
-    const updatedItems = checklistsStore[CHECKLIST_ID]?.items as Record<string, unknown>[];
-    expect(updatedItems[0]).toMatchObject({ assignee: "volunteer-1" });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ assignee: "volunteer-1" });
   });
 
   // Scenario 2 (EA-141): assignee valido anche se e' un admin non presente
@@ -174,8 +186,7 @@ describe("updateDeviceRequestChecklistItem", () => {
     );
 
     expect(result).toEqual({ success: true });
-    const updatedItems = checklistsStore[CHECKLIST_ID]?.items as Record<string, unknown>[];
-    expect(updatedItems[0]).toMatchObject({ assignee: "admin-2" });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ assignee: "admin-2" });
   });
 
   // Scenario 1 (EA-141): assignee non risolvibile a un uid reale (non tra
@@ -195,7 +206,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       )
     );
 
-    expect(checklistUpdateMock).not.toHaveBeenCalled();
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
   });
 
   // Scenario 1 (EA-141): stessa reiezione per un valore di assignee del
@@ -215,7 +226,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       )
     );
 
-    expect(checklistUpdateMock).not.toHaveBeenCalled();
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
   });
 
   // EA-141: assignee = null resta un modo valido per "spoglia" l'item,
@@ -229,8 +240,7 @@ describe("updateDeviceRequestChecklistItem", () => {
     );
 
     expect(result).toEqual({ success: true });
-    const updatedItems = checklistsStore[CHECKLIST_ID]?.items as Record<string, unknown>[];
-    expect(updatedItems[0]).toMatchObject({ assignee: null });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ assignee: null });
   });
 
   it("forwards and persists type when updating an item (admin)", async () => {
@@ -247,8 +257,31 @@ describe("updateDeviceRequestChecklistItem", () => {
     );
 
     expect(result).toEqual({ success: true });
-    const updatedItems = checklistsStore[CHECKLIST_ID]?.items as Record<string, unknown>[];
-    expect(updatedItems[0]).toMatchObject({ type: "numeric" });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ type: "numeric" });
+  });
+
+  // EA-145 Scenario: updateDeviceRequestChecklistItem inoltra completed al core
+  it("forwards and persists completed when a volunteer assigned to the request updates a boolean item", async () => {
+    checklistItemsStore["item-1"] = {
+      ...checklistItemsStore["item-1"],
+      type: "boolean",
+      assignee: "volunteer-1",
+    };
+
+    const result = await updateDeviceRequestChecklistItem.run(
+      buildRequest(
+        {
+          requestId: "req-1",
+          checklistId: CHECKLIST_ID,
+          itemId: "item-1",
+          completed: true,
+        },
+        "volunteer-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ completed: true });
   });
 
   it("allows a volunteer assigned to the request to update an item", async () => {
@@ -274,7 +307,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       new HttpsError("permission-denied", "Only admin or assigned volunteers can access the checklist for this request")
     );
 
-    expect(checklistUpdateMock).not.toHaveBeenCalled();
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
   });
 
   // Scenario 3 (EA-131): checklistId non appartenente a checklistIds -> not-found.
@@ -288,7 +321,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       )
     ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this device request"));
 
-    expect(checklistUpdateMock).not.toHaveBeenCalled();
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
   });
 
   // Scenario 5 (EA-133): nessun dual-read sul vecchio campo singolare
@@ -321,7 +354,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: requestId"));
 
-    expect(checklistUpdateMock).not.toHaveBeenCalled();
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
   });
 
   // Scenario 2 (EA-131): vecchio contratto (solo requestId, senza checklistId) -> invalid-argument.
@@ -332,7 +365,7 @@ describe("updateDeviceRequestChecklistItem", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing parameter: checklistId"));
 
-    expect(checklistUpdateMock).not.toHaveBeenCalled();
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
   });
 
   it("propagates invalid-argument from the core updateChecklistItem when itemId is missing", async () => {
@@ -342,6 +375,6 @@ describe("updateDeviceRequestChecklistItem", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing itemId"));
 
-    expect(checklistUpdateMock).not.toHaveBeenCalled();
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
   });
 });

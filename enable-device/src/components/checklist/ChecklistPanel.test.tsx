@@ -432,3 +432,98 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
     );
   });
 });
+
+describe("ChecklistPanel - controllo 'Completato' per item boolean (EA-146)", () => {
+  beforeEach(() => {
+    callable.mockReset();
+  });
+
+  it('Scenario 1: un item type="boolean" con completed=false mostra il controllo "Completato" non selezionato', async () => {
+    mockChecklist([
+      { id: "i1", title: "Verifica batteria", type: "boolean", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+
+    const row = await rowFor("Verifica batteria");
+    const checkbox = within(row).getByRole("checkbox");
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
+  });
+
+  it('Scenario 2: item type="generic" e type="numeric" non mostrano il controllo "Completato"', async () => {
+    mockChecklist([
+      { id: "i1", title: "Consegna a domicilio", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+      { id: "i2", title: "Cavo USB", type: "numeric", assignee: null, quantity: 3, notes: "", status: "Assegnare", completed: false },
+    ]);
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+
+    const genericRow = await rowFor("Consegna a domicilio");
+    expect(within(genericRow).queryByRole("checkbox")).not.toBeInTheDocument();
+
+    const numericRow = await rowFor("Cavo USB");
+    expect(within(numericRow).queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it('Scenario 3: un item type="boolean" con completed=true mostra il controllo "Completato" selezionato', async () => {
+    mockChecklist([
+      { id: "i1", title: "Verifica batteria", type: "boolean", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: true },
+    ]);
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+
+    const row = await rowFor("Verifica batteria");
+    expect(within(row).getByRole("checkbox")).toBeChecked();
+  });
+
+  it('Scenario 4: selezionare il controllo "Completato" e salvare invia completed=true a updateDeviceRequestChecklistItem, e dopo il reload il controllo risulta selezionato', async () => {
+    const item = { id: "i1", title: "Verifica batteria", type: "boolean", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false };
+    callable.mockImplementation((name: string, data: unknown) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "cat", items: [item] } });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "updateDeviceRequestChecklistItem") {
+        const patch = data as { completed?: boolean };
+        item.completed = Boolean(patch.completed);
+        return Promise.resolve({ data: { success: true } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    const row = await rowFor("Verifica batteria");
+
+    const checkbox = within(row).getByRole("checkbox");
+    expect(checkbox).not.toBeChecked();
+    await user.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    const saveButton = row.querySelector(".pi-save")?.closest("button");
+    if (!saveButton) throw new Error("Save button not found");
+    expect(saveButton).not.toBeDisabled();
+    await user.click(saveButton);
+
+    expect(callable).toHaveBeenCalledWith(
+      "updateDeviceRequestChecklistItem",
+      expect.objectContaining({
+        requestId: "r1",
+        checklistId: "c1",
+        itemId: "i1",
+        title: "Verifica batteria",
+        assignee: null,
+        quantity: null,
+        notes: "",
+        status: "Assegnare",
+        completed: true,
+      })
+    );
+
+    const reloadedRow = await rowFor("Verifica batteria");
+    expect(within(reloadedRow).getByRole("checkbox")).toBeChecked();
+  });
+});

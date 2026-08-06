@@ -10,8 +10,8 @@ const REGION = "europe-west1";
 /**
  * Cloud Function callable del layer di integrazione device-requests:
  * aggiorna in modo parziale un item (titolo, stato, assegnatario,
- * quantità, note) della checklist di fabbricazione collegata a una
- * `deviceRequest`.
+ * quantità, note, completed) della checklist di fabbricazione collegata a
+ * una `deviceRequest`.
  *
  * Riceve dal consumer `requestId` e `checklistId` (EA-131: `checklistId`
  * esplicito, non più risolto implicitamente): applica il controllo RBAC
@@ -38,7 +38,7 @@ export const updateDeviceRequestChecklistItem = onCall(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
-    const { requestId, checklistId, itemId, title, type, status, assignee, quantity, notes } = request.data as {
+    const { requestId, checklistId, itemId, title, type, status, assignee, quantity, notes, completed } = request.data as {
       requestId?: string;
       checklistId?: string;
       itemId?: string;
@@ -48,6 +48,7 @@ export const updateDeviceRequestChecklistItem = onCall(
       assignee?: string | null;
       quantity?: number | null;
       notes?: string | null;
+      completed?: boolean;
     };
 
     if (!requestId || typeof requestId !== "string") {
@@ -71,7 +72,7 @@ export const updateDeviceRequestChecklistItem = onCall(
 
     const result = (await updateChecklistItem.run({
       ...request,
-      data: { checklistId, itemId, title, type, status, assignee, quantity, notes },
+      data: { checklistId, itemId, title, type, status, assignee, quantity, notes, completed },
     } as CallableRequest)) as { success: boolean };
 
     console.log(

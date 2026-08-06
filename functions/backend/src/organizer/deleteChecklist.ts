@@ -3,6 +3,9 @@ import {getFirestore} from "firebase-admin/firestore";
 import {logSecurityEvent} from "../security/securityLog";
 import {getInvokeId} from "../utils/invoke";
 
+// Limite Firestore: max 500 operazioni per commit di un batch.
+const FIRESTORE_BATCH_WRITE_LIMIT = 500;
+
 export const deleteChecklist = onCall(
   {region: "europe-west1"},
   async (request) => {
@@ -41,8 +44,22 @@ export const deleteChecklist = onCall(
         throw new HttpsError("permission-denied", "Cannot delete another user's checklist");
       }
 
-      // Elimina il documento e tutte le sue subcollection (es. items)
-      await db.recursiveDelete(ref);
+      // checklistItems e' una collection di primo livello (non una subcollection
+      // di checklists): va interrogata e cancellata esplicitamente per non
+      // lasciare item orfani, con chunking oltre il limite di 500 op/batch.
+      const itemsSnap = await db
+        .collection("checklistItems")
+        .where("checklistId", "==", checklistId)
+        .get();
+
+      const docsToDelete = [ref, ...itemsSnap.docs.map((doc) => doc.ref)];
+      for (let i = 0; i < docsToDelete.length; i += FIRESTORE_BATCH_WRITE_LIMIT) {
+        const batch = db.batch();
+        for (const docRef of docsToDelete.slice(i, i + FIRESTORE_BATCH_WRITE_LIMIT)) {
+          batch.delete(docRef);
+        }
+        await batch.commit();
+      }
 
       await logSecurityEvent({
         type: "system",
