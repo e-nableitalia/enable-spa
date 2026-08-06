@@ -1,33 +1,22 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import {
   CHECKLIST_ITEM_STATUSES,
-  ChecklistItemStatus,
-  ChecklistItemType,
   isChecklistItemType,
 } from "./checklistItemStatus";
 
 const REGION = "europe-west1";
 
-interface ChecklistItem {
-  id: string;
-  title: string;
-  type: ChecklistItemType;
-  assignee: string | null;
-  quantity: number | null;
-  notes: string;
-  status: ChecklistItemStatus;
-  completed: boolean;
-}
-
-// addChecklistItem: aggiunge un nuovo item alla lista items di un'istanza
-// checklist esistente, con stato iniziale "Assegnare" e flag di
-// completamento a false. Richiede un `type` esplicito ('boolean' | 'generic'
-// | 'numeric'), coerentemente con createChecklist (EA-123): nessun default.
-// Restituisce l'itemId generato al consumer.
+// addChecklistItem: crea un nuovo documento in `checklistItems`, con
+// `checklistId`/`category` (denormalizzata dalla checklist padre), stato
+// iniziale "Assegnare" e flag di completamento a false, e ne aggiunge
+// l'itemId all'array `items` della checklist padre (EA-137: gli item
+// smettono di essere un array embedded aggiornato via arrayUnion). Richiede
+// un `type` esplicito ('boolean' | 'generic' | 'numeric'), coerentemente
+// con createChecklist (EA-123): nessun default. Restituisce l'itemId
+// generato al consumer.
 export const addChecklistItem = onCall(
   { region: REGION },
   async (request) => {
@@ -75,8 +64,14 @@ export const addChecklistItem = onCall(
         throw new HttpsError("not-found", "Checklist not found");
       }
 
-      const newItem: ChecklistItem = {
-        id: crypto.randomUUID(),
+      const category = checklistSnap.data()?.category;
+      const itemRef = db.collection("checklistItems").doc();
+
+      const batch = db.batch();
+      batch.set(itemRef, {
+        id: itemRef.id,
+        checklistId,
+        category,
         title,
         type,
         assignee: assignee ?? null,
@@ -84,12 +79,16 @@ export const addChecklistItem = onCall(
         notes: notes ?? "",
         status: CHECKLIST_ITEM_STATUSES[0],
         completed: false,
-      };
-
-      await checklistRef.update({
-        items: FieldValue.arrayUnion(newItem),
+        creationDate: FieldValue.serverTimestamp(),
+        dueDate: null,
+        completionDate: null,
+      });
+      batch.update(checklistRef, {
+        items: FieldValue.arrayUnion(itemRef.id),
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      await batch.commit();
 
       await logSecurityEvent({
         type: "system",
@@ -100,8 +99,8 @@ export const addChecklistItem = onCall(
         context: { function: "addChecklistItem", invokeId, requestId: checklistId },
       });
 
-      console.log(`[addChecklistItem] OK: item ${newItem.id} added to checklist ${checklistId} by ${uid}`);
-      return { itemId: newItem.id };
+      console.log(`[addChecklistItem] OK: item ${itemRef.id} added to checklist ${checklistId} by ${uid}`);
+      return { itemId: itemRef.id };
     } catch (error) {
       console.error("[addChecklistItem] KO:", error);
       await logSecurityEvent({

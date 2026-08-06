@@ -4,13 +4,28 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 
 const getMock = jest.fn();
-const updateMock = jest.fn().mockResolvedValue(undefined);
-const docMock = jest.fn();
+const checklistDocMock = jest.fn();
+const checklistItemDocMock = jest.fn();
 const collectionMock = jest.fn();
+const batchSetMock = jest.fn();
+const batchUpdateMock = jest.fn();
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
+let checklistItemDocCounter = 0;
+
+function newChecklistItemDoc() {
+  checklistItemDocCounter += 1;
+  return { id: `generated-item-id-${checklistItemDocCounter}` };
+}
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: collectionMock,
+    batch: jest.fn(() => ({
+      set: batchSetMock,
+      update: batchUpdateMock,
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -37,33 +52,57 @@ describe("addChecklistItem", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    getMock.mockResolvedValue({ exists: true });
-    updateMock.mockResolvedValue(undefined);
-    docMock.mockReturnValue({ get: getMock, update: updateMock });
-    collectionMock.mockReturnValue({ doc: docMock });
+    checklistItemDocCounter = 0;
+    getMock.mockResolvedValue({ exists: true, data: () => ({ category: "devicetype-mano" }) });
+    batchCommitMock.mockResolvedValue(undefined);
+    checklistDocMock.mockReturnValue({ get: getMock });
+    checklistItemDocMock.mockImplementation(newChecklistItemDoc);
+    collectionMock.mockImplementation((name: string) =>
+      name === "checklists" ? { doc: checklistDocMock } : { doc: checklistItemDocMock }
+    );
   });
 
-  it("adds the new item with status 'Assegnare' and completed set to false", async () => {
+  // Scenario: addChecklistItem crea un nuovo documento checklistItems invece di arrayUnion
+  it("creates a new checklistItems document with category denormalized from the parent checklist, status 'Assegnare' and completed false", async () => {
     await addChecklistItem.run(
       buildRequest({ checklistId: CHECKLIST_ID, title: "Prepara stampante", type: "generic" })
     );
 
     expect(collectionMock).toHaveBeenCalledWith("checklists");
-    expect(docMock).toHaveBeenCalledWith(CHECKLIST_ID);
-    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(collectionMock).toHaveBeenCalledWith("checklistItems");
+    expect(checklistDocMock).toHaveBeenCalledWith(CHECKLIST_ID);
+    expect(batchSetMock).toHaveBeenCalledTimes(1);
 
-    const [updatePayload] = updateMock.mock.calls[0];
-    const [newItem] = updatePayload.items.items;
-
-    expect(newItem).toMatchObject({
+    const [itemRef, newItemDocument] = batchSetMock.mock.calls[0];
+    expect(newItemDocument).toEqual({
+      id: itemRef.id,
+      checklistId: CHECKLIST_ID,
+      category: "devicetype-mano",
       title: "Prepara stampante",
       type: "generic",
+      assignee: null,
+      quantity: null,
+      notes: "",
       status: "Assegnare",
       completed: false,
+      creationDate: SERVER_TIMESTAMP_SENTINEL,
+      dueDate: null,
+      completionDate: null,
     });
-    expect(typeof newItem.id).toBe("string");
-    expect(newItem.id.length).toBeGreaterThan(0);
+  });
+
+  // Scenario: addChecklistItem crea un nuovo documento checklistItems invece di arrayUnion
+  it("adds the new itemId to the parent checklist's items array", async () => {
+    const result = await addChecklistItem.run(
+      buildRequest({ checklistId: CHECKLIST_ID, title: "Prepara stampante", type: "generic" })
+    );
+
+    expect(batchUpdateMock).toHaveBeenCalledTimes(1);
+    const [checklistRef, updatePayload] = batchUpdateMock.mock.calls[0];
+    expect(checklistRef).toBe(checklistDocMock.mock.results[0].value);
+    expect(updatePayload.items).toEqual({ __type: "arrayUnion", items: [(result as { itemId: string }).itemId] });
     expect(updatePayload.updatedAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    expect(batchCommitMock).toHaveBeenCalledTimes(1);
   });
 
   // Scenario 1: addChecklistItem con type valido
@@ -74,9 +113,8 @@ describe("addChecklistItem", () => {
         buildRequest({ checklistId: CHECKLIST_ID, title: "Verifica dita", type })
       );
 
-      const [updatePayload] = updateMock.mock.calls[0];
-      const [newItem] = updatePayload.items.items;
-      expect(newItem.type).toBe(type);
+      const [, newItemDocument] = batchSetMock.mock.calls[0];
+      expect(newItemDocument.type).toBe(type);
     }
   );
 
@@ -86,12 +124,10 @@ describe("addChecklistItem", () => {
     );
 
     expect(result).toHaveProperty("itemId");
-    expect(typeof result.itemId).toBe("string");
-    expect(result.itemId.length).toBeGreaterThan(0);
+    expect(typeof (result as { itemId: string }).itemId).toBe("string");
 
-    const [updatePayload] = updateMock.mock.calls[0];
-    const [newItem] = updatePayload.items.items;
-    expect(result.itemId).toBe(newItem.id);
+    const [itemRef] = batchSetMock.mock.calls[0];
+    expect((result as { itemId: string }).itemId).toBe(itemRef.id);
   });
 
   it("generates a unique itemId on every call", async () => {
@@ -102,7 +138,7 @@ describe("addChecklistItem", () => {
       buildRequest({ checklistId: CHECKLIST_ID, title: "Item due", type: "generic" })
     );
 
-    expect(first.itemId).not.toBe(second.itemId);
+    expect((first as { itemId: string }).itemId).not.toBe((second as { itemId: string }).itemId);
   });
 
   it("throws not-found and does not write when the checklist does not exist", async () => {
@@ -112,7 +148,7 @@ describe("addChecklistItem", () => {
       addChecklistItem.run(buildRequest({ checklistId: "missing-id", title: "Titolo", type: "generic" }))
     ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not found"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws unauthenticated when the caller is not authenticated", async () => {
@@ -122,7 +158,7 @@ describe("addChecklistItem", () => {
       )
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when checklistId is missing", async () => {
@@ -130,7 +166,7 @@ describe("addChecklistItem", () => {
       addChecklistItem.run(buildRequest({ title: "Titolo", type: "generic" }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing checklistId"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when title is missing", async () => {
@@ -138,7 +174,7 @@ describe("addChecklistItem", () => {
       addChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, type: "generic" }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing title"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   // Scenario 2: addChecklistItem senza type o con type non valido
@@ -149,7 +185,7 @@ describe("addChecklistItem", () => {
       new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
     );
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   // Scenario 2: addChecklistItem senza type o con type non valido
@@ -162,6 +198,6 @@ describe("addChecklistItem", () => {
       new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
     );
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 });

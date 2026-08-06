@@ -5,19 +5,11 @@ import { getInvokeId } from "../utils/invoke";
 
 const REGION = "europe-west1";
 
-interface ChecklistItem {
-  id: string;
-  title: string;
-  assignee: string | null;
-  quantity: number | null;
-  notes: string;
-  status: string;
-  completed: boolean;
-}
-
-// removeChecklistItem: rimuove un item dalla lista items di un'istanza
-// checklist esistente, lasciando invariati tutti gli altri item della stessa
-// checklist.
+// removeChecklistItem: elimina il documento `checklistItems/{itemId}`
+// corrispondente e rimuove il suo itemId dall'array `items` della checklist
+// padre (EA-137: gli item smettono di essere un array embedded, l'elemento
+// da rimuovere è ora un documento distinto in `checklistItems`), lasciando
+// invariati tutti gli altri item della stessa checklist.
 export const removeChecklistItem = onCall(
   { region: REGION },
   async (request) => {
@@ -49,20 +41,21 @@ export const removeChecklistItem = onCall(
         throw new HttpsError("not-found", "Checklist not found");
       }
 
-      const data = checklistSnap.data() ?? {};
-      const items: ChecklistItem[] = Array.isArray(data.items) ? data.items : [];
-      const itemIndex = items.findIndex((item) => item.id === itemId);
+      const itemRef = db.collection("checklistItems").doc(itemId);
+      const itemSnap = await itemRef.get();
 
-      if (itemIndex === -1) {
+      if (!itemSnap.exists || itemSnap.data()?.checklistId !== checklistId) {
         throw new HttpsError("not-found", "Checklist item not found");
       }
 
-      const updatedItems = items.filter((item) => item.id !== itemId);
-
-      await checklistRef.update({
-        items: updatedItems,
+      const batch = db.batch();
+      batch.delete(itemRef);
+      batch.update(checklistRef, {
+        items: FieldValue.arrayRemove(itemId),
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      await batch.commit();
 
       await logSecurityEvent({
         type: "system",

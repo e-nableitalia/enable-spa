@@ -1,39 +1,36 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus, ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
+import { CHECKLIST_ITEM_STATUSES, ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
+import { resolveChecklistItems } from "./resolveChecklistItems";
 
 const REGION = "europe-west1";
 
-interface ChecklistItem {
-  id: string;
+interface ClonedItemFields {
   title: string;
   type: ChecklistItemType;
-  assignee: string | null;
+  assignee: null;
   quantity: number | null;
   notes: string;
-  status: ChecklistItemStatus;
-  completed: boolean;
-}
-
-interface SourceChecklistItem {
-  title: unknown;
-  type: unknown;
-  quantity: unknown;
+  status: typeof CHECKLIST_ITEM_STATUSES[number];
+  completed: false;
 }
 
 /**
- * Clona un item di un'istanza sorgente in un nuovo `ChecklistItem` per la
- * nuova istanza.
+ * Clona un documento `checklistItems` risolto dell'istanza sorgente in un
+ * nuovo item per la nuova istanza (EA-139: la sorgente da cui si copia non
+ * è più un elemento dell'array embedded `checklists/{id}.items`, ma un
+ * documento distinto in `checklistItems`, risolto da `resolveChecklistItems`
+ * a valle di EA-137).
  *
- * Logica di clonazione (Epic EA-3, riferimento `useWorkshopAsTemplate` nel
- * mockup allegato; aggiornata da EA-126): titolo, type e quantità vengono
- * copiati dalla sorgente, mentre stato, assegnatario e flag di
- * completamento vengono sempre azzerati, indipendentemente dallo stato di
- * avanzamento che l'item aveva nella sorgente — si riparte sempre da zero,
- * ma senza perdere il type dell'item.
+ * Logica di clonazione invariata rispetto a prima di EA-137 (Epic EA-3,
+ * riferimento `useWorkshopAsTemplate` nel mockup allegato; aggiornata da
+ * EA-126): titolo, type e quantità vengono copiati dalla sorgente, mentre
+ * stato, assegnatario, note e flag di completamento vengono sempre
+ * azzerati, indipendentemente dallo stato di avanzamento che l'item aveva
+ * nella sorgente — si riparte sempre da zero, ma senza perdere il type
+ * dell'item.
  *
  * `type` è garantito valorizzato su ogni item di istanza a valle di EA-123
  * (`normalizeInitialItem` lo richiede e valida in creazione). Per le
@@ -42,13 +39,12 @@ interface SourceChecklistItem {
  * storici (vedi `docs/FINDINGS.md` F-8), invece di propagare un `undefined`
  * che romperebbe l'invariante "type sempre valorizzato" sulla nuova istanza.
  */
-function cloneSourceItem(sourceItem: SourceChecklistItem): ChecklistItem {
+function cloneSourceItem(sourceItem: Record<string, unknown>): ClonedItemFields {
   const title = typeof sourceItem?.title === "string" ? sourceItem.title : "";
   const type: ChecklistItemType = isChecklistItemType(sourceItem?.type) ? sourceItem.type : "generic";
   const quantity = typeof sourceItem?.quantity === "number" ? sourceItem.quantity : null;
 
   return {
-    id: crypto.randomUUID(),
     title,
     type,
     assignee: null,
@@ -77,15 +73,21 @@ function cloneSourceItem(sourceItem: SourceChecklistItem): ChecklistItem {
  *   sovrascrivere quello della sorgente. Se omesso, la categoria è
  *   ereditata dalla sorgente.
  *
- * Copia gli item della sorgente nella nuova istanza (titolo, type e
- * quantità copiati, stato impostato ad 'Assegnare', assegnatario a null e
- * flag di completamento a false su ciascun item clonato, indipendentemente
- * dallo stato che avevano nella sorgente). Registra `clonedFrom:
- * <sourceChecklistId>` come riferimento storico, non come dipendenza viva:
- * la sorgente può essere modificata o eliminata in seguito senza che la
- * nuova istanza ne risenta.
+ * Risolve gli item della sorgente (referenziati come `itemId` in
+ * `checklists/{sourceChecklistId}.items`, EA-137) nei documenti reali
+ * `checklistItems` e ne crea uno nuovo per ciascuno nella nuova istanza
+ * (titolo, type e quantità copiati, stato impostato ad 'Assegnare',
+ * assegnatario a null, flag di completamento a false e i tre campi
+ * nullabili `creationDate`/`dueDate`/`completionDate` azzerati a null su
+ * ciascun item clonato, indipendentemente dallo stato che avevano nella
+ * sorgente), con `category` denormalizzata dalla nuova checklist (EA-139).
+ * Registra `clonedFrom: <sourceChecklistId>` come riferimento storico, non
+ * come dipendenza viva: la sorgente può essere modificata o eliminata in
+ * seguito senza che la nuova istanza ne risenta.
  *
- * Crea un documento in `checklists/{checklistId}` e restituisce il
+ * Crea un documento in `checklists/{checklistId}` — il cui campo `items` è
+ * il solo elenco degli `itemId` generati — e un documento distinto in
+ * `checklistItems/{itemId}` per ciascun item clonato. Restituisce il
  * `checklistId` generato al consumer.
  */
 export const cloneChecklist = onCall(
@@ -128,24 +130,41 @@ export const cloneChecklist = onCall(
       }
 
       const sourceData = sourceSnap.data() ?? {};
-      const sourceItems: SourceChecklistItem[] = Array.isArray(sourceData.items) ? sourceData.items : [];
-      const clonedItems: ChecklistItem[] = sourceItems.map(cloneSourceItem);
+      const sourceItemIds: string[] = Array.isArray(sourceData.items) ? sourceData.items : [];
+      const sourceItems = await resolveChecklistItems(db, sourceItemIds);
+      const clonedItems: ClonedItemFields[] = sourceItems.map(cloneSourceItem);
 
       const resolvedCategory = (category as string | undefined) ?? sourceData.category;
 
       const checklistRef = db.collection("checklists").doc();
+      const itemRefs = clonedItems.map(() => db.collection("checklistItems").doc());
 
       console.log(
         `[cloneChecklist] Creating checklist document ${checklistRef.id} cloned from ${sourceChecklistId}`
       );
-      await checklistRef.set({
+      const batch = db.batch();
+      batch.set(checklistRef, {
         category: resolvedCategory,
         title,
-        items: clonedItems,
+        items: itemRefs.map((itemRef) => itemRef.id),
         clonedFrom: sourceChecklistId,
         createdBy: uid,
         createdAt: FieldValue.serverTimestamp(),
       });
+
+      itemRefs.forEach((itemRef, index) => {
+        batch.set(itemRef, {
+          id: itemRef.id,
+          checklistId: checklistRef.id,
+          category: resolvedCategory,
+          ...clonedItems[index],
+          creationDate: null,
+          dueDate: null,
+          completionDate: null,
+        });
+      });
+
+      await batch.commit();
 
       await logSecurityEvent({
         type: "system",

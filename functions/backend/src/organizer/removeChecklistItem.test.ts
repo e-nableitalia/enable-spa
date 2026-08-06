@@ -3,17 +3,27 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 
 const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 
-const getMock = jest.fn();
-const updateMock = jest.fn().mockResolvedValue(undefined);
-const docMock = jest.fn();
+const checklistGetMock = jest.fn();
+const checklistDocMock = jest.fn();
+const itemGetMock = jest.fn();
+const itemDocMock = jest.fn();
 const collectionMock = jest.fn();
+const batchDeleteMock = jest.fn();
+const batchUpdateMock = jest.fn();
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: collectionMock,
+    batch: jest.fn(() => ({
+      delete: batchDeleteMock,
+      update: batchUpdateMock,
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
+    arrayRemove: jest.fn((...items: unknown[]) => ({ __type: "arrayRemove", items })),
   },
 }));
 
@@ -25,27 +35,6 @@ import { removeChecklistItem } from "./removeChecklistItem";
 
 const CHECKLIST_ID = "existing-checklist-id";
 const ITEM_ID = "item-1";
-const OTHER_ITEM_ID = "item-2";
-
-const ITEM_TO_REMOVE = {
-  id: ITEM_ID,
-  title: "Prepara stampante",
-  assignee: "Mario Rossi",
-  quantity: 3,
-  notes: "Nota originale",
-  status: "Da iniziare",
-  completed: false,
-};
-
-const OTHER_ITEM = {
-  id: OTHER_ITEM_ID,
-  title: "Verifica materiale",
-  assignee: "Luigi Bianchi",
-  quantity: 1,
-  notes: "Altra nota",
-  status: "In corso",
-  completed: false,
-};
 
 function buildRequest(data: Record<string, unknown>, uid: string | null = "user-1"): CallableRequest {
   return {
@@ -55,92 +44,102 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "user-
   } as CallableRequest;
 }
 
-function buildChecklistSnapshot(items: unknown[]) {
-  return {
+function setItem(overrides: Record<string, unknown> | null) {
+  if (overrides === null) {
+    itemGetMock.mockResolvedValue({ exists: false });
+    return;
+  }
+  itemGetMock.mockResolvedValue({
     exists: true,
-    data: () => ({ items }),
-  };
+    data: () => ({
+      id: ITEM_ID,
+      checklistId: CHECKLIST_ID,
+      category: "devicetype-mano",
+      title: "Prepara stampante",
+      ...overrides,
+    }),
+  });
 }
 
 describe("removeChecklistItem", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    getMock.mockResolvedValue(
-      buildChecklistSnapshot([{ ...ITEM_TO_REMOVE }, { ...OTHER_ITEM }])
+    checklistGetMock.mockResolvedValue({ exists: true });
+    batchCommitMock.mockResolvedValue(undefined);
+    checklistDocMock.mockReturnValue({ get: checklistGetMock });
+    itemDocMock.mockReturnValue({ get: itemGetMock });
+    collectionMock.mockImplementation((name: string) =>
+      name === "checklists" ? { doc: checklistDocMock } : { doc: itemDocMock }
     );
-    updateMock.mockResolvedValue(undefined);
-    docMock.mockReturnValue({ get: getMock, update: updateMock });
-    collectionMock.mockReturnValue({ doc: docMock });
+    setItem({});
   });
 
-  it("removes the specified item from the checklist items", async () => {
-    await removeChecklistItem.run(
-      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID })
-    );
+  // Scenario: removeChecklistItem elimina il documento checklistItems e il riferimento sulla checklist padre
+  it("deletes the checklistItems document for the given itemId", async () => {
+    await removeChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID }));
 
     expect(collectionMock).toHaveBeenCalledWith("checklists");
-    expect(docMock).toHaveBeenCalledWith(CHECKLIST_ID);
-    expect(updateMock).toHaveBeenCalledTimes(1);
-
-    const [updatePayload] = updateMock.mock.calls[0];
-    expect(updatePayload.items).toHaveLength(1);
-    expect(
-      updatePayload.items.find((item: { id: string }) => item.id === ITEM_ID)
-    ).toBeUndefined();
-    expect(updatePayload.updatedAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    expect(collectionMock).toHaveBeenCalledWith("checklistItems");
+    expect(checklistDocMock).toHaveBeenCalledWith(CHECKLIST_ID);
+    expect(itemDocMock).toHaveBeenCalledWith(ITEM_ID);
+    expect(batchDeleteMock).toHaveBeenCalledTimes(1);
+    expect(batchDeleteMock).toHaveBeenCalledWith(itemDocMock.mock.results[0].value);
   });
 
-  it("leaves the other items of the same checklist unchanged", async () => {
-    await removeChecklistItem.run(
-      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID })
-    );
+  // Scenario: removeChecklistItem elimina il documento checklistItems e il riferimento sulla checklist padre
+  it("removes the itemId from the parent checklist's items array", async () => {
+    await removeChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID }));
 
-    const [updatePayload] = updateMock.mock.calls[0];
-    const untouchedItem = updatePayload.items.find(
-      (item: { id: string }) => item.id === OTHER_ITEM_ID
-    );
-
-    expect(untouchedItem).toEqual(OTHER_ITEM);
+    expect(batchUpdateMock).toHaveBeenCalledTimes(1);
+    const [checklistRef, updatePayload] = batchUpdateMock.mock.calls[0];
+    expect(checklistRef).toBe(checklistDocMock.mock.results[0].value);
+    expect(updatePayload.items).toEqual({ __type: "arrayRemove", items: [ITEM_ID] });
+    expect(updatePayload.updatedAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    expect(batchCommitMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns success true", async () => {
-    const result = await removeChecklistItem.run(
-      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID })
-    );
+    const result = await removeChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID }));
 
     expect(result).toEqual({ success: true });
   });
 
-  it("throws not-found and does not write when the item does not exist in the checklist", async () => {
+  it("throws not-found and does not write when the item does not exist", async () => {
+    setItem(null);
+
     await expect(
-      removeChecklistItem.run(
-        buildRequest({ checklistId: CHECKLIST_ID, itemId: "missing-item" })
-      )
+      removeChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, itemId: "missing-item" }))
     ).rejects.toMatchObject(new HttpsError("not-found", "Checklist item not found"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
+  });
+
+  it("throws not-found and does not write when the item belongs to a different checklist", async () => {
+    setItem({ checklistId: "other-checklist-id" });
+
+    await expect(
+      removeChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID }))
+    ).rejects.toMatchObject(new HttpsError("not-found", "Checklist item not found"));
+
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws not-found and does not write when the checklist does not exist", async () => {
-    getMock.mockResolvedValue({ exists: false });
+    checklistGetMock.mockResolvedValue({ exists: false });
 
     await expect(
-      removeChecklistItem.run(
-        buildRequest({ checklistId: "missing-id", itemId: ITEM_ID })
-      )
+      removeChecklistItem.run(buildRequest({ checklistId: "missing-id", itemId: ITEM_ID }))
     ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not found"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws unauthenticated when the caller is not authenticated", async () => {
     await expect(
-      removeChecklistItem.run(
-        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID }, null)
-      )
+      removeChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID }, null))
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when checklistId is missing", async () => {
@@ -148,7 +147,7 @@ describe("removeChecklistItem", () => {
       removeChecklistItem.run(buildRequest({ itemId: ITEM_ID }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing checklistId"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when itemId is missing", async () => {
@@ -156,6 +155,6 @@ describe("removeChecklistItem", () => {
       removeChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing itemId"));
 
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 });

@@ -2,29 +2,25 @@ import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {getFirestore} from "firebase-admin/firestore";
 import {logSecurityEvent} from "../security/securityLog";
 import {getInvokeId} from "../utils/invoke";
+import {resolveChecklistItems} from "./resolveChecklistItems";
 
 const REGION = "europe-west1";
-
-type ChecklistItemStatus = "Assegnare" | "Da iniziare" | "In corso" | "Completata";
-
-interface ChecklistItem {
-  id: string;
-  title: string;
-  assignee?: string;
-  quantity?: number;
-  notes?: string;
-  status: ChecklistItemStatus;
-  completed: boolean;
-}
 
 interface ChecklistResponse {
   category: unknown;
   title: unknown;
-  items: ChecklistItem[];
+  items: Record<string, unknown>[];
   createdAt: unknown;
   updatedAt: unknown;
 }
 
+/**
+ * getChecklist: legge `checklists/{id}` e ricostruisce `items` risolvendo
+ * gli `itemId` referenziati (array di stringhe, EA-137) nei documenti
+ * reali della collection `checklistItems` (EA-138), in modo che la
+ * risposta osservabile dal consumer resti la stessa di prima della
+ * migrazione: `items` come array di oggetti item completi.
+ */
 export const getChecklist = onCall({region: REGION}, async (request) => {
   const invokeId = getInvokeId(request);
   console.log(`[getChecklist] Invoke ID: ${invokeId} - Function called`);
@@ -47,11 +43,13 @@ export const getChecklist = onCall({region: REGION}, async (request) => {
     }
 
     const data = snap.data() ?? {};
+    const itemIds: string[] = Array.isArray(data.items) ? data.items : [];
+    const items = await resolveChecklistItems(db, itemIds);
 
     const response: ChecklistResponse = {
       category: data.category,
       title: data.title,
-      items: Array.isArray(data.items) ? data.items : [],
+      items,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
     };

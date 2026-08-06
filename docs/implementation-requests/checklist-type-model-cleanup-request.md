@@ -31,26 +31,26 @@ codice morto per qualunque consumer reale.
   `createTemplate.test.ts`, `updateTemplate.test.ts`), dato che il ramo
   che testano sparisce.
 
-### 2. Esporre `completed` in `updateChecklistItem` ([[F-11]])
+### 2. Esporre `completed` in `updateChecklistItem` ([[F-11]]) — RISOLTO (Story Jira EA-145, 2026-08-05)
 
 Nessuna Cloud Function scrive mai `completed: true` su un item: il
 ramo `boolean` del gate di completezza (`isBooleanItemComplete`,
 `checklistCompleteness.ts`) è irraggiungibile in produzione.
 
-- Aggiungere `completed` (boolean) ai campi aggiornabili di
+- Fatto: `completed` (boolean) è ora tra i campi aggiornabili di
   `functions/backend/src/organizer/updateChecklistItem.ts`, simmetrico
   a come `status`/`type` sono già aggiornabili.
-- **Verificare il layer consumer**, non solo il core — stessa classe di
-  problema già vista in [[F-12]] (campo aggiunto al core ma non
-  inoltrato dal layer `device-requests`, che rende il fix inutilizzabile
-  in pratica): controllare se
-  `functions/backend/src/device-requests/updateDeviceRequestChecklistItem.ts`
-  deve inoltrare `completed` al core, e se
-  `enable-device/src/components/checklist/ChecklistPanel.tsx` deve
-  esporre un modo per l'utente di marcare un item `boolean` come
-  completato (oggi la colonna "Stato" gestisce solo item
-  `generic`/`numeric`; un item `boolean` non ha un controllo UI
-  equivalente per `completed`).
+- Fatto: `functions/backend/src/device-requests/updateDeviceRequestChecklistItem.ts`
+  inoltra `completed` al core, stesso perimetro RBAC già applicato da
+  `resolveDeviceRequestChecklistAccess` — evitato lo stesso problema
+  visto in [[F-12]] (campo aggiunto al core ma non inoltrato dal layer
+  `device-requests`).
+- Ancora aperto, fuori dal perimetro di EA-145 (Story separata della
+  stessa Epic EA-135, dipendente da questa): il controllo UI in
+  `enable-device/src/components/checklist/ChecklistPanel.tsx` per
+  marcare un item `boolean` come completato (oggi la colonna "Stato"
+  gestisce solo item `generic`/`numeric`; un item `boolean` non ha
+  ancora un controllo UI equivalente per `completed`).
 
 ## Fuori scope
 

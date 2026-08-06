@@ -7,11 +7,30 @@ const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
 const checklistUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
-  checklistsStore[id] = { ...checklistsStore[id], items: updates.items };
+  checklistsStore[id] = { ...checklistsStore[id], ...updates };
   return Promise.resolve();
 });
+const checklistItemDeleteMock = jest.fn((id: string) => {
+  delete checklistItemsStore[id];
+});
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
+function applyArrayFieldValue(current: unknown, value: unknown): unknown {
+  if (value && typeof value === "object" && "__type" in (value as Record<string, unknown>)) {
+    const sentinel = value as { __type: string; items: unknown[] };
+    const existing = Array.isArray(current) ? current : [];
+    if (sentinel.__type === "arrayRemove") {
+      return existing.filter((item) => !sentinel.items.includes(item));
+    }
+    if (sentinel.__type === "arrayUnion") {
+      return [...existing, ...sentinel.items];
+    }
+  }
+  return value;
+}
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -43,13 +62,29 @@ function buildCollection(name: string) {
   if (name === "checklists") {
     return {
       doc: jest.fn((id: string) => ({
+        id,
+        _collection: "checklists",
         get: jest.fn(() =>
           Promise.resolve({
             exists: checklistsStore[id] !== undefined,
             data: () => checklistsStore[id],
           })
         ),
-        update: jest.fn((updates: Record<string, unknown>) => checklistUpdateMock(id, updates)),
+      })),
+    };
+  }
+
+  if (name === "checklistItems") {
+    return {
+      doc: jest.fn((id: string) => ({
+        id,
+        _collection: "checklistItems",
+        get: jest.fn(() =>
+          Promise.resolve({
+            exists: checklistItemsStore[id] !== undefined,
+            data: () => checklistItemsStore[id],
+          })
+        ),
       })),
     };
   }
@@ -62,9 +97,27 @@ const collectionMock = jest.fn((name: string) => buildCollection(name));
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    batch: jest.fn(() => ({
+      delete: jest.fn((ref: { id: string; _collection: string }) => {
+        if (ref._collection === "checklistItems") {
+          checklistItemDeleteMock(ref.id);
+        }
+      }),
+      update: jest.fn((ref: { id: string; _collection: string }, updates: Record<string, unknown>) => {
+        if (ref._collection === "checklists") {
+          const resolved = { ...updates };
+          if ("items" in resolved) {
+            resolved.items = applyArrayFieldValue(checklistsStore[ref.id]?.items, resolved.items);
+          }
+          checklistUpdateMock(ref.id, resolved);
+        }
+      }),
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
+    arrayRemove: jest.fn((...items: unknown[]) => ({ __type: "arrayRemove", items })),
   },
 }));
 
@@ -104,12 +157,11 @@ describe("removeDeviceRequestChecklistItem", () => {
     };
 
     checklistsStore = {
-      [CHECKLIST_ID]: {
-        items: [
-          { id: "item-1", title: "Prepara stampante", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
-          { id: "item-2", title: "Verifica materiale", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
-        ],
-      },
+      [CHECKLIST_ID]: { items: ["item-1", "item-2"] },
+    };
+    checklistItemsStore = {
+      "item-1": { id: "item-1", checklistId: CHECKLIST_ID, title: "Prepara stampante", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+      "item-2": { id: "item-2", checklistId: CHECKLIST_ID, title: "Verifica materiale", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
     };
   });
 
@@ -119,8 +171,8 @@ describe("removeDeviceRequestChecklistItem", () => {
     );
 
     expect(result).toEqual({ success: true });
-    const remainingItems = checklistsStore[CHECKLIST_ID]?.items as Record<string, unknown>[];
-    expect(remainingItems.map((i) => i.id)).toEqual(["item-2"]);
+    expect(checklistsStore[CHECKLIST_ID]?.items).toEqual(["item-2"]);
+    expect(checklistItemsStore["item-1"]).toBeUndefined();
   });
 
   it("allows a volunteer assigned to the request to remove an item", async () => {
