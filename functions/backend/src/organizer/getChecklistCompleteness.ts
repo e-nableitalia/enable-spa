@@ -3,6 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import { isChecklistComplete, ChecklistItemLike } from "./checklistCompleteness";
+import { resolveChecklistItems } from "./resolveChecklistItems";
 
 const REGION = "europe-west1";
 
@@ -14,6 +15,11 @@ const REGION = "europe-west1";
  * l'esito del gate di completezza (`complete: boolean`) — non blocca
  * nulla, non esegue transizioni di stato, non modifica il documento. Il
  * consumer decide cosa fare dell'esito.
+ *
+ * Da EA-137, `checklists/{id}.items` è un array di soli `itemId`: prima di
+ * applicare il gate occorre risolvere i documenti reali in
+ * `checklistItems` (EA-138), con lo stesso meccanismo di lettura batch
+ * usato da `getChecklist`.
  */
 export const getChecklistCompleteness = onCall(
   { region: REGION },
@@ -40,7 +46,8 @@ export const getChecklistCompleteness = onCall(
       }
 
       const data = snap.data() ?? {};
-      const items: ChecklistItemLike[] = Array.isArray(data.items) ? data.items : [];
+      const itemIds: string[] = Array.isArray(data.items) ? data.items : [];
+      const items = (await resolveChecklistItems(db, itemIds)) as unknown as ChecklistItemLike[];
 
       const complete = isChecklistComplete(items);
 

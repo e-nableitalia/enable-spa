@@ -141,7 +141,7 @@ describe("updateTemplate", () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  // Scenario 4: lo shorthand a stringa non porta un type esplicito, quindi è rifiutato
+  // Scenario: shorthand a stringa rimosso, un item-stringa è rifiutato a monte della validazione del type
   it("throws invalid-argument and does not update when an item in the new list is a bare string (no type)", async () => {
     await expect(
       updateTemplate.run(
@@ -151,7 +151,7 @@ describe("updateTemplate", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must be a string or an object with a title")
     );
 
     expect(updateMock).not.toHaveBeenCalled();

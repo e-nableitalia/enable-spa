@@ -3,13 +3,30 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 
 const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 
-const setMock = jest.fn().mockResolvedValue(undefined);
-const docMock = jest.fn();
+const batchSetMock = jest.fn();
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
 const collectionMock = jest.fn();
+
+let checklistDocCounter = 0;
+let checklistItemDocCounter = 0;
+
+function checklistsDoc() {
+  checklistDocCounter += 1;
+  return { id: `generated-checklist-id-${checklistDocCounter}` };
+}
+
+function checklistItemsDoc() {
+  checklistItemDocCounter += 1;
+  return { id: `generated-item-id-${checklistItemDocCounter}` };
+}
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: collectionMock,
+    batch: jest.fn(() => ({
+      set: batchSetMock,
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -31,66 +48,95 @@ function buildRequest(data: Record<string, unknown>): CallableRequest {
   } as CallableRequest;
 }
 
-describe("createChecklist", () => {
-  const GENERATED_ID = "generated-checklist-id";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function batchSetCallFor(id: string): [{ id: string }, any] {
+  const call = batchSetMock.mock.calls.find(([ref]) => ref.id === id);
+  if (!call) {
+    throw new Error(`No batch.set call found for document id ${id}`);
+  }
+  return call;
+}
 
+describe("createChecklist", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    setMock.mockResolvedValue(undefined);
-    docMock.mockReturnValue({ id: GENERATED_ID, set: setMock });
-    collectionMock.mockReturnValue({ doc: docMock });
+    checklistDocCounter = 0;
+    checklistItemDocCounter = 0;
+    batchCommitMock.mockResolvedValue(undefined);
+    collectionMock.mockImplementation((name: string) => ({
+      doc: jest.fn(() => (name === "checklists" ? checklistsDoc() : checklistItemsDoc())),
+    }));
   });
 
-  it("creates the checklists/{checklistId} document with category, title, items and createdAt", async () => {
+  // Scenario: createChecklist scrive gli item come documenti separati con category denormalizzata
+  it("writes each initial item as a distinct checklistItems document, referencing the new checklist and its category", async () => {
     const items = [
       { title: "Prepara stampante", type: "boolean", assignee: "user-1", quantity: 2, notes: "Nota" },
       { title: "Verifica materiale", type: "generic" },
     ];
 
-    await createChecklist.run(
+    const result = await createChecklist.run(
       buildRequest({ category: "devicetype-arto-superiore", title: "Checklist evento", items })
     );
 
     expect(collectionMock).toHaveBeenCalledWith("checklists");
-    expect(docMock).toHaveBeenCalledWith();
-    expect(setMock).toHaveBeenCalledTimes(1);
+    expect(collectionMock).toHaveBeenCalledWith("checklistItems");
+    expect(batchSetMock).toHaveBeenCalledTimes(3); // 1 checklist + 2 item
+    expect(batchCommitMock).toHaveBeenCalledTimes(1);
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument).toEqual({
+    const checklistId = (result as { checklistId: string }).checklistId;
+    const [, checklistDocument] = batchSetCallFor(checklistId);
+    expect(checklistDocument.items).toHaveLength(2);
+    expect(checklistDocument.items.every((id: unknown) => typeof id === "string")).toBe(true);
+
+    for (const itemId of checklistDocument.items as string[]) {
+      const [, itemDocument] = batchSetCallFor(itemId);
+      expect(itemDocument.checklistId).toBe(checklistId);
+      expect(itemDocument.category).toBe("devicetype-arto-superiore");
+      expect(itemDocument.id).toBe(itemId);
+    }
+
+    const firstItemId = checklistDocument.items[0] as string;
+    const [, firstItemDocument] = batchSetCallFor(firstItemId);
+    expect(firstItemDocument).toEqual({
+      id: firstItemId,
+      checklistId,
       category: "devicetype-arto-superiore",
-      title: "Checklist evento",
-      items: [
-        {
-          id: expect.any(String),
-          title: "Prepara stampante",
-          type: "boolean",
-          assignee: null,
-          quantity: 2,
-          notes: "Nota",
-          status: "Assegnare",
-          completed: false,
-        },
-        {
-          id: expect.any(String),
-          title: "Verifica materiale",
-          type: "generic",
-          assignee: null,
-          quantity: null,
-          notes: "",
-          status: "Assegnare",
-          completed: false,
-        },
-      ],
-      createdBy: "user-1",
-      createdAt: SERVER_TIMESTAMP_SENTINEL,
+      title: "Prepara stampante",
+      type: "boolean",
+      assignee: null,
+      quantity: 2,
+      notes: "Nota",
+      status: "Assegnare",
+      completed: false,
+      creationDate: SERVER_TIMESTAMP_SENTINEL,
+      dueDate: null,
+      completionDate: null,
     });
+  });
+
+  // Scenario: createChecklist scrive gli item come documenti separati con category denormalizzata
+  it("stores only the item ids (not the full item objects) on checklists/{id}.items", async () => {
+    const result = await createChecklist.run(
+      buildRequest({
+        category: "devicetype-mano",
+        title: "Checklist mano",
+        items: [{ title: "Verifica dita", type: "generic" }],
+      })
+    );
+
+    const checklistId = (result as { checklistId: string }).checklistId;
+    const [, checklistDocument] = batchSetCallFor(checklistId);
+
+    expect(checklistDocument.items).toEqual([expect.any(String)]);
+    expect(checklistDocument.items[0]).not.toHaveProperty("title");
   });
 
   // Scenario 1: item iniziale con type valido
   it.each(["boolean", "generic", "numeric"] as const)(
     "creates the item with the provided type '%s'",
     async (type) => {
-      await createChecklist.run(
+      const result = await createChecklist.run(
         buildRequest({
           category: "devicetype-mano",
           title: "Checklist mano",
@@ -98,8 +144,10 @@ describe("createChecklist", () => {
         })
       );
 
-      const [savedDocument] = setMock.mock.calls[0];
-      expect(savedDocument.items[0].type).toBe(type);
+      const checklistId = (result as { checklistId: string }).checklistId;
+      const [, checklistDocument] = batchSetCallFor(checklistId);
+      const [, itemDocument] = batchSetCallFor(checklistDocument.items[0]);
+      expect(itemDocument.type).toBe(type);
     }
   );
 
@@ -117,7 +165,7 @@ describe("createChecklist", () => {
       new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
     );
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   // Scenario 2: item iniziale senza type o con type non valido
@@ -134,11 +182,11 @@ describe("createChecklist", () => {
       new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
     );
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
-  // Scenario 2: anche lo shorthand a stringa non porta un type esplicito, quindi è rifiutato
-  it("throws invalid-argument when an initial item is a bare string (no type)", async () => {
+  // Scenario: lo shorthand a stringa è stato rimosso, l'input cade nel ramo else
+  it("throws invalid-argument when an initial item is a bare string (shorthand removed)", async () => {
     await expect(
       createChecklist.run(
         buildRequest({
@@ -148,19 +196,20 @@ describe("createChecklist", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must be a string or an object with a title")
     );
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("writes createdBy with the authenticated caller's uid", async () => {
-    await createChecklist.run(
+    const result = await createChecklist.run(
       buildRequest({ category: "devicetype-mano", title: "Checklist mano", items: [] })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.createdBy).toBe("user-1");
+    const checklistId = (result as { checklistId: string }).checklistId;
+    const [, checklistDocument] = batchSetCallFor(checklistId);
+    expect(checklistDocument.createdBy).toBe("user-1");
   });
 
   it("returns the generated checklistId to the consumer", async () => {
@@ -168,14 +217,18 @@ describe("createChecklist", () => {
       buildRequest({ category: "devicetype-mano", title: "Checklist mano", items: [] })
     );
 
-    expect(result).toEqual({ checklistId: GENERATED_ID });
+    expect(result).toEqual({ checklistId: expect.any(String) });
   });
 
   it("defaults items to an empty array when not provided", async () => {
-    await createChecklist.run(buildRequest({ category: "devicetype-mano", title: "Checklist mano" }));
+    const result = await createChecklist.run(
+      buildRequest({ category: "devicetype-mano", title: "Checklist mano" })
+    );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.items).toEqual([]);
+    const checklistId = (result as { checklistId: string }).checklistId;
+    const [, checklistDocument] = batchSetCallFor(checklistId);
+    expect(checklistDocument.items).toEqual([]);
+    expect(batchSetMock).toHaveBeenCalledTimes(1); // only the checklist document
   });
 
   it("throws invalid-argument when category is missing", async () => {
@@ -183,7 +236,7 @@ describe("createChecklist", () => {
       createChecklist.run(buildRequest({ title: "Checklist senza categoria" }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid category"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when title is missing", async () => {
@@ -191,7 +244,7 @@ describe("createChecklist", () => {
       createChecklist.run(buildRequest({ category: "devicetype-mano" }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid title"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("logs a success security event when the checklist is created", async () => {
@@ -220,5 +273,48 @@ describe("createChecklist", () => {
         context: expect.objectContaining({ function: "createChecklist" }),
       })
     );
+  });
+
+  // Scenario: createChecklist salva origin quando fornito, lo omette quando assente
+  it("writes the origin field with the exact value provided by the consumer", async () => {
+    const result = await createChecklist.run(
+      buildRequest({
+        category: "devicetype-mano",
+        title: "Checklist mano",
+        items: [],
+        origin: { type: "deviceRequest", id: "request-42" },
+      })
+    );
+
+    const checklistId = (result as { checklistId: string }).checklistId;
+    const [, checklistDocument] = batchSetCallFor(checklistId);
+    expect(checklistDocument.origin).toEqual({ type: "deviceRequest", id: "request-42" });
+  });
+
+  // Scenario: createChecklist salva origin quando fornito, lo omette quando assente
+  it("does not write an origin field when origin is not provided", async () => {
+    const result = await createChecklist.run(
+      buildRequest({ category: "devicetype-mano", title: "Checklist mano", items: [] })
+    );
+
+    const checklistId = (result as { checklistId: string }).checklistId;
+    const [, checklistDocument] = batchSetCallFor(checklistId);
+    expect(checklistDocument).not.toHaveProperty("origin");
+  });
+
+  // Scenario: createChecklist salva origin quando fornito, lo omette quando assente
+  it("throws invalid-argument when origin is provided but malformed", async () => {
+    await expect(
+      createChecklist.run(
+        buildRequest({
+          category: "devicetype-mano",
+          title: "Checklist mano",
+          items: [],
+          origin: { type: "deviceRequest" },
+        })
+      )
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "origin must be an object with type and id"));
+
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 });

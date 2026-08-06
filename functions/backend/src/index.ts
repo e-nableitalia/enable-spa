@@ -22,6 +22,7 @@ export { createChecklist } from "./organizer/createChecklist";
 export { createChecklistFromTemplate } from "./organizer/createChecklistFromTemplate";
 export { cloneChecklist } from "./organizer/cloneChecklist";
 export { listTemplates } from "./organizer/listTemplates";
+export { listMyChecklistItems } from "./organizer/listMyChecklistItems";
 export { createDeviceChecklistTemplate } from "./device-requests/createChecklistTemplate";
 export { updateDeviceChecklistTemplate } from "./device-requests/updateChecklistTemplate";
 export { deleteDeviceChecklistTemplate } from "./device-requests/deleteChecklistTemplate";
