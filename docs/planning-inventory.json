@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-04T23:28:35.645Z",
+  "generated_at": "2026-08-06T10:54:45.893Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -101,6 +101,27 @@
         "process-organizer-core",
         "device-requests"
       ]
+    },
+    {
+      "id": "ir-device-request-macro-status-reduction",
+      "type": "implementation_request",
+      "source_path": "docs/implementation-requests/device-request-macro-status-reduction-request.md",
+      "created_at": "2026-08-06T10:15:50.219Z",
+      "updated_at": "2026-08-06T10:15:50.219Z",
+      "created_by": "agent:supervisor",
+      "status": "draft",
+      "domains": [
+        "device-requests",
+        "process-organizer-core"
+      ]
+    },
+    {
+      "id": "ss-device-request-macro-status",
+      "type": "solution_study",
+      "source_path": "docs/solution-studies/ss-device-request-macro-status.json",
+      "created_at": "2026-08-06T10:54:45.893Z",
+      "updated_at": "2026-08-06T10:54:45.893Z",
+      "created_by": "cli:solution-study"
     }
   ]
 }
