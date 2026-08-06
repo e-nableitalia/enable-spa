@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "../../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db, functions } from "../../firebase";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
@@ -56,6 +57,32 @@ interface NewItemForm {
 
 const EMPTY_NEW_ITEM: NewItemForm = { title: "", type: null, assignee: "", quantity: null, notes: "" };
 
+interface AssignableUser {
+  id: string;
+  label: string;
+}
+
+/**
+ * Nome completo dell'utente `uid`, risolto da `users/{uid}/private/profile`
+ * (stesso pattern di `RequestDetail.getUserFullName`). Non tutti i chiamanti
+ * possono leggere il profilo privato di un altro utente (regole Firestore:
+ * un volontario legge solo il proprio, EA-141) — in quel caso, o se il
+ * profilo non esiste, l'etichetta ricade sull'uid stesso.
+ */
+async function resolveAssignableUserLabel(uid: string): Promise<string> {
+  try {
+    const profileSnap = await getDoc(doc(db, "users", uid, "private", "profile"));
+    if (profileSnap.exists()) {
+      const data = profileSnap.data() as { firstName?: string; lastName?: string };
+      const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+      if (fullName) return fullName;
+    }
+  } catch {
+    // Permessi insufficienti a leggere il profilo altrui: fallback sull'uid.
+  }
+  return uid;
+}
+
 interface Props {
   /** Id della deviceRequest a cui è collegata la checklist. */
   requestId: string;
@@ -78,6 +105,12 @@ interface Props {
  * core Organizer: nessun dato PII del beneficiario transita per questi
  * item, che sono dati operativi di fabbricazione (titolo, assegnatario,
  * note), non anagrafici.
+ *
+ * EA-141: l'assegnatario di un item non è più un campo di testo libero,
+ * ma una selezione tra utenti reali risolti (volontari assegnati alla
+ * deviceRequest più l'utente corrente se admin) — stesso perimetro
+ * validato lato backend da `isResolvableChecklistAssignee`
+ * (`deviceRequestChecklistAccess.ts`).
  */
 export default function ChecklistPanel({ requestId, checklistId }: Props) {
   const toast = useRef<Toast>(null);
@@ -93,6 +126,60 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
   const [drafts, setDrafts] = useState<Record<string, Partial<ChecklistItem>>>({});
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [generatingShareLink, setGeneratingShareLink] = useState(false);
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+
+  /**
+   * Utenti reali selezionabili come assegnatario di un item (EA-141):
+   * i volontari assegnati alla deviceRequest (`assignedVolunteers`, leggibile
+   * da qualunque volontario o admin autenticato, vedi `firestore.rules`) più
+   * l'utente corrente se admin — stesso perimetro RBAC validato lato backend
+   * da `isResolvableChecklistAssignee`. Sostituisce il precedente campo di
+   * testo libero, mai risolto a un'identità reale.
+   */
+  const loadAssignableUsers = useCallback(async () => {
+    if (!requestId) {
+      setAssignableUsers([]);
+      return;
+    }
+    try {
+      const requestSnap = await getDoc(doc(db, "deviceRequests", requestId));
+      const assignedVolunteers: string[] = requestSnap.exists()
+        ? ((requestSnap.data()?.assignedVolunteers as string[] | undefined) ?? [])
+        : [];
+
+      const candidateUids = new Set(assignedVolunteers);
+      const selfUid = auth.currentUser?.uid;
+      if (selfUid) {
+        const selfSnap = await getDoc(doc(db, "users", selfUid));
+        if (selfSnap.exists() && selfSnap.data()?.role === "admin") {
+          candidateUids.add(selfUid);
+        }
+      }
+
+      const users = await Promise.all(
+        Array.from(candidateUids).map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) }))
+      );
+      setAssignableUsers(users);
+    } catch (err) {
+      console.error("[ChecklistPanel] Failed to load assignable users", err);
+      setAssignableUsers([]);
+    }
+  }, [requestId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadAssignableUsers fetches from Firestore, not derivable from props/state
+    loadAssignableUsers();
+  }, [loadAssignableUsers]);
+
+  /** Opzioni per la Dropdown assegnatario di `item`: include il valore
+   * attualmente salvato anche se non (più) tra gli `assignableUsers`
+   * risolti, cosi' resta visibile invece di apparire come non impostato. */
+  const assigneeOptionsFor = (currentAssignee: string | null): AssignableUser[] => {
+    if (currentAssignee && !assignableUsers.some((u) => u.id === currentAssignee)) {
+      return [...assignableUsers, { id: currentAssignee, label: currentAssignee }];
+    }
+    return assignableUsers;
+  };
 
   const load = useCallback(async () => {
     if (!requestId || !checklistId) {
@@ -330,14 +417,20 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
             <Column
               header="Assegnatario"
               body={(item: ChecklistItem) => (
-                <InputText
-                  value={item.assignee ?? ""}
-                  onChange={(e) => setDraftField(item.id, { assignee: e.target.value })}
+                <Dropdown
+                  value={item.assignee ?? null}
+                  options={assigneeOptionsFor(item.assignee)}
+                  optionLabel="label"
+                  optionValue="id"
+                  onChange={(e) => setDraftField(item.id, { assignee: e.value ?? null })}
                   placeholder="Non assegnato"
+                  showClear
+                  filter
+                  emptyMessage="Nessun utente selezionabile per questa richiesta"
                   style={{ width: "100%" }}
                 />
               )}
-              style={{ minWidth: 140 }}
+              style={{ minWidth: 180 }}
             />
             <Column
               header="Quantità"
@@ -454,9 +547,16 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
           </div>
           <div>
             <label style={{ display: "block", marginBottom: 4 }}>Assegnatario</label>
-            <InputText
-              value={newItem.assignee}
-              onChange={(e) => setNewItem((f) => ({ ...f, assignee: e.target.value }))}
+            <Dropdown
+              value={newItem.assignee || null}
+              options={assignableUsers}
+              optionLabel="label"
+              optionValue="id"
+              onChange={(e) => setNewItem((f) => ({ ...f, assignee: e.value ?? "" }))}
+              placeholder="Non assegnato"
+              showClear
+              filter
+              emptyMessage="Nessun utente selezionabile per questa richiesta"
               style={{ width: "100%" }}
             />
           </div>

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ChecklistPanel from "./ChecklistPanel";
@@ -19,12 +19,39 @@ async function selectDropdownOption(user: ReturnType<typeof userEvent.setup>, tr
   fireEvent.click(option);
 }
 
-vi.mock("../../firebase", () => ({ functions: {} }));
+const authState = vi.hoisted(() => ({ currentUser: null as { uid: string } | null }));
+vi.mock("../../firebase", () => ({ db: {}, functions: {}, auth: authState }));
 
 const callable = vi.fn();
 vi.mock("firebase/functions", () => ({
   httpsCallable: (_functions: unknown, name: string) => (data: unknown) => callable(name, data),
 }));
+
+const firestoreDocs: Record<string, unknown> = {};
+vi.mock("firebase/firestore", () => ({
+  doc: (_db: unknown, ...segments: string[]) => ({ __path: segments.join("/") }),
+  getDoc: async (ref: { __path: string }) => {
+    const data = firestoreDocs[ref.__path];
+    return { exists: () => data !== undefined, data: () => data };
+  },
+}));
+
+function setDeviceRequestDoc(requestId: string, data: Record<string, unknown>) {
+  firestoreDocs[`deviceRequests/${requestId}`] = data;
+}
+
+function setUserProfile(uid: string, data: Record<string, unknown>) {
+  firestoreDocs[`users/${uid}/private/profile`] = data;
+}
+
+function setUserRole(uid: string, role: string) {
+  firestoreDocs[`users/${uid}`] = { role };
+}
+
+afterEach(() => {
+  for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
+  authState.currentUser = null;
+});
 
 function mockChecklist(items: Array<Record<string, unknown>>) {
   callable.mockImplementation((name: string) => {
@@ -282,6 +309,126 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
     expect(callable).toHaveBeenCalledWith(
       "createChecklistShareLink",
       expect.objectContaining({ requestId: "r1", checklistId: "c42" })
+    );
+  });
+});
+
+// Scenario 3 (EA-141): l'assegnatario di un item è una selezione tra utenti
+// reali risolti (volontari assegnati alla deviceRequest / admin), non più un
+// campo di testo libero.
+describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => {
+  beforeEach(() => {
+    callable.mockReset();
+  });
+
+  function mockChecklistWithItems(items: Array<Record<string, unknown>>) {
+    callable.mockImplementation((name: string) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "cat", items } });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "updateDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: {} });
+      }
+      if (name === "addDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: { itemId: "new-item" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+  }
+
+  it("il campo Assegnatario non è più un campo di testo libero", async () => {
+    setDeviceRequestDoc("r1", { assignedVolunteers: ["vol-1"] });
+    setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
+    mockChecklistWithItems([
+      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    const row = await rowFor("Verifica batteria");
+
+    // Non più un InputText libero: nessuna textbox per l'assegnatario.
+    expect(within(row).queryByPlaceholderText("Non assegnato")).not.toBeInTheDocument();
+    // È invece una Dropdown (trigger accessibile come "button").
+    expect(await within(row).findByRole("button", { name: "Non assegnato" })).toBeInTheDocument();
+  });
+
+  it("mostra tra le opzioni i volontari assegnati alla deviceRequest, risolti a nome reale", async () => {
+    setDeviceRequestDoc("r1", { assignedVolunteers: ["vol-1"] });
+    setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
+    mockChecklistWithItems([
+      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+    const user = userEvent.setup();
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    const row = await rowFor("Verifica batteria");
+    const trigger = within(row).getByRole("button", { name: "Non assegnato" });
+
+    await selectDropdownOption(user, trigger, "Anna Bianchi");
+
+    const saveButton = row.querySelector(".pi-save")?.closest("button");
+    if (!saveButton) throw new Error("Save button not found");
+    await user.click(saveButton);
+
+    expect(callable).toHaveBeenCalledWith(
+      "updateDeviceRequestChecklistItem",
+      expect.objectContaining({ requestId: "r1", checklistId: "c1", itemId: "i1", assignee: "vol-1" })
+    );
+  });
+
+  it("include l'utente corrente tra le opzioni se ha ruolo admin", async () => {
+    setDeviceRequestDoc("r1", { assignedVolunteers: [] });
+    setUserRole("admin-1", "admin");
+    setUserProfile("admin-1", { firstName: "Luca", lastName: "Verdi" });
+    authState.currentUser = { uid: "admin-1" };
+    mockChecklistWithItems([
+      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+    const user = userEvent.setup();
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    const row = await rowFor("Verifica batteria");
+    const trigger = within(row).getByRole("button", { name: "Non assegnato" });
+
+    await selectDropdownOption(user, trigger, "Luca Verdi");
+
+    const saveButton = row.querySelector(".pi-save")?.closest("button");
+    if (!saveButton) throw new Error("Save button not found");
+    await user.click(saveButton);
+
+    expect(callable).toHaveBeenCalledWith(
+      "updateDeviceRequestChecklistItem",
+      expect.objectContaining({ assignee: "admin-1" })
+    );
+  });
+
+  it("il dialog 'Aggiungi item' usa la stessa selezione tra utenti reali per l'assegnatario", async () => {
+    setDeviceRequestDoc("r1", { assignedVolunteers: ["vol-1"] });
+    setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
+    mockChecklistWithItems([]);
+    const user = userEvent.setup();
+
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Aggiungi item" }));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).queryByPlaceholderText("Non assegnato")).not.toBeInTheDocument();
+    const assigneeTrigger = await within(dialog).findByRole("button", { name: "Non assegnato" });
+    await selectDropdownOption(user, assigneeTrigger, "Anna Bianchi");
+
+    await user.type(within(dialog).getAllByRole("textbox")[0], "Verifica dita");
+    const typeTrigger = within(dialog).getByRole("button", { name: "Seleziona il tipo" });
+    await selectDropdownOption(user, typeTrigger, "Generico");
+    await user.click(within(dialog).getByRole("button", { name: "Aggiungi" }));
+
+    expect(callable).toHaveBeenCalledWith(
+      "addDeviceRequestChecklistItem",
+      expect.objectContaining({ requestId: "r1", checklistId: "c1", assignee: "vol-1" })
     );
   });
 });

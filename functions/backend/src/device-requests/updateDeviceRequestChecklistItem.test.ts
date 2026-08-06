@@ -102,6 +102,7 @@ describe("updateDeviceRequestChecklistItem", () => {
 
     usersStore = {
       "admin-1": { role: "admin" },
+      "admin-2": { role: "admin" },
       "volunteer-1": { role: "volunteer" },
       "volunteer-2": { role: "volunteer" },
     };
@@ -157,6 +158,89 @@ describe("updateDeviceRequestChecklistItem", () => {
       notes: "Materiale pronto",
       status: "In corso",
     });
+  });
+
+  // Scenario 2 (EA-141): assignee valido (volontario assegnato alla richiesta)
+  // -> la chiamata delega al core con quello stesso uid, senza validazione
+  // di identita' aggiuntiva lato core.
+  it("accepts and forwards a valid assignee (volunteer assigned to the request)", async () => {
+    const result = await updateDeviceRequestChecklistItem.run(
+      buildRequest(
+        { requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", assignee: "volunteer-1" },
+        "admin-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ assignee: "volunteer-1" });
+  });
+
+  // Scenario 2 (EA-141): assignee valido anche se e' un admin non presente
+  // tra gli assignedVolunteers della richiesta.
+  it("accepts and forwards a valid assignee (admin not assigned as volunteer)", async () => {
+    const result = await updateDeviceRequestChecklistItem.run(
+      buildRequest(
+        { requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", assignee: "admin-2" },
+        "admin-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ assignee: "admin-2" });
+  });
+
+  // Scenario 1 (EA-141): assignee non risolvibile a un uid reale (non tra
+  // gli assignedVolunteers ne' admin) -> invalid-argument, nessun update.
+  it("rejects an assignee not resolvable to a real uid (neither assigned volunteer nor admin)", async () => {
+    await expect(
+      updateDeviceRequestChecklistItem.run(
+        buildRequest(
+          { requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", assignee: "volunteer-2" },
+          "admin-1"
+        )
+      )
+    ).rejects.toMatchObject(
+      new HttpsError(
+        "invalid-argument",
+        "Assignee must be a Firebase uid of a volunteer assigned to this request or an admin"
+      )
+    );
+
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 1 (EA-141): stessa reiezione per un valore di assignee del
+  // tutto arbitrario (non corrisponde a nessun documento users).
+  it("rejects an assignee that is a free-text value not corresponding to any real uid", async () => {
+    await expect(
+      updateDeviceRequestChecklistItem.run(
+        buildRequest(
+          { requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", assignee: "Mario Rossi" },
+          "admin-1"
+        )
+      )
+    ).rejects.toMatchObject(
+      new HttpsError(
+        "invalid-argument",
+        "Assignee must be a Firebase uid of a volunteer assigned to this request or an admin"
+      )
+    );
+
+    expect(checklistItemUpdateMock).not.toHaveBeenCalled();
+  });
+
+  // EA-141: assignee = null resta un modo valido per "spoglia" l'item,
+  // senza passare dalla risoluzione di identita'.
+  it("allows setting assignee to null (unassign) without identity resolution", async () => {
+    const result = await updateDeviceRequestChecklistItem.run(
+      buildRequest(
+        { requestId: "req-1", checklistId: CHECKLIST_ID, itemId: "item-1", assignee: null },
+        "admin-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(checklistItemsStore["item-1"]).toMatchObject({ assignee: null });
   });
 
   it("forwards and persists type when updating an item (admin)", async () => {
