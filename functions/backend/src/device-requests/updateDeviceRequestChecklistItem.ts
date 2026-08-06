@@ -3,7 +3,7 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { updateChecklistItem } from "../organizer/updateChecklistItem";
-import { resolveDeviceRequestChecklistAccess } from "./deviceRequestChecklistAccess";
+import { resolveDeviceRequestChecklistAccess, isResolvableChecklistAssignee } from "./deviceRequestChecklistAccess";
 
 const REGION = "europe-west1";
 
@@ -19,6 +19,13 @@ const REGION = "europe-west1";
  * (`deviceRequestChecklistAccess.ts`, stesso perimetro di
  * `device/changeStatus.ts`) prima di delegare al core Organizer
  * (`organizer/updateChecklistItem.ts`).
+ *
+ * EA-141: se `assignee` è presente e non nullo, viene promosso da stringa
+ * libera a identità reale — deve risolvere a un uid Firebase tra i
+ * `assignedVolunteers` della `deviceRequest` collegata oppure a un utente
+ * con ruolo `admin` (`isResolvableChecklistAssignee`), altrimenti la
+ * richiesta è rifiutata con `invalid-argument`. Il core Organizer riceve
+ * solo un `assignee` già validato e resta opaco al concetto di identità.
  */
 export const updateDeviceRequestChecklistItem = onCall(
   { region: REGION },
@@ -51,7 +58,16 @@ export const updateDeviceRequestChecklistItem = onCall(
     }
 
     const db = getFirestore();
-    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
+    const { assignedVolunteers } = await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
+
+    if (assignee !== undefined && assignee !== null) {
+      if (typeof assignee !== "string" || !(await isResolvableChecklistAssignee(db, assignee, assignedVolunteers))) {
+        throw new HttpsError(
+          "invalid-argument",
+          "Assignee must be a Firebase uid of a volunteer assigned to this request or an admin"
+        );
+      }
+    }
 
     const result = (await updateChecklistItem.run({
       ...request,

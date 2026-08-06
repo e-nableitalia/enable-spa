@@ -37,7 +37,7 @@ export async function resolveDeviceRequestChecklistAccess(
   uid: string,
   requestId: string,
   checklistId: string
-): Promise<{ checklistId: string }> {
+): Promise<{ checklistId: string; assignedVolunteers: string[] }> {
   const requestRef = db.collection("deviceRequests").doc(requestId);
   const requestSnap = await requestRef.get();
 
@@ -46,15 +46,15 @@ export async function resolveDeviceRequestChecklistAccess(
   }
 
   const requestData = requestSnap.data() ?? {};
+  const assignedVolunteers: string[] = Array.isArray(requestData.assignedVolunteers)
+    ? requestData.assignedVolunteers.filter((v: unknown): v is string => typeof v === "string")
+    : [];
 
   const userSnap = await db.collection("users").doc(uid).get();
   const role = userSnap.exists ? userSnap.data()?.role : undefined;
 
   const isAdmin = role === "admin";
-  const isAssignedVolunteer =
-    role === "volunteer" &&
-    Array.isArray(requestData.assignedVolunteers) &&
-    requestData.assignedVolunteers.includes(uid);
+  const isAssignedVolunteer = role === "volunteer" && assignedVolunteers.includes(uid);
 
   if (!isAdmin && !isAssignedVolunteer) {
     throw new HttpsError(
@@ -71,5 +71,30 @@ export async function resolveDeviceRequestChecklistAccess(
     throw new HttpsError("not-found", "Checklist not linked to this device request");
   }
 
-  return { checklistId };
+  return { checklistId, assignedVolunteers };
+}
+
+/**
+ * Verifica che `assignee` sia un uid Firebase reale risolvibile nel
+ * perimetro RBAC di una `deviceRequest` (EA-141): un volontario presente
+ * in `assignedVolunteers` della richiesta collegata, oppure un utente con
+ * ruolo `admin` — stesso perimetro di accesso già applicato da
+ * `resolveDeviceRequestChecklistAccess`. Prima di questa Story `assignee`
+ * era una stringa libera mai risolta a un'identità reale (prerequisito
+ * segnalato in `ss-checklist-item-model`, 2026-07-30): questo layer lo
+ * promuove a uid reale prima di delegare al core Organizer
+ * (`organizer/updateChecklistItem.ts`), che resta opaco al concetto di
+ * identità.
+ */
+export async function isResolvableChecklistAssignee(
+  db: Firestore,
+  assignee: string,
+  assignedVolunteers: string[]
+): Promise<boolean> {
+  if (assignedVolunteers.includes(assignee)) {
+    return true;
+  }
+
+  const assigneeSnap = await db.collection("users").doc(assignee).get();
+  return assigneeSnap.exists && assigneeSnap.data()?.role === "admin";
 }
