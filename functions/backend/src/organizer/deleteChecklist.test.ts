@@ -62,12 +62,21 @@ const collectionMock = jest.fn((name: string) => {
  * applicati allo store solo al commit() — serve a verificare che
  * deleteChecklist apra piu' batch quando i documenti da eliminare superano
  * il limite Firestore di 500 operazioni per commit.
+ *
+ * Supporta anche `set()` (EA-137: createChecklist, usato dai test di
+ * "creator authorization" per costruire un fixture reale invece di
+ * impostare createdBy a mano, scrive la checklist via db.batch().set(...)
+ * sulla collection checklists) — applicato immediatamente, non in coda
+ * come le delete, dato che nessun test qui verifica atomicita' del set.
  */
 const batchMock = jest.fn(() => {
   const pending: DocRef[] = [];
   return {
     delete: jest.fn((ref: DocRef) => {
       pending.push(ref);
+    }),
+    set: jest.fn((ref: { id: string }, data: Record<string, unknown>) => {
+      checklistsStore[ref.id] = data;
     }),
     commit: jest.fn(() => {
       for (const ref of pending) {
@@ -240,6 +249,11 @@ describe("deleteChecklist", () => {
           "creator-uid"
         )
       );
+
+      // batchMock e' gia' stato chiamato una volta dal fixture createChecklist qui sopra
+      // (EA-137: scrive via db.batch()): isolare le sole chiamate della deleteChecklist
+      // sotto test, non quelle del setup.
+      batchMock.mockClear();
 
       await expect(
         deleteChecklist.run(buildRequest({ checklistId }, "other-uid"))

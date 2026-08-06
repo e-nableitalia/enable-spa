@@ -1,37 +1,31 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import crypto from "crypto";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { CHECKLIST_ITEM_STATUSES, ChecklistItemStatus, ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
+import { CHECKLIST_ITEM_STATUSES, ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
 
 const REGION = "europe-west1";
 
-interface ChecklistItem {
-  id: string;
+interface ClonedItemFields {
   title: string;
   type: ChecklistItemType;
-  assignee: string | null;
+  assignee: null;
   quantity: number | null;
   notes: string;
-  status: ChecklistItemStatus;
-  completed: boolean;
-}
-
-interface TemplateItem {
-  title: unknown;
-  type: unknown;
-  quantity: unknown;
+  status: typeof CHECKLIST_ITEM_STATUSES[number];
+  completed: false;
 }
 
 /**
- * Clona un item di template in un nuovo `ChecklistItem` di istanza.
+ * Clona un item di template (catalogo, non toccato da EA-137: resta un
+ * array embedded su `templates/{id}.items`) in un nuovo item per la nuova
+ * istanza.
  *
- * Logica di clonazione (Epic EA-3, aggiornata da EA-126): titolo, type e
- * quantità vengono copiati dal template, mentre stato, assegnatario e flag
- * di completamento vengono sempre azzerati, indipendentemente da cosa
- * contenesse il template (un template non ha comunque questi campi, essendo
- * un catalogo di riferimento, non un'istanza).
+ * Logica di clonazione invariata (Epic EA-3, aggiornata da EA-126): titolo,
+ * type e quantità vengono copiati dal template, mentre stato, assegnatario,
+ * note e flag di completamento vengono sempre azzerati, indipendentemente
+ * da cosa contenesse il template (un template non ha comunque questi
+ * campi, essendo un catalogo di riferimento, non un'istanza).
  *
  * `type` è garantito valorizzato su ogni item di template a valle di EA-125
  * (`normalizeTemplateItem` lo richiede e valida in creazione/modifica). Per
@@ -41,13 +35,12 @@ interface TemplateItem {
  * `undefined` che romperebbe l'invariante "type sempre valorizzato" sulla
  * nuova istanza.
  */
-function cloneTemplateItem(templateItem: TemplateItem): ChecklistItem {
+function cloneTemplateItem(templateItem: Record<string, unknown>): ClonedItemFields {
   const title = typeof templateItem?.title === "string" ? templateItem.title : "";
   const type: ChecklistItemType = isChecklistItemType(templateItem?.type) ? templateItem.type : "generic";
   const quantity = typeof templateItem?.quantity === "number" ? templateItem.quantity : null;
 
   return {
-    id: crypto.randomUUID(),
     title,
     type,
     assignee: null,
@@ -69,12 +62,16 @@ function cloneTemplateItem(templateItem: TemplateItem): ChecklistItem {
  *   sovrascrivere quello del template. Se omesso, la categoria è ereditata
  *   dal template.
  *
- * Copia gli item del template nella nuova istanza (titolo, type e quantità
- * copiati, stato impostato ad 'Assegnare', assegnatario a null e flag di
- * completamento a false su ciascun item clonato). Registra `fromTemplate:
- * <templateId>` come riferimento storico, non come dipendenza viva: il
- * template può essere modificato o eliminato in seguito senza che
- * l'istanza ne risenta.
+ * Crea un nuovo documento `checklistItems` per ciascun item del template
+ * (titolo, type e quantità copiati, stato impostato ad 'Assegnare',
+ * assegnatario a null, flag di completamento a false e i tre campi
+ * nullabili `creationDate`/`dueDate`/`completionDate` azzerati a null su
+ * ciascun item clonato), con `category` denormalizzata dalla nuova
+ * checklist (EA-139: gli item copiati non popolano più direttamente
+ * l'array embedded `checklists/{id}.items`, sostituito da un array di soli
+ * `itemId` a valle di EA-137). Registra `fromTemplate: <templateId>` come
+ * riferimento storico, non come dipendenza viva: il template può essere
+ * modificato o eliminato in seguito senza che l'istanza ne risenta.
  *
  * Crea un documento in `checklists/{checklistId}` e restituisce il
  * `checklistId` generato al consumer.
@@ -119,24 +116,40 @@ export const createChecklistFromTemplate = onCall(
       }
 
       const templateData = templateSnap.data() ?? {};
-      const templateItems: TemplateItem[] = Array.isArray(templateData.items) ? templateData.items : [];
-      const clonedItems: ChecklistItem[] = templateItems.map(cloneTemplateItem);
+      const templateItems: Record<string, unknown>[] = Array.isArray(templateData.items) ? templateData.items : [];
+      const clonedItems: ClonedItemFields[] = templateItems.map(cloneTemplateItem);
 
       const resolvedCategory = (category as string | undefined) ?? templateData.category;
 
       const checklistRef = db.collection("checklists").doc();
+      const itemRefs = clonedItems.map(() => db.collection("checklistItems").doc());
 
       console.log(
         `[createChecklistFromTemplate] Creating checklist document ${checklistRef.id} from template ${templateId}`
       );
-      await checklistRef.set({
+      const batch = db.batch();
+      batch.set(checklistRef, {
         category: resolvedCategory,
         title,
-        items: clonedItems,
+        items: itemRefs.map((itemRef) => itemRef.id),
         fromTemplate: templateId,
         createdBy: uid,
         createdAt: FieldValue.serverTimestamp(),
       });
+
+      itemRefs.forEach((itemRef, index) => {
+        batch.set(itemRef, {
+          id: itemRef.id,
+          checklistId: checklistRef.id,
+          category: resolvedCategory,
+          ...clonedItems[index],
+          creationDate: null,
+          dueDate: null,
+          completionDate: null,
+        });
+      });
+
+      await batch.commit();
 
       await logSecurityEvent({
         type: "system",

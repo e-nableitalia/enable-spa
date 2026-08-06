@@ -8,27 +8,32 @@ import {
   ChecklistItemType,
   isChecklistItemType,
 } from "./checklistItemStatus";
+import { isChecklistItemComplete, ChecklistItemLike } from "./checklistCompleteness";
 
 const REGION = "europe-west1";
 
-interface ChecklistItem {
-  id: string;
-  title: string;
-  type: ChecklistItemType;
-  assignee: string | null;
-  quantity: number | null;
-  notes: string;
-  status: ChecklistItemStatus;
-  completed: boolean;
-}
-
 // updateChecklistItem: aggiorna in modo parziale i campi (titolo, type,
-// stato, assegnatario, quantità, note) di un item esistente all'interno
-// della lista items di una checklist. Aggiorna solo i campi esplicitamente
-// presenti nella richiesta, lasciando invariati tutti gli altri campi
-// dell'item (incluso `completed`). `type`, se fornito, è validato tramite
-// il modulo condiviso checklistItemStatus (EA-122); se omesso, il type
-// esistente dell'item resta invariato.
+// stato, assegnatario, quantità, note, completed) del documento
+// `checklistItems/{itemId}` corrispondente (EA-137: non più un elemento
+// dell'array embedded `checklists/{id}.items`, ma un documento distinto).
+// Aggiorna solo i campi esplicitamente presenti nella richiesta, lasciando
+// invariati tutti gli altri campi dell'item (incluso `creationDate`,
+// `dueDate`). `type`, se fornito, è validato tramite il modulo condiviso
+// checklistItemStatus (EA-122); se omesso, il type esistente dell'item
+// resta invariato. `completed`, se fornito, deve essere un booleano
+// (EA-145): rende raggiungibile da un percorso applicativo reale il ramo
+// isBooleanItemComplete del gate di completezza type-aware
+// (checklistCompleteness.ts, EA-127).
+//
+// `completionDate` non è un campo accettato in input dal consumer: è
+// valorizzato automaticamente da questa stessa funzione (EA-137) quando
+// l'esito del gate di completezza (`isChecklistItemComplete`,
+// `checklistCompleteness.ts`) transita da non completo a completo per
+// effetto dei campi aggiornati in questa chiamata, incluso `completed`
+// quando fornito (EA-145 è mergiata prima di questa Story: il ramo
+// `boolean` del gate è quindi già raggiungibile). Se l'item era già
+// completo prima della chiamata, `completionDate` resta invariato (non
+// viene ri-valorizzato a ogni update mentre l'item resta completo).
 export const updateChecklistItem = onCall(
   { region: REGION },
   async (request) => {
@@ -40,7 +45,7 @@ export const updateChecklistItem = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const { checklistId, itemId, title, type, status, assignee, quantity, notes } = request.data as {
+      const { checklistId, itemId, title, type, status, assignee, quantity, notes, completed } = request.data as {
         checklistId?: string;
         itemId?: string;
         title?: string;
@@ -49,6 +54,7 @@ export const updateChecklistItem = onCall(
         assignee?: string | null;
         quantity?: number | null;
         notes?: string | null;
+        completed?: boolean;
       };
 
       if (!checklistId || typeof checklistId !== "string") {
@@ -64,8 +70,9 @@ export const updateChecklistItem = onCall(
       const hasAssignee = assignee !== undefined;
       const hasQuantity = quantity !== undefined;
       const hasNotes = notes !== undefined;
+      const hasCompleted = completed !== undefined;
 
-      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes) {
+      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes && !hasCompleted) {
         throw new HttpsError("invalid-argument", "At least one field to update must be provided");
       }
 
@@ -87,6 +94,9 @@ export const updateChecklistItem = onCall(
       if (hasNotes && notes !== null && typeof notes !== "string") {
         throw new HttpsError("invalid-argument", "Item notes must be a string");
       }
+      if (hasCompleted && typeof completed !== "boolean") {
+        throw new HttpsError("invalid-argument", "Item completed must be a boolean");
+      }
 
       const db = getFirestore();
       const checklistRef = db.collection("checklists").doc(checklistId);
@@ -96,41 +106,58 @@ export const updateChecklistItem = onCall(
         throw new HttpsError("not-found", "Checklist not found");
       }
 
-      const data = checklistSnap.data() ?? {};
-      const items: ChecklistItem[] = Array.isArray(data.items) ? data.items : [];
-      const itemIndex = items.findIndex((item) => item.id === itemId);
+      const itemRef = db.collection("checklistItems").doc(itemId);
+      const itemSnap = await itemRef.get();
 
-      if (itemIndex === -1) {
+      if (!itemSnap.exists || itemSnap.data()?.checklistId !== checklistId) {
         throw new HttpsError("not-found", "Checklist item not found");
       }
 
-      const updatedItem: ChecklistItem = { ...items[itemIndex] };
+      const currentItem = itemSnap.data() ?? {};
+      const beforeState: ChecklistItemLike = {
+        type: currentItem.type,
+        assignee: currentItem.assignee,
+        quantity: currentItem.quantity,
+        status: currentItem.status,
+        completed: currentItem.completed,
+      };
+      const afterState: ChecklistItemLike = {
+        type: hasType ? (type as ChecklistItemType) : beforeState.type,
+        assignee: hasAssignee ? (assignee ?? null) : beforeState.assignee,
+        quantity: hasQuantity ? (quantity ?? null) : beforeState.quantity,
+        status: hasStatus ? (status as ChecklistItemStatus) : beforeState.status,
+        completed: hasCompleted ? (completed as boolean) : beforeState.completed,
+      };
+
+      const updatePayload: Record<string, unknown> = {
+        updatedAt: FieldValue.serverTimestamp(),
+      };
       if (hasTitle) {
-        updatedItem.title = title as string;
+        updatePayload.title = title;
       }
       if (hasType) {
-        updatedItem.type = type as ChecklistItemType;
+        updatePayload.type = type;
       }
       if (hasStatus) {
-        updatedItem.status = status as ChecklistItemStatus;
+        updatePayload.status = status;
       }
       if (hasAssignee) {
-        updatedItem.assignee = assignee ?? null;
+        updatePayload.assignee = assignee ?? null;
       }
       if (hasQuantity) {
-        updatedItem.quantity = quantity ?? null;
+        updatePayload.quantity = quantity ?? null;
       }
       if (hasNotes) {
-        updatedItem.notes = notes ?? "";
+        updatePayload.notes = notes ?? "";
+      }
+      if (!isChecklistItemComplete(beforeState) && isChecklistItemComplete(afterState)) {
+        updatePayload.completionDate = FieldValue.serverTimestamp();
+      }
+      if (hasCompleted) {
+        updatePayload.completed = completed as boolean;
       }
 
-      const updatedItems = [...items];
-      updatedItems[itemIndex] = updatedItem;
-
-      await checklistRef.update({
-        items: updatedItems,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      await itemRef.update(updatePayload);
 
       await logSecurityEvent({
         type: "system",

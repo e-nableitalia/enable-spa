@@ -7,31 +7,30 @@ const GENERATED_CHECKLIST_ID = "generated-checklist-id";
 
 /**
  * Store in-memory minimale che simula la collection `templates` da cui
- * viene letto il template sorgente della clonazione.
+ * viene letto il template sorgente (catalogo, non toccato da EA-137: gli
+ * item restano un array embedded).
  */
 let templatesStore: Record<string, Record<string, unknown> | undefined>;
 
-const setMock = jest.fn().mockResolvedValue(undefined);
-const checklistDocMock = jest.fn(() => ({ id: GENERATED_CHECKLIST_ID, set: setMock }));
+const templateDocMock = jest.fn();
+const batchSetMock = jest.fn();
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
+let generatedItemCounter = 0;
+
+const checklistItemDocMock = jest.fn(() => {
+  generatedItemCounter += 1;
+  return { id: `generated-item-id-${generatedItemCounter}` };
+});
 
 function buildCollection(name: string) {
   if (name === "templates") {
-    return {
-      doc: jest.fn((id: string) => ({
-        get: jest.fn(() => {
-          const data = templatesStore[id];
-          return Promise.resolve({
-            exists: data !== undefined,
-            data: () => data,
-          });
-        }),
-      })),
-    };
+    return { doc: templateDocMock };
   }
-
-  return {
-    doc: checklistDocMock,
-  };
+  if (name === "checklists") {
+    return { doc: jest.fn(() => ({ id: GENERATED_CHECKLIST_ID })) };
+  }
+  return { doc: checklistItemDocMock };
 }
 
 const collectionMock = jest.fn((name: string) => buildCollection(name));
@@ -39,6 +38,10 @@ const collectionMock = jest.fn((name: string) => buildCollection(name));
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    batch: jest.fn(() => ({
+      set: batchSetMock,
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -63,7 +66,8 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "user-
 describe("createChecklistFromTemplate", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    setMock.mockResolvedValue(undefined);
+    generatedItemCounter = 0;
+    batchCommitMock.mockResolvedValue(undefined);
 
     templatesStore = {
       [TEMPLATE_ID]: {
@@ -75,19 +79,38 @@ describe("createChecklistFromTemplate", () => {
         ],
       },
     };
+
+    templateDocMock.mockImplementation((id: string) => ({
+      get: jest.fn(() => {
+        const data = templatesStore[id];
+        return Promise.resolve({ exists: data !== undefined, data: () => data });
+      }),
+    }));
   });
 
-  it("clones template items into the new instance resetting status, assignee and completed", async () => {
+  function savedChecklistDocument() {
+    const call = batchSetMock.mock.calls.find(([ref]) => ref.id === GENERATED_CHECKLIST_ID);
+    return call?.[1];
+  }
+
+  function savedItemDocuments() {
+    return batchSetMock.mock.calls
+      .filter(([ref]) => ref.id !== GENERATED_CHECKLIST_ID)
+      .map(([, document]) => document);
+  }
+
+  // Scenario: createChecklistFromTemplate crea checklistItems azzerati con category denormalizzata
+  it("creates a checklistItems document per template item, category denormalized, status/assignee/completed/dates zeroed", async () => {
     await createChecklistFromTemplate.run(
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
     );
 
-    expect(setMock).toHaveBeenCalledTimes(1);
-    const [savedDocument] = setMock.mock.calls[0];
-
-    expect(savedDocument.items).toEqual([
+    const items = savedItemDocuments();
+    expect(items).toEqual([
       {
         id: expect.any(String),
+        checklistId: GENERATED_CHECKLIST_ID,
+        category: "devicetype-arto-superiore",
         title: "Prepara stampante",
         type: "boolean",
         assignee: null,
@@ -95,9 +118,14 @@ describe("createChecklistFromTemplate", () => {
         notes: "",
         status: "Assegnare",
         completed: false,
+        creationDate: null,
+        dueDate: null,
+        completionDate: null,
       },
       {
         id: expect.any(String),
+        checklistId: GENERATED_CHECKLIST_ID,
+        category: "devicetype-arto-superiore",
         title: "Verifica materiale",
         type: "numeric",
         assignee: null,
@@ -105,15 +133,28 @@ describe("createChecklistFromTemplate", () => {
         notes: "",
         status: "Assegnare",
         completed: false,
+        creationDate: null,
+        dueDate: null,
+        completionDate: null,
       },
     ]);
 
-    // ogni item clonato ha un id univoco generato per la nuova istanza.
-    const ids = savedDocument.items.map((item: { id: string }) => item.id);
+    const ids = items.map((item) => (item as { id: string }).id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("propagates the type of each template item onto the cloned instance item (Scenario 1)", async () => {
+  // Scenario: createChecklistFromTemplate crea checklistItems azzerati con category denormalizzata
+  it("denormalizes the new checklist's category (overridden by the consumer) onto every created checklistItems document", async () => {
+    await createChecklistFromTemplate.run(
+      buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento", category: "devicetype-mano" })
+    );
+
+    for (const item of savedItemDocuments()) {
+      expect((item as { category: string }).category).toBe("devicetype-mano");
+    }
+  });
+
+  it("propagates the type of each template item onto the created instance item (regression, EA-126)", async () => {
     templatesStore[TEMPLATE_ID] = {
       category: "devicetype-arto-superiore",
       title: "Checklist stampa standard",
@@ -128,18 +169,20 @@ describe("createChecklistFromTemplate", () => {
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.items.map((item: { type: string }) => item.type)).toEqual([
+    const items = savedItemDocuments();
+    expect(items.map((item) => (item as { type: string }).type)).toEqual([
       "boolean",
       "generic",
       "numeric",
     ]);
-    // status/assignee/completed restano ai valori iniziali di una nuova istanza,
-    // indipendentemente dal type propagato.
-    for (const item of savedDocument.items) {
-      expect(item.status).toBe("Assegnare");
-      expect(item.assignee).toBeNull();
-      expect(item.completed).toBe(false);
+    for (const item of items) {
+      const typedItem = item as Record<string, unknown>;
+      expect(typedItem.status).toBe("Assegnare");
+      expect(typedItem.assignee).toBeNull();
+      expect(typedItem.completed).toBe(false);
+      expect(typedItem.creationDate).toBeNull();
+      expect(typedItem.dueDate).toBeNull();
+      expect(typedItem.completionDate).toBeNull();
     }
   });
 
@@ -154,17 +197,16 @@ describe("createChecklistFromTemplate", () => {
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.items[0].type).toBe("generic");
+    expect((savedItemDocuments()[0] as { type: string }).type).toBe("generic");
   });
 
+  // Scenario: createChecklistFromTemplate crea checklistItems azzerati con category denormalizzata
   it("registers fromTemplate as a historical reference to the source template", async () => {
     await createChecklistFromTemplate.run(
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.fromTemplate).toBe(TEMPLATE_ID);
+    expect(savedChecklistDocument()?.fromTemplate).toBe(TEMPLATE_ID);
   });
 
   it("inherits the category from the template when not overridden by the consumer", async () => {
@@ -172,8 +214,7 @@ describe("createChecklistFromTemplate", () => {
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.category).toBe("devicetype-arto-superiore");
+    expect(savedChecklistDocument()?.category).toBe("devicetype-arto-superiore");
   });
 
   it("overrides the category with the one provided by the consumer", async () => {
@@ -181,18 +222,18 @@ describe("createChecklistFromTemplate", () => {
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento", category: "devicetype-mano" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.category).toBe("devicetype-mano");
+    expect(savedChecklistDocument()?.category).toBe("devicetype-mano");
   });
 
-  it("saves the title and createdAt provided by the consumer", async () => {
+  it("saves the title, createdAt and the itemId references provided by the consumer", async () => {
     await createChecklistFromTemplate.run(
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.title).toBe("Checklist evento");
-    expect(savedDocument.createdAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    const document = savedChecklistDocument();
+    expect(document?.title).toBe("Checklist evento");
+    expect(document?.createdAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    expect(document?.items).toEqual(savedItemDocuments().map((item) => (item as { id: string }).id));
   });
 
   it("returns the generated checklistId to the consumer", async () => {
@@ -208,8 +249,7 @@ describe("createChecklistFromTemplate", () => {
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" }, "user-42")
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.createdBy).toBe("user-42");
+    expect(savedChecklistDocument()?.createdBy).toBe("user-42");
   });
 
   it("creates an instance with no items when the template has none", async () => {
@@ -223,8 +263,8 @@ describe("createChecklistFromTemplate", () => {
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.items).toEqual([]);
+    expect(savedChecklistDocument()?.items).toEqual([]);
+    expect(savedItemDocuments()).toEqual([]);
   });
 
   it("throws not-found when the template does not exist", async () => {
@@ -234,7 +274,7 @@ describe("createChecklistFromTemplate", () => {
       )
     ).rejects.toMatchObject(new HttpsError("not-found", "Template not found"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws unauthenticated when there is no auth context", async () => {
@@ -244,7 +284,7 @@ describe("createChecklistFromTemplate", () => {
       )
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "Authentication required"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when templateId is missing", async () => {
@@ -252,7 +292,7 @@ describe("createChecklistFromTemplate", () => {
       createChecklistFromTemplate.run(buildRequest({ title: "Checklist evento" }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid templateId"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when title is missing", async () => {
@@ -260,7 +300,7 @@ describe("createChecklistFromTemplate", () => {
       createChecklistFromTemplate.run(buildRequest({ templateId: TEMPLATE_ID }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid title"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when category is not a string", async () => {
@@ -270,7 +310,7 @@ describe("createChecklistFromTemplate", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "category must be a string"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("logs a success security event when the checklist is created from a template", async () => {

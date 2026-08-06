@@ -7,18 +7,29 @@ const GENERATED_CHECKLIST_ID = "generated-checklist-id";
  * Store in-memory minimale che simula le collection Firestore coinvolte:
  * `users` (RBAC), `deviceRequests` (documento principale + back-reference
  * array `checklistIds`), `publicDeviceRequests` (fallback `devicetype`),
- * `templates` (catalogo da cui istanziare) e `checklists` (scrittura
- * delegata al core Organizer).
+ * `templates` (catalogo da cui istanziare), `checklists` (scrittura della
+ * nuova istanza, `items` come solo array di `itemId`, EA-137) e
+ * `checklistItems` (un documento per ciascun item copiato dal template,
+ * scrittura delegata al core Organizer `createChecklistFromTemplate`,
+ * EA-139).
  */
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let publicDeviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let templatesStore: Record<string, Record<string, unknown> | undefined>;
 
-const checklistsSetMock = jest.fn((doc: Record<string, unknown>) => {
-  void doc;
-  return Promise.resolve();
-});
+const batchSetMock = jest.fn();
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
+let generatedItemCounter = 0;
+
+function checklistItemDoc() {
+  generatedItemCounter += 1;
+  return { id: `generated-item-id-${generatedItemCounter}` };
+}
+
+const checklistItemDocMock = jest.fn(checklistItemDoc);
+
 const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
   const current = deviceRequestsStore[id] ?? {};
   const { checklistIds: arrayUnionOp, ...rest } = updates as {
@@ -107,8 +118,12 @@ function buildCollection(name: string) {
 
   if (name === "checklists") {
     return {
-      doc: jest.fn(() => ({ id: GENERATED_CHECKLIST_ID, set: checklistsSetMock })),
+      doc: jest.fn(() => ({ id: GENERATED_CHECKLIST_ID })),
     };
+  }
+
+  if (name === "checklistItems") {
+    return { doc: checklistItemDocMock };
   }
 
   throw new Error(`Unexpected collection ${name}`);
@@ -119,6 +134,15 @@ const collectionMock = jest.fn((name: string) => buildCollection(name));
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    // createChecklist e createChecklistFromTemplate (organizer core, EA-137/EA-139)
+    // scrivono la checklist e i suoi checklistItems via db.batch().set(ref, data):
+    // qui batchSetMock registra ogni chiamata, distinta per ref.id (vedi
+    // savedChecklistDocument()/savedItemDocuments() sotto), stesso pattern di
+    // createChecklistFromTemplate.test.ts.
+    batch: jest.fn(() => ({
+      set: batchSetMock,
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),
@@ -140,10 +164,21 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "admin
   } as CallableRequest;
 }
 
+function savedChecklistDocument() {
+  const call = batchSetMock.mock.calls.find(([ref]: [{ id: string }]) => ref.id === GENERATED_CHECKLIST_ID);
+  return call?.[1] as Record<string, unknown> | undefined;
+}
+
+function savedItemDocuments() {
+  return batchSetMock.mock.calls
+    .filter(([ref]: [{ id: string }]) => ref.id !== GENERATED_CHECKLIST_ID)
+    .map(([, document]: [unknown, Record<string, unknown>]) => document);
+}
+
 describe("createDeviceRequestChecklist", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    checklistsSetMock.mockResolvedValue(undefined);
+    generatedItemCounter = 0;
 
     usersStore = {
       "admin-1": { role: "admin" },
@@ -197,15 +232,16 @@ describe("createDeviceRequestChecklist", () => {
     const result = await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-1" }, "admin-1"));
 
     expect(collectionMock).toHaveBeenCalledWith("templates");
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({
         category: "Kinetic Hand",
         fromTemplate: "template-kinetic-hand",
-        items: [
-          expect.objectContaining({ title: "Stampa dita", quantity: 2, status: "Assegnare", completed: false }),
-        ],
+        items: [expect.any(String)],
       })
     );
+    expect(savedItemDocuments()).toEqual([
+      expect.objectContaining({ title: "Stampa dita", quantity: 2, status: "Assegnare", completed: false }),
+    ]);
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
     expect(deviceRequestsStore["req-1"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
   });
@@ -213,14 +249,15 @@ describe("createDeviceRequestChecklist", () => {
   it("creates a blank checklist when no template matches the request's devicetype", async () => {
     const result = await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-2" }, "admin-1"));
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    const savedDocument = savedChecklistDocument();
+    expect(savedDocument).toEqual(
       expect.objectContaining({
         category: "Guitar Pick",
         items: [],
       })
     );
-    const [savedDocument] = checklistsSetMock.mock.calls[0] as [Record<string, unknown>];
     expect(savedDocument).not.toHaveProperty("fromTemplate");
+    expect(savedItemDocuments()).toEqual([]);
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
     expect(deviceRequestsStore["req-2"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
   });
@@ -229,7 +266,7 @@ describe("createDeviceRequestChecklist", () => {
     await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-no-devicetype" }, "admin-1"));
 
     expect(collectionMock).toHaveBeenCalledWith("publicDeviceRequests");
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({ category: "Kinetic Hand", fromTemplate: "template-kinetic-hand" })
     );
   });
@@ -248,7 +285,7 @@ describe("createDeviceRequestChecklist", () => {
       new HttpsError("permission-denied", "Only admin or assigned volunteers can create the checklist for this request")
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchSetMock).not.toHaveBeenCalled();
     expect(deviceRequestsStore["req-1"]?.checklistIds).toBeUndefined();
   });
 
@@ -259,7 +296,7 @@ describe("createDeviceRequestChecklist", () => {
       new HttpsError("permission-denied", "Only admin or assigned volunteers can create the checklist for this request")
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchSetMock).not.toHaveBeenCalled();
   });
 
   it("throws unauthenticated when there is no auth context, without querying Firestore", async () => {
@@ -275,7 +312,7 @@ describe("createDeviceRequestChecklist", () => {
       createDeviceRequestChecklist.run(buildRequest({ requestId: "missing-request" }, "admin-1"))
     ).rejects.toMatchObject(new HttpsError("not-found", "Device request not found"));
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchSetMock).not.toHaveBeenCalled();
   });
 
   it("adds an additional checklist via arrayUnion when the request already has one, without removing existing ids", async () => {
@@ -300,7 +337,7 @@ describe("createDeviceRequestChecklist", () => {
       )
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchSetMock).not.toHaveBeenCalled();
     expect(deviceRequestsStore["req-at-max-checklists"]?.checklistIds).toEqual([
       "c-1",
       "c-2",
@@ -315,7 +352,7 @@ describe("createDeviceRequestChecklist", () => {
       new HttpsError("invalid-argument", "Missing or invalid requestId")
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchSetMock).not.toHaveBeenCalled();
   });
 
   it("uses the provided title instead of the default one", async () => {
@@ -323,7 +360,7 @@ describe("createDeviceRequestChecklist", () => {
       buildRequest({ requestId: "req-2", title: "Checklist custom" }, "admin-1")
     );
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({ title: "Checklist custom" })
     );
   });
@@ -331,7 +368,7 @@ describe("createDeviceRequestChecklist", () => {
   it("generates a default title from the requestNumber when title is omitted", async () => {
     await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-2" }, "admin-1"));
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({ title: "Checklist di fabbricazione - REQ-000002" })
     );
   });
