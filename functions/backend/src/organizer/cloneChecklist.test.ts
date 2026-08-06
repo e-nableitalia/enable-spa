@@ -6,41 +6,56 @@ const SOURCE_CHECKLIST_ID = "existing-checklist-id";
 const GENERATED_CHECKLIST_ID = "generated-checklist-id";
 
 /**
- * Store in-memory minimale che simula la collection `checklists` da cui
- * viene letta la checklist sorgente della clonazione.
+ * Store in-memory minimale che simula le collection `checklists` (la
+ * checklist sorgente, con `items` come array di soli `itemId`, EA-137) e
+ * `checklistItems` (i documenti reali risolti dalla sorgente) da cui legge
+ * la clonazione.
  */
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
-const setMock = jest.fn().mockResolvedValue(undefined);
-const newChecklistDocMock = jest.fn(() => ({ id: GENERATED_CHECKLIST_ID, set: setMock }));
+const checklistDocMock = jest.fn();
+const getAllMock = jest.fn();
+const batchSetMock = jest.fn();
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
 
-function buildCollection() {
-  return {
-    doc: jest.fn((id?: string) => {
-      if (id === undefined) {
-        // db.collection("checklists").doc() senza argomenti: genera il
-        // riferimento alla nuova istanza da creare.
-        return newChecklistDocMock();
-      }
+let generatedItemCounter = 0;
 
-      return {
-        get: jest.fn(() => {
-          const data = checklistsStore[id];
-          return Promise.resolve({
-            exists: data !== undefined,
-            data: () => data,
-          });
-        }),
-      };
-    }),
-  };
+function checklistItemDoc(id?: string) {
+  if (id !== undefined) {
+    return { id };
+  }
+  generatedItemCounter += 1;
+  return { id: `generated-item-id-${generatedItemCounter}` };
 }
 
-const collectionMock = jest.fn(() => buildCollection());
+const checklistItemDocMock = jest.fn(checklistItemDoc);
+
+function buildCollection(name: string) {
+  if (name === "checklists") {
+    return {
+      doc: jest.fn((id?: string) => {
+        if (id === undefined) {
+          return { id: GENERATED_CHECKLIST_ID };
+        }
+        return checklistDocMock(id);
+      }),
+    };
+  }
+
+  return { doc: checklistItemDocMock };
+}
+
+const collectionMock = jest.fn((name: string) => buildCollection(name));
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
-    collection: () => collectionMock(),
+    collection: (name: string) => collectionMock(name),
+    getAll: getAllMock,
+    batch: jest.fn(() => ({
+      set: batchSetMock,
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -65,49 +80,89 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "user-
 describe("cloneChecklist", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    setMock.mockResolvedValue(undefined);
+    generatedItemCounter = 0;
+    batchCommitMock.mockResolvedValue(undefined);
 
     checklistsStore = {
       [SOURCE_CHECKLIST_ID]: {
         category: "devicetype-arto-superiore",
         title: "Checklist evento passato",
-        items: [
-          {
-            id: "item-1",
-            title: "Prepara stampante",
-            type: "boolean",
-            assignee: "vol-1",
-            quantity: 2,
-            notes: "Nota storica",
-            status: "Completata",
-            completed: true,
-          },
-          {
-            id: "item-2",
-            title: "Verifica materiale",
-            type: "numeric",
-            assignee: null,
-            quantity: null,
-            notes: "",
-            status: "Da iniziare",
-            completed: false,
-          },
-        ],
+        items: ["item-1", "item-2"],
       },
     };
+    checklistItemsStore = {
+      "item-1": {
+        id: "item-1",
+        checklistId: SOURCE_CHECKLIST_ID,
+        category: "devicetype-arto-superiore",
+        title: "Prepara stampante",
+        type: "boolean",
+        assignee: "vol-1",
+        quantity: 2,
+        notes: "Nota storica",
+        status: "Completata",
+        completed: true,
+        creationDate: { seconds: 1, nanoseconds: 0 },
+        dueDate: null,
+        completionDate: { seconds: 2, nanoseconds: 0 },
+      },
+      "item-2": {
+        id: "item-2",
+        checklistId: SOURCE_CHECKLIST_ID,
+        category: "devicetype-arto-superiore",
+        title: "Verifica materiale",
+        type: "numeric",
+        assignee: null,
+        quantity: null,
+        notes: "",
+        status: "Da iniziare",
+        completed: false,
+        creationDate: { seconds: 1, nanoseconds: 0 },
+        dueDate: null,
+        completionDate: null,
+      },
+    };
+
+    checklistDocMock.mockImplementation((id: string) => ({
+      get: jest.fn(() => {
+        const data = checklistsStore[id];
+        return Promise.resolve({ exists: data !== undefined, data: () => data });
+      }),
+    }));
+    getAllMock.mockImplementation((...refs: { id: string }[]) =>
+      Promise.resolve(
+        refs.map((ref) => {
+          const data = checklistItemsStore[ref.id];
+          return { id: ref.id, exists: data !== undefined, data: () => data };
+        })
+      )
+    );
   });
 
-  it("clones source instance items into the new instance resetting status, assignee and completed", async () => {
+  function savedChecklistDocument() {
+    const call = batchSetMock.mock.calls.find(([ref]) => ref.id === GENERATED_CHECKLIST_ID);
+    return call?.[1];
+  }
+
+  function savedItemDocuments() {
+    return batchSetMock.mock.calls
+      .filter(([ref]) => ref.id !== GENERATED_CHECKLIST_ID)
+      .map(([, document]) => document);
+  }
+
+  // Scenario: cloneChecklist crea checklistItems azzerati indipendentemente dallo stato della sorgente
+  it("clones source instance items into new checklistItems documents resetting status, assignee, notes and completed", async () => {
     await cloneChecklist.run(
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
     );
 
-    expect(setMock).toHaveBeenCalledTimes(1);
-    const [savedDocument] = setMock.mock.calls[0];
-
-    expect(savedDocument.items).toEqual([
+    expect(getAllMock).toHaveBeenCalledTimes(1);
+    const items = savedItemDocuments();
+    expect(items).toEqual([
       {
         id: expect.any(String),
+        checklistId: GENERATED_CHECKLIST_ID,
+        category: "devicetype-arto-superiore",
         title: "Prepara stampante",
         type: "boolean",
         assignee: null,
@@ -115,9 +170,14 @@ describe("cloneChecklist", () => {
         notes: "",
         status: "Assegnare",
         completed: false,
+        creationDate: null,
+        dueDate: null,
+        completionDate: null,
       },
       {
         id: expect.any(String),
+        checklistId: GENERATED_CHECKLIST_ID,
+        category: "devicetype-arto-superiore",
         title: "Verifica materiale",
         type: "numeric",
         assignee: null,
@@ -125,62 +185,68 @@ describe("cloneChecklist", () => {
         notes: "",
         status: "Assegnare",
         completed: false,
+        creationDate: null,
+        dueDate: null,
+        completionDate: null,
       },
     ]);
 
-    // ogni item clonato ha un id univoco generato per la nuova istanza,
-    // distinto dall'id che l'item aveva nella sorgente.
-    const ids = savedDocument.items.map((item: { id: string }) => item.id);
+    const ids = items.map((item) => (item as { id: string }).id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).not.toContain("item-1");
     expect(ids).not.toContain("item-2");
   });
 
-  it("resets status, assignee and completed even when cloning from a fully completed source checklist", async () => {
-    checklistsStore[SOURCE_CHECKLIST_ID] = {
-      category: "devicetype-arto-superiore",
-      title: "Checklist completata",
-      items: [
-        { id: "item-1", title: "Task A", type: "generic", assignee: "vol-1", quantity: 1, notes: "x", status: "Completata", completed: true },
-        { id: "item-2", title: "Task B", type: "numeric", assignee: "vol-2", quantity: 3, notes: "y", status: "Completata", completed: true },
-      ],
-    };
+  // Scenario: cloneChecklist crea checklistItems azzerati indipendentemente dallo stato della sorgente
+  it("resets status, assignee, dates and completed even when cloning from a fully completed source checklist", async () => {
+    checklistItemsStore["item-1"] = { ...checklistItemsStore["item-1"], status: "Completata", completed: true, assignee: "vol-1" };
+    checklistItemsStore["item-2"] = { ...checklistItemsStore["item-2"], status: "Completata", completed: true, assignee: "vol-2", quantity: 3 };
 
     await cloneChecklist.run(
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist ripetuta" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    for (const item of savedDocument.items) {
-      expect(item.status).toBe("Assegnare");
-      expect(item.assignee).toBeNull();
-      expect(item.completed).toBe(false);
+    for (const item of savedItemDocuments()) {
+      const typedItem = item as Record<string, unknown>;
+      expect(typedItem.status).toBe("Assegnare");
+      expect(typedItem.assignee).toBeNull();
+      expect(typedItem.completed).toBe(false);
+      expect(typedItem.creationDate).toBeNull();
+      expect(typedItem.dueDate).toBeNull();
+      expect(typedItem.completionDate).toBeNull();
     }
-    expect(savedDocument.items[0].title).toBe("Task A");
-    expect(savedDocument.items[0].quantity).toBe(1);
-    expect(savedDocument.items[1].title).toBe("Task B");
-    expect(savedDocument.items[1].quantity).toBe(3);
   });
 
-  it("propagates the type of the source item onto the cloned instance item, regardless of source progress (Scenario 2)", async () => {
+  // Scenario 2 (regression, EA-126): propagazione del type indipendentemente dallo stato della sorgente
+  it("propagates the type of the source item onto the cloned instance item, regardless of source progress", async () => {
     checklistsStore[SOURCE_CHECKLIST_ID] = {
       category: "devicetype-arto-superiore",
       title: "Checklist con item in stati diversi",
-      items: [
-        { id: "item-1", title: "Item boolean completato", type: "boolean", assignee: "vol-1", quantity: null, notes: "", status: "Completata", completed: true },
-        { id: "item-2", title: "Item generic non iniziato", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
-        { id: "item-3", title: "Item numeric in corso", type: "numeric", assignee: "vol-2", quantity: 5, notes: "", status: "In corso", completed: false },
-      ],
+      items: ["item-1", "item-2", "item-3"],
+    };
+    checklistItemsStore["item-3"] = {
+      id: "item-3",
+      checklistId: SOURCE_CHECKLIST_ID,
+      category: "devicetype-arto-superiore",
+      title: "Item numeric in corso",
+      type: "numeric",
+      assignee: "vol-2",
+      quantity: 5,
+      notes: "",
+      status: "In corso",
+      completed: false,
+      creationDate: { seconds: 1, nanoseconds: 0 },
+      dueDate: null,
+      completionDate: null,
     };
 
     await cloneChecklist.run(
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.items.map((item: { type: string }) => item.type)).toEqual([
+    expect(savedItemDocuments().map((item) => (item as { type: string }).type)).toEqual([
       "boolean",
-      "generic",
+      "numeric",
       "numeric",
     ]);
   });
@@ -189,26 +255,48 @@ describe("cloneChecklist", () => {
     checklistsStore[SOURCE_CHECKLIST_ID] = {
       category: "devicetype-arto-superiore",
       title: "Checklist legacy",
-      items: [
-        { id: "item-1", title: "Item legacy senza type", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
-      ],
+      items: ["item-1"],
+    };
+    checklistItemsStore["item-1"] = {
+      id: "item-1",
+      checklistId: SOURCE_CHECKLIST_ID,
+      title: "Item legacy senza type",
+      assignee: null,
+      quantity: null,
+      notes: "",
+      status: "Assegnare",
+      completed: false,
     };
 
     await cloneChecklist.run(
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.items[0].type).toBe("generic");
+    expect((savedItemDocuments()[0] as { type: string }).type).toBe("generic");
   });
 
+  // Scenario: cloneChecklist crea checklistItems azzerati indipendentemente dallo stato della sorgente
+  it("denormalizes the new checklist's category (not the source item's) onto every cloned checklistItems document", async () => {
+    await cloneChecklist.run(
+      buildRequest({
+        sourceChecklistId: SOURCE_CHECKLIST_ID,
+        title: "Checklist nuova occasione",
+        category: "devicetype-mano",
+      })
+    );
+
+    for (const item of savedItemDocuments()) {
+      expect((item as { category: string }).category).toBe("devicetype-mano");
+    }
+  });
+
+  // Scenario: cloneChecklist crea checklistItems azzerati indipendentemente dallo stato della sorgente
   it("registers clonedFrom as a historical reference to the source checklist", async () => {
     await cloneChecklist.run(
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.clonedFrom).toBe(SOURCE_CHECKLIST_ID);
+    expect(savedChecklistDocument()?.clonedFrom).toBe(SOURCE_CHECKLIST_ID);
   });
 
   it("inherits the category from the source checklist when not overridden by the consumer", async () => {
@@ -216,8 +304,7 @@ describe("cloneChecklist", () => {
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.category).toBe("devicetype-arto-superiore");
+    expect(savedChecklistDocument()?.category).toBe("devicetype-arto-superiore");
   });
 
   it("overrides the category with the one provided by the consumer", async () => {
@@ -229,18 +316,18 @@ describe("cloneChecklist", () => {
       })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.category).toBe("devicetype-mano");
+    expect(savedChecklistDocument()?.category).toBe("devicetype-mano");
   });
 
-  it("saves the title and createdAt provided by the consumer", async () => {
+  it("saves the title, createdAt and the itemId references provided by the consumer", async () => {
     await cloneChecklist.run(
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.title).toBe("Checklist nuova occasione");
-    expect(savedDocument.createdAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    const document = savedChecklistDocument();
+    expect(document?.title).toBe("Checklist nuova occasione");
+    expect(document?.createdAt).toBe(SERVER_TIMESTAMP_SENTINEL);
+    expect(document?.items).toEqual(savedItemDocuments().map((item) => (item as { id: string }).id));
   });
 
   it("returns the generated checklistId to the consumer", async () => {
@@ -259,8 +346,7 @@ describe("cloneChecklist", () => {
       )
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.createdBy).toBe("user-42");
+    expect(savedChecklistDocument()?.createdBy).toBe("user-42");
   });
 
   it("creates an instance with no items when the source checklist has none", async () => {
@@ -274,8 +360,9 @@ describe("cloneChecklist", () => {
       buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID, title: "Checklist nuova occasione" })
     );
 
-    const [savedDocument] = setMock.mock.calls[0];
-    expect(savedDocument.items).toEqual([]);
+    expect(getAllMock).not.toHaveBeenCalled();
+    expect(savedChecklistDocument()?.items).toEqual([]);
+    expect(savedItemDocuments()).toEqual([]);
   });
 
   it("throws not-found when the source checklist does not exist", async () => {
@@ -285,7 +372,7 @@ describe("cloneChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("not-found", "Source checklist not found"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws unauthenticated when there is no auth context", async () => {
@@ -295,7 +382,7 @@ describe("cloneChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("unauthenticated", "Authentication required"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when sourceChecklistId is missing", async () => {
@@ -303,7 +390,7 @@ describe("cloneChecklist", () => {
       cloneChecklist.run(buildRequest({ title: "Checklist nuova occasione" }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid sourceChecklistId"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when title is missing", async () => {
@@ -311,7 +398,7 @@ describe("cloneChecklist", () => {
       cloneChecklist.run(buildRequest({ sourceChecklistId: SOURCE_CHECKLIST_ID }))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid title"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when category is not a string", async () => {
@@ -325,7 +412,7 @@ describe("cloneChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "category must be a string"));
 
-    expect(setMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("logs a success security event when the checklist is cloned", async () => {
