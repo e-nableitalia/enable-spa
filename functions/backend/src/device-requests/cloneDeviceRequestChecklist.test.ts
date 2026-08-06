@@ -7,18 +7,17 @@ const GENERATED_CHECKLIST_ID = "generated-checklist-id";
  * Store in-memory minimale che simula le collection Firestore coinvolte:
  * `users` (RBAC sulla richiesta di destinazione), `deviceRequests`
  * (documento principale della richiesta di destinazione e della sorgente,
- * con back-reference array `checklistIds`) e `checklists` (lettura della
- * checklist sorgente + scrittura della nuova istanza, delegata al core
- * Organizer `cloneChecklist`).
+ * con back-reference array `checklistIds`), `checklists` (lettura della
+ * checklist sorgente, il cui `items` e' un array di soli `itemId`, EA-137,
+ * e scrittura della nuova istanza) e `checklistItems` (documenti reali
+ * risolti dalla sorgente e nuovi documenti creati per la nuova istanza,
+ * delegato interamente al core Organizer `cloneChecklist`, EA-139).
  */
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
-const checklistsSetMock = jest.fn((doc: Record<string, unknown>) => {
-  void doc;
-  return Promise.resolve();
-});
 const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
   const current = deviceRequestsStore[id] ?? {};
   const { checklistIds: arrayUnionOp, ...rest } = updates as {
@@ -37,6 +36,22 @@ const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unk
   };
   return Promise.resolve();
 });
+
+const getAllMock = jest.fn();
+const batchSetMock = jest.fn();
+const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
+let generatedItemCounter = 0;
+
+function checklistItemDoc(id?: string) {
+  if (id !== undefined) {
+    return { id };
+  }
+  generatedItemCounter += 1;
+  return { id: `generated-item-id-${generatedItemCounter}` };
+}
+
+const checklistItemDocMock = jest.fn(checklistItemDoc);
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -70,7 +85,7 @@ function buildCollection(name: string) {
     return {
       doc: jest.fn((id?: string) => {
         if (id === undefined) {
-          return { id: GENERATED_CHECKLIST_ID, set: checklistsSetMock };
+          return { id: GENERATED_CHECKLIST_ID };
         }
         return {
           get: jest.fn(() => {
@@ -82,6 +97,10 @@ function buildCollection(name: string) {
     };
   }
 
+  if (name === "checklistItems") {
+    return { doc: checklistItemDocMock };
+  }
+
   throw new Error(`Unexpected collection ${name}`);
 }
 
@@ -90,6 +109,11 @@ const collectionMock = jest.fn((name: string) => buildCollection(name));
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    getAll: getAllMock,
+    batch: jest.fn(() => ({
+      set: batchSetMock,
+      commit: batchCommitMock,
+    })),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),
@@ -111,10 +135,22 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "admin
   } as CallableRequest;
 }
 
+function savedChecklistDocument() {
+  const call = batchSetMock.mock.calls.find(([ref]) => ref.id === GENERATED_CHECKLIST_ID);
+  return call?.[1] as Record<string, unknown> | undefined;
+}
+
+function savedItemDocuments() {
+  return batchSetMock.mock.calls
+    .filter(([ref]) => ref.id !== GENERATED_CHECKLIST_ID)
+    .map(([, document]) => document as Record<string, unknown>);
+}
+
 describe("cloneDeviceRequestChecklist", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    checklistsSetMock.mockResolvedValue(undefined);
+    generatedItemCounter = 0;
+    batchCommitMock.mockResolvedValue(undefined);
 
     usersStore = {
       "admin-1": { role: "admin" },
@@ -169,18 +205,56 @@ describe("cloneDeviceRequestChecklist", () => {
       "source-checklist-same-type": {
         category: "Kinetic Hand",
         title: "Checklist evento passato",
-        items: [
-          { id: "item-1", title: "Stampa dita", assignee: "vol-9", quantity: 2, notes: "vecchia nota", status: "Completata", completed: true },
-        ],
+        items: ["item-1"],
       },
       "source-checklist-other-type": {
         category: "Guitar Pick",
         title: "Checklist plettro",
-        items: [
-          { id: "item-2", title: "Taglia plettro", assignee: null, quantity: 5, notes: "", status: "Da iniziare", completed: false },
-        ],
+        items: ["item-2"],
       },
     };
+
+    checklistItemsStore = {
+      "item-1": {
+        id: "item-1",
+        checklistId: "source-checklist-same-type",
+        category: "Kinetic Hand",
+        title: "Stampa dita",
+        type: "generic",
+        assignee: "vol-9",
+        quantity: 2,
+        notes: "vecchia nota",
+        status: "Completata",
+        completed: true,
+        creationDate: { seconds: 1, nanoseconds: 0 },
+        dueDate: null,
+        completionDate: { seconds: 2, nanoseconds: 0 },
+      },
+      "item-2": {
+        id: "item-2",
+        checklistId: "source-checklist-other-type",
+        category: "Guitar Pick",
+        title: "Taglia plettro",
+        type: "generic",
+        assignee: null,
+        quantity: 5,
+        notes: "",
+        status: "Da iniziare",
+        completed: false,
+        creationDate: { seconds: 1, nanoseconds: 0 },
+        dueDate: null,
+        completionDate: null,
+      },
+    };
+
+    getAllMock.mockImplementation((...refs: { id: string }[]) =>
+      Promise.resolve(
+        refs.map((ref) => {
+          const data = checklistItemsStore[ref.id];
+          return { id: ref.id, exists: data !== undefined, data: () => data };
+        })
+      )
+    );
   });
 
   it("clones the checklist from a source request of the same devicetype and links it to the target request", async () => {
@@ -191,15 +265,24 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     );
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({
         category: "Kinetic Hand",
         clonedFrom: "source-checklist-same-type",
-        items: [
-          expect.objectContaining({ title: "Stampa dita", quantity: 2, assignee: null, status: "Assegnare", completed: false }),
-        ],
       })
     );
+    expect(savedItemDocuments()).toEqual([
+      expect.objectContaining({
+        title: "Stampa dita",
+        quantity: 2,
+        assignee: null,
+        status: "Assegnare",
+        completed: false,
+        creationDate: null,
+        dueDate: null,
+        completionDate: null,
+      }),
+    ]);
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
     expect(deviceRequestsStore["req-target"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
   });
@@ -212,15 +295,15 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     );
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({
         category: "Guitar Pick",
         clonedFrom: "source-checklist-other-type",
-        items: [
-          expect.objectContaining({ title: "Taglia plettro", quantity: 5, status: "Assegnare", completed: false }),
-        ],
       })
     );
+    expect(savedItemDocuments()).toEqual([
+      expect.objectContaining({ title: "Taglia plettro", quantity: 5, status: "Assegnare", completed: false }),
+    ]);
     expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
     expect(deviceRequestsStore["req-target"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
   });
@@ -233,7 +316,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     );
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({
         category: "Guitar Pick",
         clonedFrom: "source-checklist-other-type",
@@ -265,7 +348,7 @@ describe("cloneDeviceRequestChecklist", () => {
       new HttpsError("permission-denied", "Only admin or assigned volunteers can clone a checklist for this request")
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
     expect(deviceRequestsStore["req-target"]?.checklistIds).toBeUndefined();
   });
 
@@ -307,7 +390,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
     expect(deviceRequestsStore["req-target-at-max-checklists"]?.checklistIds).toEqual([
       "c-1",
       "c-2",
@@ -337,7 +420,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid requestId"));
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when sourceRequestId is missing", async () => {
@@ -347,7 +430,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid sourceRequestId"));
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when sourceChecklistId is missing", async () => {
@@ -357,7 +440,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "Missing or invalid sourceChecklistId"));
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws not-found when the target device request does not exist", async () => {
@@ -370,7 +453,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("not-found", "Device request not found"));
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws not-found when the source device request does not exist", async () => {
@@ -383,7 +466,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     ).rejects.toMatchObject(new HttpsError("not-found", "Source device request not found"));
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws failed-precondition when the source device request has no checklists at all", async () => {
@@ -398,7 +481,7 @@ describe("cloneDeviceRequestChecklist", () => {
       new HttpsError("failed-precondition", "The source checklist is not linked to the source device request")
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("throws failed-precondition when sourceChecklistId does not belong to the source request's checklistIds", async () => {
@@ -413,7 +496,7 @@ describe("cloneDeviceRequestChecklist", () => {
       new HttpsError("failed-precondition", "The source checklist is not linked to the source device request")
     );
 
-    expect(checklistsSetMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   it("uses the provided title instead of the default one", async () => {
@@ -429,7 +512,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     );
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Checklist custom" }));
+    expect(savedChecklistDocument()).toEqual(expect.objectContaining({ title: "Checklist custom" }));
   });
 
   it("generates a default title from the target request's requestNumber when title is omitted", async () => {
@@ -440,7 +523,7 @@ describe("cloneDeviceRequestChecklist", () => {
       )
     );
 
-    expect(checklistsSetMock).toHaveBeenCalledWith(
+    expect(savedChecklistDocument()).toEqual(
       expect.objectContaining({ title: "Checklist di fabbricazione - REQ-000010" })
     );
   });
