@@ -50,15 +50,15 @@ describe("applyStatusChangeTransaction", () => {
     applyStatusChangeTransaction(tx as unknown as Transaction, requestRef as unknown as DocumentReference, {
       db: db as never,
       requestId: "req-1",
-      currentStatus: "personalizzazione",
-      newStatus: "attesa materiali",
+      currentStatus: "in produzione",
+      newStatus: "pronta per spedizione",
       createdBy: "volunteer-1",
       note: "nota di transizione",
     });
 
     expect(tx.update).toHaveBeenCalledTimes(1);
     expect(tx.update).toHaveBeenCalledWith(requestRef, {
-      status: "attesa materiali",
+      status: "pronta per spedizione",
       publicStatus: "fabbricazione in corso",
       updatedAt: "SERVER_TIMESTAMP",
     });
@@ -66,8 +66,8 @@ describe("applyStatusChangeTransaction", () => {
     expect(tx.set).toHaveBeenCalledTimes(2);
     expect(tx.set).toHaveBeenNthCalledWith(1, eventDocRef, {
       type: "status_change",
-      fromStatus: "personalizzazione",
-      toStatus: "attesa materiali",
+      fromStatus: "in produzione",
+      toStatus: "pronta per spedizione",
       timestamp: "SERVER_TIMESTAMP",
       createdBy: "volunteer-1",
       note: "nota di transizione",
@@ -92,7 +92,7 @@ describe("applyStatusChangeTransaction", () => {
       db: db as never,
       requestId: "req-2",
       currentStatus: "inviata",
-      newStatus: "famiglia contattata",
+      newStatus: "da gestire",
       createdBy: "admin-1",
     });
 
@@ -103,7 +103,7 @@ describe("applyStatusChangeTransaction", () => {
     expect(eventPayload).toEqual({
       type: "status_change",
       fromStatus: "inviata",
-      toStatus: "famiglia contattata",
+      toStatus: "da gestire",
       timestamp: "SERVER_TIMESTAMP",
       createdBy: "admin-1",
       note: null,
