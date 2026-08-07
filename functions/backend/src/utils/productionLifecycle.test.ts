@@ -4,14 +4,11 @@ import {
 } from "./productionLifecycle";
 
 describe("PRODUCTION_LIFECYCLE_STATUSES", () => {
-  // Scenario 1: unica fonte di verità backend per gli 8 stati di fabbricazione
-  it("exposes exactly the same 8 statuses previously duplicated in mapToPublicStatus.ts", () => {
+  // Scenario (EA-148): riduzione da 8 a 4 stati dopo il collasso dei 5 stati
+  // di produzione pre-spedizione nell'unico valore 'in produzione'
+  it("exposes exactly the 4 statuses after the EA-148 collapse", () => {
     expect(PRODUCTION_LIFECYCLE_STATUSES).toEqual([
-      "scelta device e dimensionamento",
-      "personalizzazione",
-      "attesa materiali",
-      "fabbricazione",
-      "fitting",
+      "in produzione",
       "pronta per spedizione",
       "spedita",
       "followup famiglia",

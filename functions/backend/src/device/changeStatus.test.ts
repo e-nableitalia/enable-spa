@@ -158,7 +158,7 @@ describe("changeStatus", () => {
 
     deviceRequestsStore = {
       "req-1": {
-        status: "scelta device e dimensionamento",
+        status: "in produzione",
         assignedVolunteers: ["volunteer-1"],
       },
     };
@@ -177,18 +177,19 @@ describe("changeStatus", () => {
     expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "spedita" });
   });
 
-  // Scenario 2 (EA-103): volontario assegnato può eseguire una delle 5 transizioni consentite
-  it("allows an assigned volunteer to perform one of the 5 allowed transitions", async () => {
+  // Scenario 2 (EA-103, ridotto a 2 coppie da EA-148): volontario assegnato
+  // può eseguire una delle 2 transizioni consentite
+  it("allows an assigned volunteer to perform one of the 2 allowed transitions", async () => {
     const result = await changeStatus.run(
-      buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "volunteer-1")
+      buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione" }, "volunteer-1")
     );
 
     expect(result).toEqual({ success: true });
-    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "personalizzazione" });
+    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "pronta per spedizione" });
   });
 
-  // Scenario 3 (EA-103): volontario tenta una transizione non consentita
-  it("rejects an assigned volunteer attempting a transition not among the 5 allowed", async () => {
+  // Scenario 3 (EA-103, ridotto a 2 coppie da EA-148): volontario tenta una transizione non consentita
+  it("rejects an assigned volunteer attempting a transition not among the 2 allowed", async () => {
     await expect(
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "spedita" }, "volunteer-1"))
     ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid status transition"));
@@ -199,7 +200,7 @@ describe("changeStatus", () => {
   // Scenario 4 (EA-103): volontario non assegnato viene rifiutato indipendentemente dalla transizione
   it("rejects a volunteer not assigned to the request regardless of the target status", async () => {
     await expect(
-      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "volunteer-2"))
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione" }, "volunteer-2"))
     ).rejects.toMatchObject(new HttpsError("permission-denied", "Not assigned volunteer"));
 
     expect(runTransactionMock).not.toHaveBeenCalled();
@@ -208,7 +209,7 @@ describe("changeStatus", () => {
   // Regression (EA-103): ruolo diverso da admin/volunteer resta rifiutato come da comportamento pre-refactoring
   it("rejects a role other than admin or volunteer", async () => {
     await expect(
-      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "organizer-1"))
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione" }, "organizer-1"))
     ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid role"));
 
     expect(runTransactionMock).not.toHaveBeenCalled();
@@ -217,7 +218,7 @@ describe("changeStatus", () => {
   // Scenario 1 (EA-104): nessuna notifica se il parametro notifica è omesso
   it("sends no notification when notifica is omitted", async () => {
     const result = await changeStatus.run(
-      buildRequest({ requestId: "req-1", newStatus: "personalizzazione" }, "admin-1")
+      buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione" }, "admin-1")
     );
 
     expect(result).toEqual({ success: true });
@@ -230,7 +231,7 @@ describe("changeStatus", () => {
       buildRequest(
         {
           requestId: "req-1",
-          newStatus: "personalizzazione",
+          newStatus: "pronta per spedizione",
           note: "presa in carico",
           notifica: { admin: true, volunteers: true, telegram: true },
         },
@@ -242,8 +243,8 @@ describe("changeStatus", () => {
     const [params] = sendChangeStatusNotificationsMock.mock.calls[0];
     expect(params).toMatchObject({
       requestId: "req-1",
-      currentStatus: "scelta device e dimensionamento",
-      newStatus: "personalizzazione",
+      currentStatus: "in produzione",
+      newStatus: "pronta per spedizione",
       note: "presa in carico",
       notifica: { admin: true, volunteers: true, telegram: true },
     });
@@ -253,13 +254,13 @@ describe("changeStatus", () => {
   // fonte changeStatus.ts righe 74-98).
   it("updates status/publicStatus/updatedAt, writes the event and syncs publicDeviceRequests in a single transaction", async () => {
     await changeStatus.run(
-      buildRequest({ requestId: "req-1", newStatus: "attesa materiali", note: "avanti" }, "admin-1")
+      buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione", note: "avanti" }, "admin-1")
     );
 
     expect(runTransactionMock).toHaveBeenCalledTimes(1);
 
     expect(deviceRequestsStore["req-1"]).toMatchObject({
-      status: "attesa materiali",
+      status: "pronta per spedizione",
       publicStatus: "fabbricazione in corso",
       updatedAt: SERVER_TIMESTAMP_SENTINEL,
     });
@@ -267,8 +268,8 @@ describe("changeStatus", () => {
     expect(eventsStore["req-1"]).toHaveLength(1);
     expect(eventsStore["req-1"][0]).toEqual({
       type: "status_change",
-      fromStatus: "scelta device e dimensionamento",
-      toStatus: "attesa materiali",
+      fromStatus: "in produzione",
+      toStatus: "pronta per spedizione",
       timestamp: SERVER_TIMESTAMP_SENTINEL,
       createdBy: "admin-1",
       note: "avanti",
@@ -284,14 +285,117 @@ describe("changeStatus", () => {
     forcePublicWriteFailure = true;
 
     await expect(
-      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "attesa materiali" }, "admin-1"))
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione" }, "admin-1"))
     ).rejects.toThrow("Simulated Firestore write failure");
 
     expect(deviceRequestsStore["req-1"]).toEqual({
-      status: "scelta device e dimensionamento",
+      status: "in produzione",
       assignedVolunteers: ["volunteer-1"],
     });
     expect(eventsStore["req-1"]).toBeUndefined();
     expect(publicStore["req-1"]).toBeUndefined();
+  });
+});
+
+describe("changeStatus - EA-148 (riduzione dominio status a 11 valori)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    forcePublicWriteFailure = false;
+
+    usersStore = {
+      "admin-1": { role: "admin", consents: ACCEPTED_CONSENTS },
+      "volunteer-1": { role: "volunteer", consents: ACCEPTED_CONSENTS },
+    };
+
+    deviceRequestsStore = {
+      "req-triage": {
+        status: "validata",
+        assignedVolunteers: [],
+      },
+      "req-waiting": {
+        status: "attesa volontario",
+        assignedVolunteers: [],
+      },
+      "req-cancel": {
+        status: "da gestire",
+        assignedVolunteers: [],
+      },
+      "req-prod": {
+        status: "in produzione",
+        assignedVolunteers: ["volunteer-1"],
+      },
+      "req-manage": {
+        status: "da gestire",
+        assignedVolunteers: ["volunteer-1"],
+      },
+    };
+
+    eventsStore = {};
+    publicStore = {};
+  });
+
+  // Scenario 1: Admin porta una richiesta di triage a "da gestire"
+  it("moves a request from 'validata' to 'da gestire' and records a status_change event", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-triage", newStatus: "da gestire" }, "admin-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(deviceRequestsStore["req-triage"]).toMatchObject({ status: "da gestire" });
+    expect(eventsStore["req-triage"]).toHaveLength(1);
+    expect(eventsStore["req-triage"][0]).toMatchObject({
+      type: "status_change",
+      fromStatus: "validata",
+      toStatus: "da gestire",
+    });
+  });
+
+  // Scenario 2: Admin porta una richiesta a "in produzione"
+  it("moves a request from 'attesa volontario' to 'in produzione'", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-waiting", newStatus: "in produzione" }, "admin-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(deviceRequestsStore["req-waiting"]).toMatchObject({ status: "in produzione" });
+  });
+
+  // Scenario 3: Admin annulla una richiesta con motivo specifico salvato come nota sull'evento
+  it("cancels a non-terminal request to 'annullata', storing the specific reason as an event note rather than a separate status value", async () => {
+    const result = await changeStatus.run(
+      buildRequest(
+        { requestId: "req-cancel", newStatus: "annullata", note: "famiglia irraggiungibile da 3 mesi" },
+        "admin-1"
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(deviceRequestsStore["req-cancel"]).toMatchObject({ status: "annullata" });
+    expect(eventsStore["req-cancel"]).toHaveLength(1);
+    expect(eventsStore["req-cancel"][0]).toMatchObject({
+      type: "status_change",
+      toStatus: "annullata",
+      note: "famiglia irraggiungibile da 3 mesi",
+    });
+  });
+
+  // Scenario 4: Volontario avanza tra le due coppie consentite
+  it("allows an assigned volunteer to move 'in produzione' -> 'pronta per spedizione'", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-prod", newStatus: "pronta per spedizione" }, "volunteer-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(deviceRequestsStore["req-prod"]).toMatchObject({ status: "pronta per spedizione" });
+  });
+
+  // Scenario 5: Volontario tenta una transizione non più consentita
+  it("rejects an assigned volunteer moving 'da gestire' -> 'in produzione' with permission-denied and leaves status unchanged", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-manage", newStatus: "in produzione" }, "volunteer-1"))
+    ).rejects.toMatchObject(new HttpsError("permission-denied", "Invalid status transition"));
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+    expect(deviceRequestsStore["req-manage"]).toMatchObject({ status: "da gestire" });
   });
 });
