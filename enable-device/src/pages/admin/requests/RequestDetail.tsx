@@ -521,8 +521,8 @@ export default function RequestDetail() {
   /**
    * Valida una richiesta con status "inviata":
    * 1. Salva i campi operativi in deviceRequests/{id}
-   * 2. Aggiorna publicDeviceRequests/{id} con publicStatus = "da gestire"
-   * 3. Cambia lo status interno a "famiglia contattata" via cloud function
+   * 2. Aggiorna publicDeviceRequests/{id} con il devicetype
+   * 3. Cambia lo status interno a "validata" via cloud function
    */
   const handleValidate = async () => {
     if (!id) return;
@@ -548,9 +548,8 @@ export default function RequestDetail() {
         amputationType: validationForm.amputationType.trim(),
       });
 
-      // 2. Rendi la richiesta visibile ai volontari (publicStatus) e aggiorna devicetype
+      // 2. Aggiorna il devicetype sulla proiezione pubblica
       await updateDoc(doc(db, "publicDeviceRequests", id), {
-        publicStatus: "da gestire",
         devicetype: valIsDeviceTypeOther ? valDeviceTypeOtherText.trim() : validationForm.deviceTypeVal.trim(),
       });
 
@@ -1551,7 +1550,7 @@ export default function RequestDetail() {
       >
         <p>
           Confermando, la richiesta sarà resa visibile ai volontari con stato{" "}
-          <strong>«validata»</strong> e publicStatus <strong>«da gestire»</strong>.
+          <strong>«validata»</strong>.
           Questa operazione non può essere annullata automaticamente.
         </p>
       </Dialog>

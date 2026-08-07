@@ -1,10 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
-import type { DocumentReference, Firestore, Transaction } from "firebase-admin/firestore";
-import { mapToPublicStatus } from "../utils/mapToPublicStatus";
+import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 
 export interface ApplyStatusChangeParams {
-  db: Firestore;
-  requestId: string;
   currentStatus: string;
   newStatus: string;
   createdBy: string;
@@ -12,23 +9,21 @@ export interface ApplyStatusChangeParams {
 }
 
 /**
- * Costruisce, dentro la transazione `tx` già aperta dal caller, i tre write
- * collegati a un cambio di stato: aggiornamento del documento principale,
- * evento di event sourcing (`dc-request-event`) e sincronizzazione di
- * `publicStatus` verso `publicDeviceRequests` (`dc-public-status`). Non
- * esegue alcuna I/O propria: l'atomicità resta responsabilità della
- * `db.runTransaction` del caller.
+ * Costruisce, dentro la transazione `tx` già aperta dal caller, i due write
+ * collegati a un cambio di stato: aggiornamento del documento principale ed
+ * evento di event sourcing (`dc-request-event`). Non esegue alcuna I/O
+ * propria: l'atomicità resta responsabilità della `db.runTransaction` del
+ * caller.
  */
 export function applyStatusChangeTransaction(
   tx: Transaction,
   requestRef: DocumentReference,
   params: ApplyStatusChangeParams
 ): void {
-  const { db, requestId, currentStatus, newStatus, createdBy, note } = params;
+  const { currentStatus, newStatus, createdBy, note } = params;
 
   tx.update(requestRef, {
     status: newStatus,
-    publicStatus: mapToPublicStatus(newStatus),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
@@ -40,10 +35,4 @@ export function applyStatusChangeTransaction(
     createdBy,
     note: note ?? null,
   });
-
-  tx.set(
-    db.collection("publicDeviceRequests").doc(requestId),
-    { publicStatus: mapToPublicStatus(newStatus) },
-    { merge: true }
-  );
 }

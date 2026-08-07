@@ -26,30 +26,16 @@ function buildRequestRef(eventDocRef: unknown) {
   };
 }
 
-function buildDb(publicDocRef: unknown) {
-  return {
-    collection: jest.fn((name: string) => {
-      if (name !== "publicDeviceRequests") {
-        throw new Error(`Unexpected collection ${name}`);
-      }
-      return { doc: jest.fn(() => publicDocRef) };
-    }),
-  };
-}
-
 describe("applyStatusChangeTransaction", () => {
-  // Scenario "la transazione aggiorna atomicamente i tre documenti" (EA-106):
-  // le tre write vengono accodate sulla stessa tx, senza I/O proprio.
-  it("queues the three writes (status update, event, public sync) on the given tx", () => {
+  // Scenario "la transazione aggiorna atomicamente i due documenti" (EA-106,
+  // aggiornato da EA-149: niente più scrittura di publicStatus né
+  // sincronizzazione di publicDeviceRequests).
+  it("queues the two writes (status update, event) on the given tx, without publicStatus", () => {
     const tx = buildTx();
     const eventDocRef = { id: "event-1" };
-    const publicDocRef = { id: "req-1" };
     const requestRef = buildRequestRef(eventDocRef);
-    const db = buildDb(publicDocRef);
 
     applyStatusChangeTransaction(tx as unknown as Transaction, requestRef as unknown as DocumentReference, {
-      db: db as never,
-      requestId: "req-1",
       currentStatus: "in produzione",
       newStatus: "pronta per spedizione",
       createdBy: "volunteer-1",
@@ -59,11 +45,10 @@ describe("applyStatusChangeTransaction", () => {
     expect(tx.update).toHaveBeenCalledTimes(1);
     expect(tx.update).toHaveBeenCalledWith(requestRef, {
       status: "pronta per spedizione",
-      publicStatus: "fabbricazione in corso",
       updatedAt: "SERVER_TIMESTAMP",
     });
 
-    expect(tx.set).toHaveBeenCalledTimes(2);
+    expect(tx.set).toHaveBeenCalledTimes(1);
     expect(tx.set).toHaveBeenNthCalledWith(1, eventDocRef, {
       type: "status_change",
       fromStatus: "in produzione",
@@ -72,12 +57,6 @@ describe("applyStatusChangeTransaction", () => {
       createdBy: "volunteer-1",
       note: "nota di transizione",
     });
-    expect(tx.set).toHaveBeenNthCalledWith(
-      2,
-      publicDocRef,
-      { publicStatus: "fabbricazione in corso" },
-      { merge: true }
-    );
   });
 
   // Scenario "struttura dell'evento invariata" (EA-106): esattamente i 6
@@ -86,11 +65,8 @@ describe("applyStatusChangeTransaction", () => {
     const tx = buildTx();
     const eventDocRef = { id: "event-2" };
     const requestRef = buildRequestRef(eventDocRef);
-    const db = buildDb({ id: "req-2" });
 
     applyStatusChangeTransaction(tx as unknown as Transaction, requestRef as unknown as DocumentReference, {
-      db: db as never,
-      requestId: "req-2",
       currentStatus: "inviata",
       newStatus: "da gestire",
       createdBy: "admin-1",

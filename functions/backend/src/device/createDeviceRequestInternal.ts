@@ -1,6 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { mapToPublicStatus } from "../utils/mapToPublicStatus";
 
 const REGION = "europe-west1";
 
@@ -44,7 +43,6 @@ export const createDeviceRequestInternal = onCall(
                     age: data.age || null,
                     gender: data.gender || null,
                     status: "inviata",
-                    publicStatus: mapToPublicStatus("inviata"),
                     assignedVolunteers: [],
                     createdAt: FieldValue.serverTimestamp(),
                     updatedAt: FieldValue.serverTimestamp(),
@@ -84,7 +82,6 @@ export const createDeviceRequestInternal = onCall(
                     db.collection("publicDeviceRequests").doc(requestRef.id),
                     {
                         province: data.province,
-                        publicStatus: mapToPublicStatus("inviata"),
                         createdAt: FieldValue.serverTimestamp(),
                         devicetype: data.devicetype || "unknown",
                         requestNumber: requestNumber,

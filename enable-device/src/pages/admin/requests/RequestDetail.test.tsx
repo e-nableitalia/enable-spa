@@ -156,3 +156,35 @@ describe("RequestDetail (admin) - flag requiresAttention condiviso (EA-105)", ()
     expect(await screen.findByText("⚠️ Sì")).toBeInTheDocument();
   });
 });
+
+describe("RequestDetail (admin) - handleValidate non scrive più publicStatus (EA-149)", () => {
+  beforeEach(() => {
+    for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
+    for (const key of Object.keys(firestoreCollections)) delete firestoreCollections[key];
+    callable.mockClear();
+    updateDocMock.mockClear();
+  });
+
+  it("Scenario 2: valida una richiesta 'inviata' senza scrivere publicStatus, e la porta a status 'validata'", async () => {
+    const user = userEvent.setup();
+    setRequestDoc({ requestNumber: "42", status: "inviata", assignedVolunteers: [] });
+    render(<RequestDetail />);
+
+    await user.click(await screen.findByRole("button", { name: "Valida richiesta" }));
+    await user.click(await screen.findByRole("button", { name: "Conferma validazione" }));
+
+    expect(callable).toHaveBeenCalledWith("changeStatus", {
+      requestId: "req1",
+      newStatus: "validata",
+      note: "Richiesta validata dall'amministratore.",
+    });
+
+    const publicWrites = updateDocMock.mock.calls.filter(
+      ([ref]) => (ref as { __path: string }).__path === "publicDeviceRequests/req1"
+    );
+    expect(publicWrites.length).toBeGreaterThan(0);
+    for (const [, payload] of publicWrites) {
+      expect(payload).not.toHaveProperty("publicStatus");
+    }
+  });
+});

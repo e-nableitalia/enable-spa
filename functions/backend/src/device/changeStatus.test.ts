@@ -10,23 +10,20 @@ const ACCEPTED_CONSENTS = {
 
 /**
  * Store in-memory minimale che simula le collection Firestore coinvolte:
- * `users` (RBAC + consensi volontario), `deviceRequests` (documento
- * principale + sottocollezione `events`) e `publicDeviceRequests`
- * (sincronizzazione di `publicStatus`, convenzione `dc-public-status`).
+ * `users` (RBAC + consensi volontario) e `deviceRequests` (documento
+ * principale + sottocollezione `events`).
  */
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 let eventsStore: Record<string, Array<Record<string, unknown>>>;
-let publicStore: Record<string, Record<string, unknown> | undefined>;
 
-// Consente ai test di far fallire la write su publicDeviceRequests per
-// verificare che la transazione non produca scritture parziali.
-let forcePublicWriteFailure = false;
+// Consente ai test di far fallire la write dell'evento per verificare che
+// la transazione non produca scritture parziali.
+let forceEventWriteFailure = false;
 
 type WriteRef =
   | { __kind: "deviceRequest"; __id: string }
-  | { __kind: "event"; __id: string }
-  | { __kind: "public"; __id: string };
+  | { __kind: "event"; __id: string };
 
 interface QueuedWrite {
   ref: WriteRef;
@@ -73,10 +70,6 @@ function buildCollection(name: string) {
     return { doc: jest.fn((id: string) => buildDeviceRequestRef(id)) };
   }
 
-  if (name === "publicDeviceRequests") {
-    return { doc: jest.fn((id: string) => ({ __kind: "public" as const, __id: id })) };
-  }
-
   throw new Error(`Unexpected collection ${name}`);
 }
 
@@ -93,11 +86,11 @@ const runTransactionMock = jest.fn(
       update: jest.fn((ref: WriteRef, data: Record<string, unknown>) => {
         writes.push({ ref, data });
       }),
-      set: jest.fn((ref: WriteRef, data: Record<string, unknown>, options?: { merge?: boolean }) => {
-        if (forcePublicWriteFailure && ref.__kind === "public") {
+      set: jest.fn((ref: WriteRef, data: Record<string, unknown>) => {
+        if (forceEventWriteFailure && ref.__kind === "event") {
           throw new Error("Simulated Firestore write failure");
         }
-        writes.push({ ref, data, options });
+        writes.push({ ref, data });
       }),
     };
 
@@ -109,10 +102,6 @@ const runTransactionMock = jest.fn(
       } else if (w.ref.__kind === "event") {
         eventsStore[w.ref.__id] = eventsStore[w.ref.__id] ?? [];
         eventsStore[w.ref.__id].push(w.data);
-      } else if (w.ref.__kind === "public") {
-        publicStore[w.ref.__id] = w.options?.merge
-          ? { ...(publicStore[w.ref.__id] ?? {}), ...w.data }
-          : w.data;
       }
     }
   }
@@ -147,7 +136,7 @@ function buildRequest(data: Record<string, unknown>, uid: string | null): Callab
 describe("changeStatus", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    forcePublicWriteFailure = false;
+    forceEventWriteFailure = false;
 
     usersStore = {
       "admin-1": { role: "admin", consents: ACCEPTED_CONSENTS },
@@ -164,7 +153,6 @@ describe("changeStatus", () => {
     };
 
     eventsStore = {};
-    publicStore = {};
   });
 
   // Scenario 1 (EA-103): admin può eseguire qualsiasi transizione
@@ -250,20 +238,22 @@ describe("changeStatus", () => {
     });
   });
 
-  // Scenario "la transazione aggiorna atomicamente i tre documenti" (EA-106,
-  // fonte changeStatus.ts righe 74-98).
-  it("updates status/publicStatus/updatedAt, writes the event and syncs publicDeviceRequests in a single transaction", async () => {
+  // Scenario 1 (EA-149): changeStatus non scrive più publicStatus, né su
+  // deviceRequests né su publicDeviceRequests (quest'ultima non viene più
+  // nemmeno toccata: buildCollection lancia se qualcosa la richiede ancora).
+  it("Scenario 1: updates status/updatedAt and writes the event, without ever touching publicStatus or publicDeviceRequests", async () => {
     await changeStatus.run(
       buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione", note: "avanti" }, "admin-1")
     );
 
     expect(runTransactionMock).toHaveBeenCalledTimes(1);
 
-    expect(deviceRequestsStore["req-1"]).toMatchObject({
+    expect(deviceRequestsStore["req-1"]).toEqual({
       status: "pronta per spedizione",
-      publicStatus: "fabbricazione in corso",
+      assignedVolunteers: ["volunteer-1"],
       updatedAt: SERVER_TIMESTAMP_SENTINEL,
     });
+    expect(deviceRequestsStore["req-1"]).not.toHaveProperty("publicStatus");
 
     expect(eventsStore["req-1"]).toHaveLength(1);
     expect(eventsStore["req-1"][0]).toEqual({
@@ -274,15 +264,13 @@ describe("changeStatus", () => {
       createdBy: "admin-1",
       note: "avanti",
     });
-
-    expect(publicStore["req-1"]).toEqual({ publicStatus: "fabbricazione in corso" });
   });
 
   // Scenario "fallimento della transazione non produce scritture parziali"
-  // (non regressione, EA-106): se una delle tre write fallisce, nessuno dei
-  // tre documenti viene modificato.
-  it("leaves all three documents untouched when one of the transaction writes fails", async () => {
-    forcePublicWriteFailure = true;
+  // (non regressione, EA-106): se una delle write fallisce, nessuno dei due
+  // documenti viene modificato.
+  it("leaves both documents untouched when one of the transaction writes fails", async () => {
+    forceEventWriteFailure = true;
 
     await expect(
       changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "pronta per spedizione" }, "admin-1"))
@@ -293,14 +281,13 @@ describe("changeStatus", () => {
       assignedVolunteers: ["volunteer-1"],
     });
     expect(eventsStore["req-1"]).toBeUndefined();
-    expect(publicStore["req-1"]).toBeUndefined();
   });
 });
 
 describe("changeStatus - EA-148 (riduzione dominio status a 11 valori)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    forcePublicWriteFailure = false;
+    forceEventWriteFailure = false;
 
     usersStore = {
       "admin-1": { role: "admin", consents: ACCEPTED_CONSENTS },
@@ -331,7 +318,6 @@ describe("changeStatus - EA-148 (riduzione dominio status a 11 valori)", () => {
     };
 
     eventsStore = {};
-    publicStore = {};
   });
 
   // Scenario 1: Admin porta una richiesta di triage a "da gestire"

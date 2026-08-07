@@ -1,6 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { mapToPublicStatus } from "../utils/mapToPublicStatus";
 import { verifyRecaptcha } from "../security/recaptcha";
 import { checkEmailRateLimit, checkIpRateLimit } from "../security/rateLimit";
 import { logSecurityEvent } from "../security/securityLog";
@@ -151,7 +150,6 @@ export const createDeviceRequest = onCall(
           age: data.age || null,
           gender: data.gender || null,
           status: "inviata",
-          publicStatus: mapToPublicStatus("inviata"),
           assignedVolunteers: [],
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
@@ -187,7 +185,6 @@ export const createDeviceRequest = onCall(
           db.collection("publicDeviceRequests").doc(requestRef.id),
           {
             province: data.province,
-            publicStatus: mapToPublicStatus("inviata"),
             createdAt: FieldValue.serverTimestamp(),
             devicetype: data.devicetype || "unknown",
             requestNumber,
