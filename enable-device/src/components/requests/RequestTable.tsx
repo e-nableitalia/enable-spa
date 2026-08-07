@@ -8,7 +8,7 @@ import { InputText } from "primereact/inputtext";
 import { useState, useEffect, useMemo } from "react";
 import { FilterMatchMode } from "primereact/api";
 import type { DataTableFilterMeta } from "primereact/datatable";
-import { REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY } from "../../helpers/requestStatus";
+import { REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, getPublicStatusGroup } from "../../helpers/requestStatus";
 
 interface Props {
   requests: any[];
@@ -121,9 +121,10 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
     />
   );
 
-  // Mappa i dati per convertire i campi data in oggetti Date
+  // Mappa i dati per convertire i campi data in oggetti Date e ricalcolare lo stato pubblico da status (EA-150)
   const tableData = requests.map((r) => ({
     ...r,
+    publicStatus: getPublicStatusGroup(r.status || ""),
     createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : null,
     updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : null,
   }));
@@ -157,7 +158,7 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
   }, [requests]);
 
   const publicStatusOptions = useMemo(() => {
-    const unique = [...new Set(requests.map((r) => r.publicStatus).filter(Boolean))] as string[];
+    const unique = [...new Set(requests.map((r) => getPublicStatusGroup(r.status || "")).filter(Boolean))] as string[];
     return unique.sort().map((s) => ({ label: s, value: s }));
   }, [requests]);
 

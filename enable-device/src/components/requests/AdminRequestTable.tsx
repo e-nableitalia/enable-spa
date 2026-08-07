@@ -15,7 +15,7 @@ import { useRef, useState, useEffect, useMemo } from "react";
 import { Toast } from "primereact/toast";
 import { Dialog } from "primereact/dialog";
 import { MultiSelect } from "primereact/multiselect";
-import { REQUEST_STATUSES, REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType } from "../../helpers/requestStatus";
+import { REQUEST_STATUSES, REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType, getPublicStatusGroup } from "../../helpers/requestStatus";
 import { FilterMatchMode } from "primereact/api";
 import type { DataTableFilterMeta } from "primereact/datatable";
 
@@ -167,6 +167,8 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
 
   const tableData = requests.map((r) => ({
     ...r,
+    // Stato pubblico display-only, ricalcolato al volo da status (EA-150)
+    publicStatus: getPublicStatusGroup(r.status || ""),
     createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : null,
     updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : null,
     // Campo derivato per il filtro: array di UID → nomi ricercabili
