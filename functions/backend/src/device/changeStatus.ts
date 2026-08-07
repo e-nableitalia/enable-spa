@@ -60,8 +60,6 @@ export const changeStatus = onCall(
 
     await db.runTransaction(async (tx) => {
       applyStatusChangeTransaction(tx, requestRef, {
-        db,
-        requestId,
         currentStatus,
         newStatus,
         createdBy: uid,
