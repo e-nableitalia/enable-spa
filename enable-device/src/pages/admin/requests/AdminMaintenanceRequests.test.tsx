@@ -75,7 +75,10 @@ describe("AdminMaintenanceRequests (EA-152) - migrazione one-shot dei 10 stati r
     await clickMigrate();
 
     await waitFor(() => expect(allUpdates).toHaveLength(1));
-    expect(allUpdates[0]).toEqual({ path: "deviceRequests/r1", data: { status: "da gestire" } });
+    expect(allUpdates[0]).toEqual({
+      path: "deviceRequests/r1",
+      data: { status: "da gestire", updatedAt: "__SERVER_TIMESTAMP__" },
+    });
     expect(allSets).toHaveLength(1);
     expect(allSets[0].data).toMatchObject({
       type: "status_change",
@@ -91,7 +94,10 @@ describe("AdminMaintenanceRequests (EA-152) - migrazione one-shot dei 10 stati r
     await clickMigrate();
 
     await waitFor(() => expect(allUpdates).toHaveLength(1));
-    expect(allUpdates[0]).toEqual({ path: "deviceRequests/r2", data: { status: "in produzione" } });
+    expect(allUpdates[0]).toEqual({
+      path: "deviceRequests/r2",
+      data: { status: "in produzione", updatedAt: "__SERVER_TIMESTAMP__" },
+    });
     expect(allSets[0].data).toMatchObject({ fromStatus: "fabbricazione", toStatus: "in produzione" });
     expect(allSets[0].data.note).toContain("fabbricazione");
   });
@@ -102,7 +108,10 @@ describe("AdminMaintenanceRequests (EA-152) - migrazione one-shot dei 10 stati r
     await clickMigrate();
 
     await waitFor(() => expect(allUpdates).toHaveLength(1));
-    expect(allUpdates[0]).toEqual({ path: "deviceRequests/r3", data: { status: "annullata" } });
+    expect(allUpdates[0]).toEqual({
+      path: "deviceRequests/r3",
+      data: { status: "annullata", updatedAt: "__SERVER_TIMESTAMP__" },
+    });
     expect(allSets[0].data).toMatchObject({ fromStatus: "followup famiglia ko", toStatus: "annullata" });
     expect(allSets[0].data.note).toContain("followup famiglia ko");
   });

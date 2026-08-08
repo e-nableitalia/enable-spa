@@ -690,6 +690,7 @@ export default function AdminMaintenanceRequests() {
 
           if (newStatus) {
             update.status = newStatus;
+            update.updatedAt = serverTimestamp();
             changes.push(`status: "${oldStatus}" → "${newStatus}"`);
           }
           if ("publicStatus" in data) {
