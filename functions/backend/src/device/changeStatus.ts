@@ -70,11 +70,14 @@ export const changeStatus = onCall(
 
     // --- Auto-istanziazione checklist di produzione (EA-151) ---
     // Nessun gate: un eventuale fallimento non blocca la transizione di
-    // stato, già commitata sopra (vedi autoCreateProductionChecklist.ts).
+    // stato, già commitata sopra. Il guard di idempotenza è letto e
+    // "claimato" atomicamente dentro autoCreateProductionChecklist.ts
+    // stesso (non qui): un valore letto prima di questa transazione, come
+    // in una prima versione di questo modulo, sarebbe stale sotto due
+    // changeStatus quasi simultanei sulla stessa richiesta.
     await autoCreateProductionChecklistOnTransition(request, {
       requestId,
       newStatus,
-      productionChecklistAlreadyCreated: Boolean(requestData?.productionChecklistCreated),
     });
 
     // --- Notifiche opzionali ---

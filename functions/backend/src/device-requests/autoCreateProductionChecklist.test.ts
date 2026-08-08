@@ -23,7 +23,9 @@ const checklistItemDocMock = jest.fn(() => {
   return { id: `generated-item-id-${generatedItemCounter}` };
 });
 
-const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
+const FIELD_DELETE_SENTINEL = { __type: "fieldDelete" };
+
+function applyUpdate(id: string, updates: Record<string, unknown>) {
   const current = deviceRequestsStore[id] ?? {};
   const { checklistIds: arrayUnionOp, ...rest } = updates as {
     checklistIds?: { __op: "arrayUnion"; values: unknown[] };
@@ -34,13 +36,48 @@ const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unk
       new Set([...(Array.isArray(current.checklistIds) ? current.checklistIds : []), ...arrayUnionOp.values])
     )
     : (current.checklistIds as unknown[] | undefined);
-  deviceRequestsStore[id] = {
+  const merged: Record<string, unknown> = {
     ...current,
     ...rest,
     ...(arrayUnionOp ? { checklistIds: mergedChecklistIds } : {}),
   };
+  for (const [key, value] of Object.entries(merged)) {
+    if (value === FIELD_DELETE_SENTINEL) delete merged[key];
+  }
+  deviceRequestsStore[id] = merged;
+}
+
+const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
+  applyUpdate(id, updates);
   return Promise.resolve();
 });
+
+// Simula l'atomicita' della transazione Firestore usata per il claim del
+// guard di idempotenza (vedi autoCreateProductionChecklist.ts): tx.get
+// legge lo stato corrente, tx.update accoda una write applicata solo se la
+// callback termina senza eccezioni — stesso pattern gia' usato in
+// changeStatus.test.ts per applyStatusChangeTransaction.
+const runTransactionMock = jest.fn(
+  async (updateFn: (tx: { get: jest.Mock; update: jest.Mock }) => Promise<unknown>) => {
+    const pendingUpdates: { id: string; data: Record<string, unknown> }[] = [];
+    const tx = {
+      get: jest.fn((ref: { id: string }) =>
+        Promise.resolve({
+          exists: deviceRequestsStore[ref.id] !== undefined,
+          data: () => deviceRequestsStore[ref.id],
+        })
+      ),
+      update: jest.fn((ref: { id: string }, data: Record<string, unknown>) => {
+        pendingUpdates.push({ id: ref.id, data });
+      }),
+    };
+    const result = await updateFn(tx);
+    for (const { id, data } of pendingUpdates) {
+      applyUpdate(id, data);
+    }
+    return result;
+  }
+);
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -56,6 +93,7 @@ function buildCollection(name: string) {
   if (name === "deviceRequests") {
     return {
       doc: jest.fn((id: string) => ({
+        id,
         get: jest.fn(() =>
           Promise.resolve({
             exists: deviceRequestsStore[id] !== undefined,
@@ -98,10 +136,12 @@ jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
     batch: jest.fn(() => ({ set: batchSetMock, commit: batchCommitMock })),
+    runTransaction: (fn: (tx: { get: jest.Mock; update: jest.Mock }) => Promise<unknown>) => runTransactionMock(fn),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
     arrayUnion: jest.fn((...values: unknown[]) => ({ __op: "arrayUnion", values })),
+    delete: jest.fn(() => FIELD_DELETE_SENTINEL),
   },
 }));
 
@@ -141,7 +181,6 @@ describe("autoCreateProductionChecklistOnTransition", () => {
     await autoCreateProductionChecklistOnTransition(buildRequest(), {
       requestId: "req-1",
       newStatus: "in produzione",
-      productionChecklistAlreadyCreated: false,
     });
 
     const items = savedItemDocuments();
@@ -162,7 +201,7 @@ describe("autoCreateProductionChecklistOnTransition", () => {
   });
 
   // Scenario 2 EA-151: transizioni successive non duplicano la checklist
-  it("does not create a second checklist when productionChecklistAlreadyCreated is true (e.g. re-entering after standby)", async () => {
+  it("does not create a second checklist when productionChecklistCreated is already true (e.g. re-entering after standby)", async () => {
     deviceRequestsStore["req-1"] = {
       ...deviceRequestsStore["req-1"],
       checklistIds: ["existing-production-checklist-id"],
@@ -172,18 +211,78 @@ describe("autoCreateProductionChecklistOnTransition", () => {
     await autoCreateProductionChecklistOnTransition(buildRequest(), {
       requestId: "req-1",
       newStatus: "in produzione",
-      productionChecklistAlreadyCreated: true,
     });
 
     expect(batchSetMock).not.toHaveBeenCalled();
     expect(deviceRequestsStore["req-1"]?.checklistIds).toEqual(["existing-production-checklist-id"]);
   });
 
+  // Regressione (adversarial concern, panel review EA-151): il guard va
+  // letto DENTRO la transazione, non prima. Simula il caso reale di due
+  // `changeStatus` quasi simultanei: la prima transazione parte e resta
+  // sospesa a meta' della propria `tx.get` (rappresenta l'invocazione che
+  // ha iniziato per prima ma non ha ancora letto lo stato fresco); nel
+  // frattempo una seconda transazione, concorrente, va a termine per
+  // intero e vince la corsa. Solo quando la prima transazione riprende
+  // deve vedere il flag gia' `true` (scritto dalla seconda) e rinunciare:
+  // con un guard letto PRIMA della transazione (il bug originale) la prima
+  // invocazione avrebbe invece ancora visto lo stato stale e creato una
+  // seconda checklist.
+  it("claims the guard atomically: a transaction resumed after a concurrent winner sees the fresh flag and skips creation", async () => {
+    const gate: { release: () => void } = { release: () => {} };
+    const firstGetGate = new Promise<void>((resolve) => {
+      gate.release = resolve;
+    });
+
+    runTransactionMock.mockImplementationOnce(
+      async (updateFn: (tx: { get: jest.Mock; update: jest.Mock }) => Promise<unknown>) => {
+        const pendingUpdates: { id: string; data: Record<string, unknown> }[] = [];
+        const tx = {
+          get: jest.fn(async (ref: { id: string }) => {
+            await firstGetGate; // si sblocca solo dopo che la transazione concorrente e' committata
+            return {
+              exists: deviceRequestsStore[ref.id] !== undefined,
+              data: () => deviceRequestsStore[ref.id],
+            };
+          }),
+          update: jest.fn((ref: { id: string }, data: Record<string, unknown>) => {
+            pendingUpdates.push({ id: ref.id, data });
+          }),
+        };
+        const result = await updateFn(tx);
+        for (const { id, data } of pendingUpdates) {
+          applyUpdate(id, data);
+        }
+        return result;
+      }
+    );
+
+    const first = autoCreateProductionChecklistOnTransition(buildRequest(), {
+      requestId: "req-1",
+      newStatus: "in produzione",
+    });
+
+    // La transazione concorrente usa il mock di default (non gated) e va a
+    // termine per intero prima che la prima si sblocchi: vince la corsa,
+    // scrive il flag e crea la sua checklist.
+    await autoCreateProductionChecklistOnTransition(buildRequest(), {
+      requestId: "req-1",
+      newStatus: "in produzione",
+    });
+
+    gate.release();
+    await first;
+
+    const items = savedItemDocuments();
+    expect(items).toHaveLength(5); // una sola checklist creata, non due
+    expect(deviceRequestsStore["req-1"]?.checklistIds).toHaveLength(1);
+    expect(deviceRequestsStore["req-1"]?.productionChecklistCreated).toBe(true);
+  });
+
   it("does nothing when the target status is not 'in produzione'", async () => {
     await autoCreateProductionChecklistOnTransition(buildRequest(), {
       requestId: "req-1",
       newStatus: "pronta per spedizione",
-      productionChecklistAlreadyCreated: false,
     });
 
     expect(batchSetMock).not.toHaveBeenCalled();
@@ -202,10 +301,11 @@ describe("autoCreateProductionChecklistOnTransition", () => {
       autoCreateProductionChecklistOnTransition(buildRequest(), {
         requestId: "req-1",
         newStatus: "in produzione",
-        productionChecklistAlreadyCreated: false,
       })
     ).resolves.toBeUndefined();
 
+    // Il claim viene scritto prima della creazione, poi rimosso (rollback)
+    // perche' la creazione fallisce: un tentativo futuro deve poter riprovare.
     expect(deviceRequestsStore["req-1"]?.productionChecklistCreated).toBeUndefined();
   });
 });

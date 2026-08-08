@@ -20,29 +20,59 @@ const PRODUCTION_STATUS = "in produzione";
  * granulari collassate, invece di lasciare che risolva un template.
  *
  * Idempotenza (Scenario 2 EA-151 — nessuna checklist duplicata su
- * transizioni successive, es. dopo standby): poiché per decisione esplicita
- * del supervisor nessun marcatore identifica quale tra le checklist
- * collegate rappresenti la produzione, l'idempotenza è tracciata da un
- * flag dedicato e indipendente, `deviceRequests/{id}.productionChecklistCreated`,
- * valorizzato a `true` solo dopo la prima auto-creazione riuscita. Il flag
- * non referenzia alcun checklistId: non introduce quindi il marcatore
- * "quale checklist è quella di produzione" esplicitamente escluso dallo
- * scope della Story, resta solo un guard "l'auto-creazione è già avvenuta".
+ * transizioni successive, es. dopo standby, NÉ su transizioni concorrenti
+ * verso "in produzione" sulla stessa richiesta): poiché per decisione
+ * esplicita del supervisor nessun marcatore identifica quale tra le
+ * checklist collegate rappresenti la produzione, l'idempotenza è tracciata
+ * da un flag dedicato e indipendente,
+ * `deviceRequests/{id}.productionChecklistCreated`. Il flag non referenzia
+ * alcun checklistId: non introduce quindi il marcatore "quale checklist è
+ * quella di produzione" esplicitamente escluso dallo scope della Story,
+ * resta solo un guard "l'auto-creazione è già avvenuta".
+ *
+ * Lettura e claim del flag avvengono in un'unica transazione Firestore,
+ * PRIMA di creare la checklist (non dopo, come una prima versione di questa
+ * funzione faceva): solo l'invocazione che vince il compare-and-swap
+ * procede alla creazione, le altre (es. due `changeStatus` quasi simultanei
+ * sulla stessa richiesta) vedono il flag già `true` e restituiscono
+ * immediatamente. Se la creazione fallisce dopo aver vinto il claim, il
+ * flag viene rimosso (rollback) per non bloccare permanentemente un futuro
+ * retry — vedi gestione errori sotto.
  *
  * Nessun gate: per decisione esplicita del supervisor la checklist resta
  * uno strumento di tracciamento scorrelato da qualunque transizione di
  * status. Un fallimento nell'auto-creazione (es. richiesta già al limite
  * `MAX_CHECKLISTS_PER_REQUEST`) viene quindi solo loggato, senza propagare
  * l'errore al chiamante (`device/changeStatus.ts`): la transizione di stato
- * resta valida anche se la checklist non può essere creata.
+ * resta valida anche se la checklist non può essere creata, e — grazie al
+ * rollback del claim — un successivo tentativo può ancora riuscire.
  */
 export async function autoCreateProductionChecklistOnTransition(
   request: CallableRequest,
-  params: { requestId: string; newStatus: string; productionChecklistAlreadyCreated: boolean }
+  params: { requestId: string; newStatus: string }
 ): Promise<void> {
-  const { requestId, newStatus, productionChecklistAlreadyCreated } = params;
+  const { requestId, newStatus } = params;
 
-  if (newStatus !== PRODUCTION_STATUS || productionChecklistAlreadyCreated) {
+  if (newStatus !== PRODUCTION_STATUS) {
+    return;
+  }
+
+  const db = getFirestore();
+  const requestRef = db.collection("deviceRequests").doc(requestId);
+
+  const claimed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(requestRef);
+    if (Boolean(snap.data()?.productionChecklistCreated)) {
+      return false;
+    }
+    tx.update(requestRef, {
+      productionChecklistCreated: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+
+  if (!claimed) {
     return;
   }
 
@@ -60,11 +90,6 @@ export async function autoCreateProductionChecklistOnTransition(
       },
     } as CallableRequest);
 
-    await getFirestore().collection("deviceRequests").doc(requestId).update({
-      productionChecklistCreated: true,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
     console.log(
       `[autoCreateProductionChecklist] OK: production checklist created for request ${requestId}`
     );
@@ -73,5 +98,11 @@ export async function autoCreateProductionChecklistOnTransition(
       `[autoCreateProductionChecklist] KO: could not auto-create production checklist for request ${requestId}`,
       error
     );
+    await requestRef.update({ productionChecklistCreated: FieldValue.delete() }).catch((rollbackError) => {
+      console.error(
+        `[autoCreateProductionChecklist] KO: rollback of productionChecklistCreated failed for request ${requestId}`,
+        rollbackError
+      );
+    });
   }
 }
