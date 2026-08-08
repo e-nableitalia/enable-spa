@@ -305,7 +305,32 @@ describe("autoCreateProductionChecklistOnTransition", () => {
     ).resolves.toBeUndefined();
 
     // Il claim viene scritto prima della creazione, poi rimosso (rollback)
-    // perche' la creazione fallisce: un tentativo futuro deve poter riprovare.
+    // perche' la creazione fallisce PRIMA di qualunque scrittura (limite
+    // raggiunto: HttpsError("failed-precondition", ...) lanciato dalle
+    // validazioni iniziali di createDeviceRequestChecklist.ts, prima del
+    // primo createChecklist.run) — un errore provabilmente pre-scrittura,
+    // un tentativo futuro deve poter riprovare.
     expect(deviceRequestsStore["req-1"]?.productionChecklistCreated).toBeUndefined();
+  });
+
+  // Regressione (adversarial concern, panel review EA-151, secondo giro): il
+  // rollback incondizionato di una prima versione di questo fix avrebbe
+  // riabilitato un retry anche quando la checklist era gia' stata scritta
+  // (batch.commit riuscito) ma il link a checklistIds falliva separatamente
+  // — producendo una checklist orfana PIU' una seconda al retry successivo.
+  // Un errore che non e' provabilmente pre-scrittura (qui: un fallimento
+  // generico durante createChecklist, non uno dei codici HttpsError delle
+  // validazioni iniziali) non deve rimuovere il claim.
+  it("does NOT roll back the guard when the underlying error is not provably pre-write", async () => {
+    batchCommitMock.mockRejectedValueOnce(new Error("simulated deadline-exceeded"));
+
+    await expect(
+      autoCreateProductionChecklistOnTransition(buildRequest(), {
+        requestId: "req-1",
+        newStatus: "in produzione",
+      })
+    ).resolves.toBeUndefined();
+
+    expect(deviceRequestsStore["req-1"]?.productionChecklistCreated).toBe(true);
   });
 });

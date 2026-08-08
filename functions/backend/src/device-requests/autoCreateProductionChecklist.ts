@@ -1,3 +1,4 @@
+import { HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { createDeviceRequestChecklist } from "./createDeviceRequestChecklist";
@@ -9,6 +10,31 @@ import { PRODUCTION_CHECKLIST_ITEMS, PRODUCTION_CHECKLIST_TITLE } from "./produc
  * checklist di produzione.
  */
 const PRODUCTION_STATUS = "in produzione";
+
+/**
+ * Codici `HttpsError` che `createDeviceRequestChecklist.ts` può lanciare
+ * SOLO nelle proprie validazioni iniziali (auth/RBAC/argomenti/limite
+ * `MAX_CHECKLISTS_PER_REQUEST`), tutte eseguite PRIMA di qualunque
+ * scrittura Firestore — vedi righe 64-130 di quel file, tutte precedenti al
+ * primo `createChecklist.run`. Un errore con uno di questi codici garantisce
+ * che nessuna checklist sia stata creata: sicuro da usare come condizione
+ * per il rollback del guard (vedi commento sul catch sotto). Qualunque
+ * altro errore (rete, timeout, o il write separato e non atomico di
+ * `requestRef.update` alla riga 198 di quel file, che collega la checklist
+ * già scritta a `checklistIds`) NON dà questa garanzia e non deve fare
+ * rollback.
+ */
+const SAFE_TO_ROLLBACK_ERROR_CODES = new Set([
+  "unauthenticated",
+  "invalid-argument",
+  "not-found",
+  "failed-precondition",
+  "permission-denied",
+]);
+
+function isSafeToRollback(error: unknown): boolean {
+  return error instanceof HttpsError && SAFE_TO_ROLLBACK_ERROR_CODES.has(error.code);
+}
 
 /**
  * Auto-istanziazione della checklist di produzione alla transizione di una
@@ -35,17 +61,30 @@ const PRODUCTION_STATUS = "in produzione";
  * funzione faceva): solo l'invocazione che vince il compare-and-swap
  * procede alla creazione, le altre (es. due `changeStatus` quasi simultanei
  * sulla stessa richiesta) vedono il flag già `true` e restituiscono
- * immediatamente. Se la creazione fallisce dopo aver vinto il claim, il
- * flag viene rimosso (rollback) per non bloccare permanentemente un futuro
- * retry — vedi gestione errori sotto.
+ * immediatamente.
+ *
+ * Rollback del claim SOLO per errori pre-scrittura (vedi
+ * `isSafeToRollback`/`SAFE_TO_ROLLBACK_ERROR_CODES` sopra): una prima
+ * versione di questa funzione faceva rollback incondizionato su qualunque
+ * errore, ma `createDeviceRequestChecklist.ts` esegue la propria scrittura
+ * in due passi non atomici (creazione della checklist via `createChecklist`,
+ * poi un `requestRef.update` separato per collegarla a `checklistIds`) — un
+ * errore nel secondo passo lascia una checklist già scritta ma orfana, e un
+ * rollback incondizionato in quel caso avrebbe riabilitato un successivo
+ * tentativo a crearne una SECONDA, violando esattamente la garanzia "nessun
+ * duplicato" di questa funzione (adversarial concern, panel review EA-151).
+ * Per gli errori che sappiamo con certezza pre-scrittura (es. richiesta già
+ * al limite `MAX_CHECKLISTS_PER_REQUEST`) il rollback resta invece
+ * legittimo e necessario, per non bloccare permanentemente un retry che
+ * potrebbe riuscire in futuro (es. dopo che l'admin ha rimosso una
+ * checklist in eccesso).
  *
  * Nessun gate: per decisione esplicita del supervisor la checklist resta
  * uno strumento di tracciamento scorrelato da qualunque transizione di
- * status. Un fallimento nell'auto-creazione (es. richiesta già al limite
- * `MAX_CHECKLISTS_PER_REQUEST`) viene quindi solo loggato, senza propagare
- * l'errore al chiamante (`device/changeStatus.ts`): la transizione di stato
- * resta valida anche se la checklist non può essere creata, e — grazie al
- * rollback del claim — un successivo tentativo può ancora riuscire.
+ * status. Un fallimento nell'auto-creazione viene quindi solo loggato,
+ * senza propagare l'errore al chiamante (`device/changeStatus.ts`): la
+ * transizione di stato resta valida anche se la checklist non può essere
+ * creata.
  */
 export async function autoCreateProductionChecklistOnTransition(
   request: CallableRequest,
@@ -98,6 +137,17 @@ export async function autoCreateProductionChecklistOnTransition(
       `[autoCreateProductionChecklist] KO: could not auto-create production checklist for request ${requestId}`,
       error
     );
+
+    if (!isSafeToRollback(error)) {
+      console.warn(
+        `[autoCreateProductionChecklist] guard NOT rolled back for request ${requestId}: ` +
+          "the error is not provably pre-write, a partial write (checklist created but not yet " +
+          "linked to checklistIds) cannot be ruled out — rolling back here could enable a duplicate " +
+          "checklist on a future retry."
+      );
+      return;
+    }
+
     await requestRef.update({ productionChecklistCreated: FieldValue.delete() }).catch((rollbackError) => {
       console.error(
         `[autoCreateProductionChecklist] KO: rollback of productionChecklistCreated failed for request ${requestId}`,
