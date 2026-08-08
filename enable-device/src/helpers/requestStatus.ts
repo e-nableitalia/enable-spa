@@ -17,7 +17,18 @@ export const REQUEST_STATUSES = [
   "followup famiglia",
   "completata",
   "annullata",
-  "standby"
+  "standby",
+  // Story EA-152: "da gestire"/"in produzione" sono i 2 valori generici
+  // introdotti da EA-148 per i 10 stati rimossi (vedi REMOVED_STATUS_TO_GENERIC
+  // sotto) — aggiunti qui (additivo, i 10 valori rimossi restano per ora,
+  // rimuoverli è F-29, fuori scope) perché una deviceRequest migrata da
+  // handleMigrateStatuses resti filtrabile/bulk-editabile in
+  // AdminRequestTable.tsx e selezionabile nei dropdown "Cambia stato"
+  // (RequestDetail.tsx/VolunteerRequestDetail.tsx), che leggono da questo
+  // array senza fallback per i valori assenti (adversarial concern, panel
+  // review close-story --auto).
+  "da gestire",
+  "in produzione"
 ];
 
 export const REQUEST_STATUS_DESCRIPTIONS: { [key: string]: string } = {
@@ -147,6 +158,12 @@ export const REQUEST_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "suc
   "followup famiglia troppo piccolo": "danger",
   "annullata": "danger",
   "standby": "danger",
+  // Story EA-152 (vedi commento su REQUEST_STATUSES sopra): severity
+  // coerente col gruppo pubblico di appartenenza dei due valori generici
+  // (PUBLIC_STATUS_GROUPS_FROM_STATUS: "da gestire" -> gruppo "da gestire",
+  // "in produzione" -> gruppo "fabbricazione in corso").
+  "da gestire": "warning",
+  "in produzione": "secondary",
 };
 
 export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
@@ -162,8 +179,12 @@ export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "succ
  * opt-b di `ss-device-request-macro-status`, EA-148) al valore generico
  * corrispondente. Usata solo dallo strumento di migrazione one-shot in
  * `AdminMaintenanceRequests.tsx` per riconoscere e riscrivere le deviceRequest
- * già esistenti in uno di questi 10 valori: non tocca REQUEST_STATUSES/
- * deviceStatus (ancora sui 19 valori pre-riduzione, F-29), fuori scope qui.
+ * già esistenti in uno di questi 10 valori. `REQUEST_STATUSES`/
+ * `REQUEST_STATUS_SEVERITY` sono stati estesi (additivamente, vedi sopra) coi
+ * 2 nuovi valori generici perché la migrazione non regredisse la UI admin;
+ * la RIMOZIONE dei 10 valori qui sotto da quegli stessi elenchi, e da
+ * `deviceStatus` (`shared/types/deviceData.ts`), resta invece fuori scope
+ * (F-29 — ancora sui 19 valori pre-riduzione).
  */
 export const REMOVED_STATUS_TO_GENERIC: { [key: string]: string } = {
   "famiglia contattata": "da gestire",
