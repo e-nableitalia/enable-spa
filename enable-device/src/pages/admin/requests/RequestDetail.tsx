@@ -16,7 +16,7 @@ import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
-import { REQUEST_STATUSES } from "../../../helpers/requestStatus";
+import { REQUEST_STATUSES, getPublicStatusGroup } from "../../../helpers/requestStatus";
 import { setRequiresAttention } from "../../../helpers/requiresAttention";
 import type { ShippingAddress } from "../../../shared/types/shippingAddress";
 import provinceList from "../../../helpers/province.json";
@@ -147,14 +147,14 @@ export default function RequestDetail() {
     const privateDataLoaded = privateSnap.exists() ? privateSnap.data() : null;
     setPrivateData(privateDataLoaded);
 
-    // Load public data (contains devicetype and publicStatus)
+    // Load public data (contains devicetype). Lo stato pubblico non è più letto da qui:
+    // è ricalcolato al volo da status via getPublicStatusGroup (EA-150).
     const publicSnap = await getDoc(doc(db, "publicDeviceRequests", id));
     if (publicSnap.exists()) {
       const publicData = publicSnap.data();
       setRequest((prev: any) => ({
         ...prev,
         deviceType: publicData.devicetype ?? prev?.deviceType,
-        publicStatus: publicData.publicStatus ?? prev?.publicStatus,
       }));
     }
 
@@ -927,9 +927,9 @@ export default function RequestDetail() {
               </div>
               <div style={{ marginBottom: 10 }}>
                 <strong>Stato pubblico:</strong>
-                {request.publicStatus ? (
+                {request.status ? (
                   <span style={{ marginLeft: 8 }}>
-                    <Badge value={request.publicStatus} severity="warning" />
+                    <Badge value={getPublicStatusGroup(request.status)} severity="warning" />
                   </span>
                 ) : (
                   <span style={{ marginLeft: 8 }}>-</span>

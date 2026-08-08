@@ -9,7 +9,7 @@ import { Avatar } from "primereact/avatar";
 import { Dialog } from "primereact/dialog";
 import { Sidebar } from "primereact/sidebar";
 import logo from "../../assets/logo.png";
-import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
+import { PUBLIC_STATUS_GROUPS_FROM_STATUS, getPublicStatusGroup } from "../../helpers/requestStatus";
 
 import VolunteerDashboard from "../../pages/volunteer/VolunteerDashboard";
 import MyRequests from "../../pages/volunteer/MyRequests";
@@ -77,8 +77,9 @@ export default function VolunteerLayout() {
                                 const pub = publicSnap.data();
                                 base.province = pub.province ?? base.province;
                                 base.deviceType = pub.devicetype ?? base.deviceType;
-                                base.publicStatus = pub.publicStatus ?? base.publicStatus;
                             }
+                            // Stato pubblico display-only, ricalcolato al volo da status (EA-150)
+                            base.publicStatus = base.status ? getPublicStatusGroup(base.status) : undefined;
                             if (privateSnap.exists()) {
                                 const priv = privateSnap.data();
                                 base.firstName = priv.firstName ?? base.firstName;
@@ -88,9 +89,9 @@ export default function VolunteerLayout() {
                         })
                     );
                     setRequests(data);
-                    setShippingRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["fabbricazione in corso"].includes(r.status) && ["pronta per spedizione", "spedita"].includes(r.status)));
-                    setProductionRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["fabbricazione in corso"].includes(r.status) && !["pronta per spedizione", "spedita"].includes(r.status)));
-                    // setCompletedRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS["completati"].includes(r.status)));
+                    setShippingRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status) && ["pronta per spedizione", "spedita"].includes(r.status)));
+                    setProductionRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status) && !["pronta per spedizione", "spedita"].includes(r.status)));
+                    // setCompletedRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status)));
                 });
             } finally {
                 if (!cancelled) setLoading(false);

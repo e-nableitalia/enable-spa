@@ -25,7 +25,7 @@ import AdminValidate from "../../pages/admin/requests/AdminValidate";
 import AdminAttention from "../../pages/admin/requests/AdminAttention";
 
 import logo from "../../assets/logo.png";
-import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
+import { PUBLIC_STATUS_GROUPS_FROM_STATUS, getPublicStatusGroup } from "../../helpers/requestStatus";
 import AdminDashboard from "../../pages/admin/AdminDashboard";
 import VolunteerMaintenance from "../../pages/admin/volunteers/VolunteerMaintenance";
 import ContactsList from "../../pages/admin/volunteers/ContactsList";
@@ -114,8 +114,9 @@ useEffect(() => {
             ...privateData,
             // Keep deviceType from private if present, otherwise use public's devicetype
             deviceType: publicData.devicetype ?? undefined,
-            // Always surface publicStatus from the public collection as a separate field
-            publicStatus2: publicData.publicStatus ?? undefined,
+            // Stato pubblico display-only, ricalcolato al volo da status (EA-150):
+            // non più letto dal campo publicStatus persistito su publicDeviceRequests.
+            publicStatus2: docSnap.data().status ? getPublicStatusGroup(docSnap.data().status) : undefined,
             sequenceNumber: publicData.requestNumber ?? undefined,
           };
         })
@@ -147,27 +148,29 @@ useEffect(() => {
   const validateRequests = requests.filter((r) => r.status === "inviata");
 
   const triageRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS["da gestire"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"].includes(r.status)
   );
 
+  // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
   const pendingRequests = requests.filter(
     (r) => r.status === "attesa volontario"
   );
 
   const productionRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS["fabbricazione in corso"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status)
   );
 
+  // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
   const shippingRequests = requests.filter((r) =>
     ["pronta per spedizione", "spedita"].includes(r.status)
   );
 
   const completedRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS["completati"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status)
   );
 
   const cancelledRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS["annullate / non completabili"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["annullate / non completabili"].includes(r.status)
   );
 
   const attentionRequests = requests.filter((r) => r.requiresAttention === true);
