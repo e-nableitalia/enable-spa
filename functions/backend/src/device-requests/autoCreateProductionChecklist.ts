@@ -81,10 +81,18 @@ function isSafeToRollback(error: unknown): boolean {
  *
  * Nessun gate: per decisione esplicita del supervisor la checklist resta
  * uno strumento di tracciamento scorrelato da qualunque transizione di
- * status. Un fallimento nell'auto-creazione viene quindi solo loggato,
- * senza propagare l'errore al chiamante (`device/changeStatus.ts`): la
- * transizione di stato resta valida anche se la checklist non può essere
- * creata.
+ * status. Un fallimento — inclusa la stessa transazione di claim del
+ * guard, non solo la creazione della checklist che segue (una prima
+ * versione di questa funzione avvolgeva in try/catch solo quest'ultima:
+ * un errore della transazione di claim, es. `ABORTED` per contention su
+ * `changeStatus` quasi simultanei — esattamente lo scenario che questa
+ * funzione gestisce — si propagava non gestito fino al chiamante,
+ * facendo fallire l'intera callable pur con la transizione di stato già
+ * committata; adversarial concern, panel review EA-151) — viene quindi
+ * solo loggato, senza propagare l'errore al chiamante
+ * (`device/changeStatus.ts`): la transizione di stato resta valida anche
+ * se la checklist non può essere creata o il suo guard non può essere
+ * reclamato.
  */
 export async function autoCreateProductionChecklistOnTransition(
   request: CallableRequest,
@@ -99,23 +107,29 @@ export async function autoCreateProductionChecklistOnTransition(
   const db = getFirestore();
   const requestRef = db.collection("deviceRequests").doc(requestId);
 
-  const claimed = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(requestRef);
-    if (Boolean(snap.data()?.productionChecklistCreated)) {
-      return false;
-    }
-    tx.update(requestRef, {
-      productionChecklistCreated: true,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    return true;
-  });
-
-  if (!claimed) {
-    return;
-  }
+  // `claimed` resta `false` se l'eccezione arriva dalla transazione stessa
+  // (nessuna scrittura avvenuta, il catch sotto non deve fare nulla) e
+  // diventa `true` solo dopo che la transazione ha effettivamente commesso
+  // il claim — distingue le due sorgenti d'errore nel catch comune.
+  let claimed = false;
 
   try {
+    claimed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(requestRef);
+      if (Boolean(snap.data()?.productionChecklistCreated)) {
+        return false;
+      }
+      tx.update(requestRef, {
+        productionChecklistCreated: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+
+    if (!claimed) {
+      return;
+    }
+
     console.log(
       `[autoCreateProductionChecklist] Auto-creating production checklist for request ${requestId}`
     );
@@ -137,6 +151,12 @@ export async function autoCreateProductionChecklistOnTransition(
       `[autoCreateProductionChecklist] KO: could not auto-create production checklist for request ${requestId}`,
       error
     );
+
+    if (!claimed) {
+      // Fallita la transazione di claim stessa (es. contention): nessuna
+      // scrittura e' avvenuta, niente da rollbackare.
+      return;
+    }
 
     if (!isSafeToRollback(error)) {
       console.warn(

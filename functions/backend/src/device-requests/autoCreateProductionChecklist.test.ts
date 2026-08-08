@@ -333,4 +333,26 @@ describe("autoCreateProductionChecklistOnTransition", () => {
 
     expect(deviceRequestsStore["req-1"]?.productionChecklistCreated).toBe(true);
   });
+
+  // Regressione (adversarial concern, panel review EA-151, terzo giro): un
+  // fallimento della TRANSAZIONE DI CLAIM stessa (es. ABORTED per
+  // contention — proprio lo scenario di changeStatus quasi simultanei che
+  // questa funzione gestisce) non deve propagarsi al chiamante: una prima
+  // versione di questo fix avvolgeva in try/catch solo la creazione della
+  // checklist, non la transazione di claim che la precede, facendo fallire
+  // l'intera callable changeStatus pur con la transizione di stato gia'
+  // committata.
+  it("does not throw when the guard-claim transaction itself fails", async () => {
+    runTransactionMock.mockRejectedValueOnce(new Error("simulated ABORTED: too much contention"));
+
+    await expect(
+      autoCreateProductionChecklistOnTransition(buildRequest(), {
+        requestId: "req-1",
+        newStatus: "in produzione",
+      })
+    ).resolves.toBeUndefined();
+
+    expect(batchSetMock).not.toHaveBeenCalled();
+    expect(deviceRequestsStore["req-1"]?.productionChecklistCreated).toBeUndefined();
+  });
 });
