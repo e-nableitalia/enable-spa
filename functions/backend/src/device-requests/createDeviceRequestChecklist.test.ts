@@ -372,4 +372,43 @@ describe("createDeviceRequestChecklist", () => {
       expect.objectContaining({ title: "Checklist di fabbricazione - REQ-000002" })
     );
   });
+
+  // EA-151: `items` espliciti hanno precedenza sulla risoluzione da
+  // template, anche quando un template esiste per il devicetype della
+  // richiesta (req-1 ha un template registrato per "Kinetic Hand").
+  it("uses the explicit items and skips template resolution when items is provided", async () => {
+    const result = await createDeviceRequestChecklist.run(
+      buildRequest(
+        {
+          requestId: "req-1",
+          title: "Checklist di produzione",
+          items: [
+            { title: "Scelta device e dimensionamento", type: "generic" },
+            { title: "Personalizzazione", type: "generic" },
+          ],
+        },
+        "admin-1"
+      )
+    );
+
+    expect(collectionMock).not.toHaveBeenCalledWith("templates");
+    expect(savedChecklistDocument()).toEqual(
+      expect.objectContaining({ category: "Kinetic Hand", title: "Checklist di produzione" })
+    );
+    expect(savedChecklistDocument()).not.toHaveProperty("fromTemplate");
+    expect(savedItemDocuments()).toEqual([
+      expect.objectContaining({ title: "Scelta device e dimensionamento", status: "Assegnare", completed: false }),
+      expect.objectContaining({ title: "Personalizzazione", status: "Assegnare", completed: false }),
+    ]);
+    expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
+    expect(deviceRequestsStore["req-1"]?.checklistIds).toEqual([GENERATED_CHECKLIST_ID]);
+  });
+
+  it("throws invalid-argument when items is not an array", async () => {
+    await expect(
+      createDeviceRequestChecklist.run(buildRequest({ requestId: "req-2", items: "not-an-array" }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "items must be an array"));
+
+    expect(batchSetMock).not.toHaveBeenCalled();
+  });
 });

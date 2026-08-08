@@ -123,6 +123,19 @@ jest.mock("./changeStatusNotifications", () => ({
   sendChangeStatusNotifications: (...args: unknown[]) => sendChangeStatusNotificationsMock(...args),
 }));
 
+// EA-151: il comportamento reale dell'auto-istanziazione (5 item, guard di
+// idempotenza) è coperto in isolamento da
+// `device-requests/autoCreateProductionChecklist.test.ts`. Qui si verifica
+// solo la delega: changeStatus la invoca con i parametri corretti e non ne
+// lascia propagare eventuali errori (comportamento già garantito dal modulo
+// stesso, non duplicato qui).
+const autoCreateProductionChecklistOnTransitionMock = jest.fn().mockResolvedValue(undefined);
+
+jest.mock("../device-requests/autoCreateProductionChecklist", () => ({
+  autoCreateProductionChecklistOnTransition: (...args: unknown[]) =>
+    autoCreateProductionChecklistOnTransitionMock(...args),
+}));
+
 import { changeStatus } from "./changeStatus";
 
 function buildRequest(data: Record<string, unknown>, uid: string | null): CallableRequest {
@@ -383,5 +396,74 @@ describe("changeStatus - EA-148 (riduzione dominio status a 11 valori)", () => {
 
     expect(runTransactionMock).not.toHaveBeenCalled();
     expect(deviceRequestsStore["req-manage"]).toMatchObject({ status: "da gestire" });
+  });
+});
+
+describe("changeStatus - EA-151 (delega dell'auto-istanziazione checklist di produzione)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    forceEventWriteFailure = false;
+
+    usersStore = {
+      "admin-1": { role: "admin", consents: ACCEPTED_CONSENTS },
+    };
+
+    deviceRequestsStore = {
+      "req-waiting": {
+        status: "attesa volontario",
+        assignedVolunteers: [],
+      },
+      "req-prod-again": {
+        status: "standby",
+        assignedVolunteers: [],
+        productionChecklistCreated: true,
+      },
+      "req-prod": {
+        status: "in produzione",
+        assignedVolunteers: [],
+      },
+    };
+
+    eventsStore = {};
+  });
+
+  // Scenario 1 EA-151: la prima transizione a "in produzione" delega
+  // l'auto-istanziazione passando solo requestId/newStatus — il guard di
+  // idempotenza (productionChecklistCreated) NON viene più letto qui né
+  // passato: lo legge e lo "claima" atomicamente il modulo dedicato stesso,
+  // dentro la propria transazione (fix della race condition trovata dalla
+  // panel review: un valore letto prima di questa transazione, come in una
+  // prima versione di questo modulo, sarebbe stale sotto due changeStatus
+  // quasi simultanei sulla stessa richiesta).
+  it("delegates to autoCreateProductionChecklistOnTransition passing only requestId/newStatus on first transition to 'in produzione'", async () => {
+    await changeStatus.run(buildRequest({ requestId: "req-waiting", newStatus: "in produzione" }, "admin-1"));
+
+    expect(autoCreateProductionChecklistOnTransitionMock).toHaveBeenCalledTimes(1);
+    const [, params] = autoCreateProductionChecklistOnTransitionMock.mock.calls[0];
+    expect(params).toEqual({
+      requestId: "req-waiting",
+      newStatus: "in produzione",
+    });
+  });
+
+  // Scenario 2 EA-151: una transizione successiva (es. dopo standby), su una
+  // richiesta che ha già una checklist di produzione, delega esattamente
+  // allo stesso modo — nessun parametro diverso: sarà il modulo dedicato a
+  // leggere il guard fresco e decidere il no-op.
+  it("delegates the same way regardless of any pre-existing productionChecklistCreated flag", async () => {
+    await changeStatus.run(buildRequest({ requestId: "req-prod-again", newStatus: "in produzione" }, "admin-1"));
+
+    const [, params] = autoCreateProductionChecklistOnTransitionMock.mock.calls[0];
+    expect(params).toEqual({ requestId: "req-prod-again", newStatus: "in produzione" });
+  });
+
+  // Regression: una transizione verso uno status diverso da "in produzione"
+  // delega comunque (il modulo decide internamente il no-op), passando il
+  // newStatus effettivo.
+  it("still delegates, passing the actual newStatus, for transitions unrelated to 'in produzione'", async () => {
+    await changeStatus.run(buildRequest({ requestId: "req-prod", newStatus: "pronta per spedizione" }, "admin-1"));
+
+    const [, params] = autoCreateProductionChecklistOnTransitionMock.mock.calls[0];
+    expect(params).toMatchObject({ newStatus: "pronta per spedizione" });
   });
 });
