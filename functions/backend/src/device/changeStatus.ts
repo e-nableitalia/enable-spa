@@ -4,6 +4,7 @@ import {applyStatusChangeTransaction} from "./applyStatusChangeTransaction";
 import {requireVolunteerConsents} from "../utils/consents";
 import {sendChangeStatusNotifications, NotificaOptions} from "./changeStatusNotifications";
 import {assertVolunteerTransitionAllowed} from "../utils/volunteerTransitions";
+import {autoCreateProductionChecklistOnTransition} from "../device-requests/autoCreateProductionChecklist";
 
 export const changeStatus = onCall(
   {
@@ -65,6 +66,15 @@ export const changeStatus = onCall(
         createdBy: uid,
         note
       });
+    });
+
+    // --- Auto-istanziazione checklist di produzione (EA-151) ---
+    // Nessun gate: un eventuale fallimento non blocca la transizione di
+    // stato, già commitata sopra (vedi autoCreateProductionChecklist.ts).
+    await autoCreateProductionChecklistOnTransition(request, {
+      requestId,
+      newStatus,
+      productionChecklistAlreadyCreated: Boolean(requestData?.productionChecklistCreated),
     });
 
     // --- Notifiche opzionali ---
