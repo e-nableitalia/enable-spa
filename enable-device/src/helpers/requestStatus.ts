@@ -157,6 +157,27 @@ export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "succ
   "annullate / non completabili": "danger"
 };
 
+/**
+ * Story EA-152: mappa dei 10 valori di `status` rimossi dal dominio (decisione
+ * opt-b di `ss-device-request-macro-status`, EA-148) al valore generico
+ * corrispondente. Usata solo dallo strumento di migrazione one-shot in
+ * `AdminMaintenanceRequests.tsx` per riconoscere e riscrivere le deviceRequest
+ * già esistenti in uno di questi 10 valori: non tocca REQUEST_STATUSES/
+ * deviceStatus (ancora sui 19 valori pre-riduzione, F-29), fuori scope qui.
+ */
+export const REMOVED_STATUS_TO_GENERIC: { [key: string]: string } = {
+  "famiglia contattata": "da gestire",
+  "definizione richiesta": "da gestire",
+  "valutazione fattibilità": "da gestire",
+  "scelta device e dimensionamento": "in produzione",
+  "personalizzazione": "in produzione",
+  "attesa materiali": "in produzione",
+  "fabbricazione": "in produzione",
+  "fitting": "in produzione",
+  "followup famiglia ko": "annullata",
+  "followup famiglia troppo piccolo": "annullata",
+};
+
 export function shortAmputationType(amputationType: string): "avambraccio" | "braccio" | "mano" | "altro" {
   const type = amputationType.toLowerCase();
 

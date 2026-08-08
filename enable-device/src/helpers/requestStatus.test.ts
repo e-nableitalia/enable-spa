@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getPublicStatusGroup, PUBLIC_STATUS_GROUPS_FROM_STATUS } from "./requestStatus";
+import { getPublicStatusGroup, PUBLIC_STATUS_GROUPS_FROM_STATUS, REMOVED_STATUS_TO_GENERIC } from "./requestStatus";
 
 describe("getPublicStatusGroup (EA-150) - raggruppamento display-only dagli 11 valori di status", () => {
   it("classifica ognuno degli 11 valori di status nel gruppo pubblico atteso", () => {
@@ -30,5 +30,30 @@ describe("getPublicStatusGroup (EA-150) - raggruppamento display-only dagli 11 v
     expect(allStatuses).toHaveLength(11);
     expect(new Set(allStatuses).size).toBe(11);
     expect(Object.keys(PUBLIC_STATUS_GROUPS_FROM_STATUS)).toHaveLength(5);
+  });
+});
+
+describe("REMOVED_STATUS_TO_GENERIC (EA-152) - mappa dei 10 stati rimossi ai 3 generici", () => {
+  it("mappa i 3 stati di triage rimossi a 'da gestire'", () => {
+    expect(REMOVED_STATUS_TO_GENERIC["famiglia contattata"]).toBe("da gestire");
+    expect(REMOVED_STATUS_TO_GENERIC["definizione richiesta"]).toBe("da gestire");
+    expect(REMOVED_STATUS_TO_GENERIC["valutazione fattibilità"]).toBe("da gestire");
+  });
+
+  it("mappa i 5 stati di produzione pre-spedizione rimossi a 'in produzione'", () => {
+    expect(REMOVED_STATUS_TO_GENERIC["scelta device e dimensionamento"]).toBe("in produzione");
+    expect(REMOVED_STATUS_TO_GENERIC["personalizzazione"]).toBe("in produzione");
+    expect(REMOVED_STATUS_TO_GENERIC["attesa materiali"]).toBe("in produzione");
+    expect(REMOVED_STATUS_TO_GENERIC["fabbricazione"]).toBe("in produzione");
+    expect(REMOVED_STATUS_TO_GENERIC["fitting"]).toBe("in produzione");
+  });
+
+  it("mappa i 2 stati di cancellazione specifica rimossi a 'annullata'", () => {
+    expect(REMOVED_STATUS_TO_GENERIC["followup famiglia ko"]).toBe("annullata");
+    expect(REMOVED_STATUS_TO_GENERIC["followup famiglia troppo piccolo"]).toBe("annullata");
+  });
+
+  it("contiene esattamente 10 voci, nessuna in più", () => {
+    expect(Object.keys(REMOVED_STATUS_TO_GENERIC)).toHaveLength(10);
   });
 });

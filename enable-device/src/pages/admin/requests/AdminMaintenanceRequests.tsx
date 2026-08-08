@@ -5,13 +5,13 @@ import { ProgressBar } from "primereact/progressbar";
 import { Toast } from "primereact/toast";
 import Papa from "papaparse";
 import { db, functions } from "../../../firebase";
-import { collection, doc, getDocs, deleteDoc, updateDoc, writeBatch, deleteField } from "firebase/firestore";
+import { collection, doc, getDocs, deleteDoc, updateDoc, writeBatch, deleteField, serverTimestamp } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { Timestamp } from "firebase/firestore";
 import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import { ToggleButton } from "primereact/togglebutton";
-import { mapInternalStatusToPublic } from "../../../helpers/requestStatus";
+import { mapInternalStatusToPublic, REMOVED_STATUS_TO_GENERIC } from "../../../helpers/requestStatus";
 import { TabView, TabPanel } from "primereact/tabview";
 
 export default function AdminMaintenanceRequests() {
@@ -31,6 +31,7 @@ export default function AdminMaintenanceRequests() {
   const [logsTab, setLogsTab] = useState(true);
   const [updatingDates, setUpdatingDates] = useState(false);
   const [migratingVolunteers, setMigratingVolunteers] = useState(false);
+  const [migratingStatuses, setMigratingStatuses] = useState(false);
   const toast = useRef<any>(null);
 
   type PrivateData = {
@@ -613,6 +614,183 @@ export default function AdminMaintenanceRequests() {
     }
   };
 
+  // Migrate deviceRequests already stored in one of the 10 removed status
+  // values to the corresponding generic value ("da gestire" / "in produzione"
+  // / "annullata"), recording the lost granular value as a note event, and
+  // remove the stale publicStatus field wherever still present on
+  // deviceRequests/publicDeviceRequests (Story EA-152, decisione opt-b di
+  // ss-device-request-macro-status). Idempotent: rieseguire non tocca i
+  // documenti già migrati e non aggiunge nuove note.
+  const handleMigrateStatuses = async () => {
+    setMigratingStatuses(true);
+    setLogs([]);
+    setProgress(0);
+    setSuccessCount(0);
+    setErrorCount(0);
+
+    const newLogs: string[] = [];
+
+    try {
+      const requestsSnap = await getDocs(collection(db, "deviceRequests"));
+      const publicRequestsSnap = await getDocs(collection(db, "publicDeviceRequests"));
+
+      const needsStatusMigration = (d: { data: () => Record<string, unknown> }) => {
+        const status = d.data().status;
+        return typeof status === "string" && status in REMOVED_STATUS_TO_GENERIC;
+      };
+      const needsPublicStatusRemoval = (d: { data: () => Record<string, unknown> }) =>
+        "publicStatus" in d.data();
+
+      const mainToMigrate = requestsSnap.docs.filter((d) => needsStatusMigration(d) || needsPublicStatusRemoval(d));
+      const mainSkipped = requestsSnap.docs.filter((d) => !needsStatusMigration(d) && !needsPublicStatusRemoval(d));
+      const publicToMigrate = publicRequestsSnap.docs.filter((d) => needsPublicStatusRemoval(d));
+      const publicSkipped = publicRequestsSnap.docs.filter((d) => !needsPublicStatusRemoval(d));
+
+      const totalToMigrate = mainToMigrate.length + publicToMigrate.length;
+
+      newLogs.push(`── Inizio migrazione stati / publicStatus ──────`);
+      newLogs.push(`deviceRequests totali        : ${requestsSnap.docs.length}`);
+      newLogs.push(`deviceRequests da migrare     : ${mainToMigrate.length}`);
+      newLogs.push(`deviceRequests già ok (skip)  : ${mainSkipped.length}`);
+      newLogs.push(`publicDeviceRequests totali       : ${publicRequestsSnap.docs.length}`);
+      newLogs.push(`publicDeviceRequests da migrare    : ${publicToMigrate.length}`);
+      newLogs.push(`publicDeviceRequests già ok (skip) : ${publicSkipped.length}`);
+      newLogs.push(`─────────────────────────────────────────────────`);
+      setLogs([...newLogs]);
+
+      if (totalToMigrate === 0) {
+        newLogs.push(`\nNessun documento da migrare.`);
+        setLogs([...newLogs]);
+        toast.current?.show({
+          severity: "info",
+          summary: "Migrazione non necessaria",
+          detail: "Tutti i documenti risultano già migrati.",
+          life: 3000,
+        });
+        return;
+      }
+
+      // Ogni documento deviceRequests può generare fino a 2 write nello stesso
+      // batch (aggiornamento status/publicStatus + evento di nota): un batch
+      // size più basso del limite Firestore (500 ops/batch) tiene margine.
+      const BATCH_SIZE = 200;
+      let ok = 0, err = 0;
+
+      for (let i = 0; i < mainToMigrate.length; i += BATCH_SIZE) {
+        const chunk = mainToMigrate.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const batch = writeBatch(db);
+
+        const chunkMeta = chunk.map((docSnap) => {
+          const data = docSnap.data();
+          const oldStatus = data.status as string;
+          const newStatus = REMOVED_STATUS_TO_GENERIC[oldStatus];
+          const update: Record<string, unknown> = {};
+          const changes: string[] = [];
+
+          if (newStatus) {
+            update.status = newStatus;
+            changes.push(`status: "${oldStatus}" → "${newStatus}"`);
+          }
+          if ("publicStatus" in data) {
+            update.publicStatus = deleteField();
+            changes.push(`publicStatus rimosso`);
+          }
+          batch.update(docSnap.ref, update);
+
+          if (newStatus) {
+            const eventRef = doc(collection(db, "deviceRequests", docSnap.id, "events"));
+            const note = `Stato precedente alla migrazione: ${oldStatus}`;
+            batch.set(eventRef, {
+              type: "status_change",
+              fromStatus: oldStatus,
+              toStatus: newStatus,
+              timestamp: serverTimestamp(),
+              createdBy: "migration",
+              note,
+            });
+            changes.push(`evento di nota: "${note}"`);
+          }
+
+          return { docSnap, changes };
+        });
+
+        try {
+          await batch.commit();
+          ok += chunk.length;
+          chunkMeta.forEach(({ docSnap, changes }) => {
+            newLogs.push(`OK    deviceRequests/${docSnap.id}`);
+            changes.forEach((c) => newLogs.push(`  └─ ${c}`));
+          });
+        } catch (e: unknown) {
+          err += chunk.length;
+          newLogs.push(
+            `ERROR batch ${batchNum} (deviceRequests): ${(e as { message?: string })?.message || String(e)}`
+          );
+          chunkMeta.forEach(({ docSnap }) =>
+            newLogs.push(`  └─ ${docSnap.id} non aggiornato`)
+          );
+        }
+
+        setProgress(Math.round((Math.min(i + BATCH_SIZE, totalToMigrate) / totalToMigrate) * 100));
+        setSuccessCount(ok);
+        setErrorCount(err);
+        setLogs([...newLogs]);
+      }
+
+      for (let i = 0; i < publicToMigrate.length; i += BATCH_SIZE) {
+        const chunk = publicToMigrate.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const batch = writeBatch(db);
+
+        chunk.forEach((docSnap) => batch.update(docSnap.ref, { publicStatus: deleteField() }));
+
+        try {
+          await batch.commit();
+          ok += chunk.length;
+          chunk.forEach((docSnap) => {
+            newLogs.push(`OK    publicDeviceRequests/${docSnap.id}`);
+            newLogs.push(`  └─ publicStatus rimosso`);
+          });
+        } catch (e: unknown) {
+          err += chunk.length;
+          newLogs.push(
+            `ERROR batch ${batchNum} (publicDeviceRequests): ${(e as { message?: string })?.message || String(e)}`
+          );
+        }
+
+        setProgress(Math.round((Math.min(mainToMigrate.length + i + BATCH_SIZE, totalToMigrate) / totalToMigrate) * 100));
+        setSuccessCount(ok);
+        setErrorCount(err);
+        setLogs([...newLogs]);
+      }
+
+      newLogs.push(`─────────────────────────────────────────────────`);
+      newLogs.push(`── Riepilogo ──────────────────────────────────`);
+      newLogs.push(`Totale processati : ${totalToMigrate}`);
+      newLogs.push(`Aggiornati        : ${ok}`);
+      newLogs.push(`Errori            : ${err}`);
+      newLogs.push(`─────────────────────────────────────────────────`);
+      setLogs([...newLogs]);
+
+      toast.current?.show({
+        severity: err === 0 ? "success" : "warn",
+        summary: "Migrazione stati completata",
+        detail: `Aggiornati: ${ok} | Errori: ${err}`,
+        life: 5000,
+      });
+    } catch (e: unknown) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore migrazione stati",
+        detail: (e as { message?: string })?.message || String(e),
+        life: 4000,
+      });
+    } finally {
+      setMigratingStatuses(false);
+    }
+  };
+
   // Delete all deviceRequests and subcollections
   const handleDeleteAll = async () => {
     setDeleteAllLoading(true);
@@ -749,7 +927,7 @@ export default function AdminMaintenanceRequests() {
             label="Aggiorna date"
             icon="pi pi-calendar"
             onClick={handleUpdateDates}
-            disabled={!csvRows.length || importing || updatingDates || migratingVolunteers}
+            disabled={!csvRows.length || importing || updatingDates || migratingVolunteers || migratingStatuses}
             loading={updatingDates}
             className="p-button-warning"
           />
@@ -757,10 +935,20 @@ export default function AdminMaintenanceRequests() {
             label="Migra volontari"
             icon="pi pi-users"
             onClick={handleMigrateVolunteers}
-            disabled={importing || updatingDates || migratingVolunteers}
+            disabled={importing || updatingDates || migratingVolunteers || migratingStatuses}
             loading={migratingVolunteers}
             className="p-button-help"
             tooltip="Migra assignedVolunteer → assignedVolunteers (idempotente)"
+            tooltipOptions={{ position: "top" }}
+          />
+          <Button
+            label="Migra stati richieste"
+            icon="pi pi-refresh"
+            onClick={handleMigrateStatuses}
+            disabled={importing || updatingDates || migratingVolunteers || migratingStatuses}
+            loading={migratingStatuses}
+            className="p-button-help"
+            tooltip="Migra i 10 stati rimossi (triage/produzione/annullamento) ai 3 generici e rimuove publicStatus (idempotente)"
             tooltipOptions={{ position: "top" }}
           />
         </div>
