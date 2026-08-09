@@ -17,7 +17,18 @@ export const REQUEST_STATUSES = [
   "followup famiglia",
   "completata",
   "annullata",
-  "standby"
+  "standby",
+  // Story EA-152: "da gestire"/"in produzione" sono i 2 valori generici
+  // introdotti da EA-148 per i 10 stati rimossi (vedi REMOVED_STATUS_TO_GENERIC
+  // sotto) — aggiunti qui (additivo, i 10 valori rimossi restano per ora,
+  // rimuoverli è F-29, fuori scope) perché una deviceRequest migrata da
+  // handleMigrateStatuses resti filtrabile/bulk-editabile in
+  // AdminRequestTable.tsx e selezionabile nei dropdown "Cambia stato"
+  // (RequestDetail.tsx/VolunteerRequestDetail.tsx), che leggono da questo
+  // array senza fallback per i valori assenti (adversarial concern, panel
+  // review close-story --auto).
+  "da gestire",
+  "in produzione"
 ];
 
 export const REQUEST_STATUS_DESCRIPTIONS: { [key: string]: string } = {
@@ -95,6 +106,33 @@ export function mapInternalStatusToPublic(status: string): string {
   return "da gestire"; // Default se non trovato
 }
 
+/**
+ * Raggruppamento pubblico a 5 gruppi calcolato sugli 11 valori di `status`
+ * introdotti dalla Story EA-148 (decisione opt-b di ss-device-request-macro-status).
+ *
+ * Sostituto display-only di PUBLIC_STATUS_GROUPS/mapInternalStatusToPublic sopra
+ * (che restano invariati solo perché ancora usati da AdminMaintenanceRequests.tsx,
+ * l'unico consumer non incluso nel perimetro della Story EA-150): nessun campo
+ * `publicStatus` viene più persistito da EA-149, quindi qui il raggruppamento è
+ * ricalcolato al volo da `status` a ogni chiamata, non letto da Firestore.
+ */
+export const PUBLIC_STATUS_GROUPS_FROM_STATUS: { [key: string]: string[] } = {
+  "da validare": ["inviata"],
+  "da gestire": ["validata", "da gestire", "attesa volontario"],
+  "fabbricazione in corso": ["in produzione", "pronta per spedizione", "spedita", "followup famiglia"],
+  "completati": ["completata"],
+  "annullate / non completabili": ["annullata", "standby"],
+};
+
+export function getPublicStatusGroup(status: string): string {
+  for (const [group, statuses] of Object.entries(PUBLIC_STATUS_GROUPS_FROM_STATUS)) {
+    if (statuses.includes(status)) {
+      return group;
+    }
+  }
+  return "da gestire"; // Default se non trovato, coerente con mapInternalStatusToPublic
+}
+
 export const REQUEST_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
   // da validare → info
   "inviata": "info",
@@ -120,6 +158,12 @@ export const REQUEST_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "suc
   "followup famiglia troppo piccolo": "danger",
   "annullata": "danger",
   "standby": "danger",
+  // Story EA-152 (vedi commento su REQUEST_STATUSES sopra): severity
+  // coerente col gruppo pubblico di appartenenza dei due valori generici
+  // (PUBLIC_STATUS_GROUPS_FROM_STATUS: "da gestire" -> gruppo "da gestire",
+  // "in produzione" -> gruppo "fabbricazione in corso").
+  "da gestire": "warning",
+  "in produzione": "secondary",
 };
 
 export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
@@ -128,6 +172,31 @@ export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "succ
   "fabbricazione in corso": "secondary",
   "completati": "success",
   "annullate / non completabili": "danger"
+};
+
+/**
+ * Story EA-152: mappa dei 10 valori di `status` rimossi dal dominio (decisione
+ * opt-b di `ss-device-request-macro-status`, EA-148) al valore generico
+ * corrispondente. Usata solo dallo strumento di migrazione one-shot in
+ * `AdminMaintenanceRequests.tsx` per riconoscere e riscrivere le deviceRequest
+ * già esistenti in uno di questi 10 valori. `REQUEST_STATUSES`/
+ * `REQUEST_STATUS_SEVERITY` sono stati estesi (additivamente, vedi sopra) coi
+ * 2 nuovi valori generici perché la migrazione non regredisse la UI admin;
+ * la RIMOZIONE dei 10 valori qui sotto da quegli stessi elenchi, e da
+ * `deviceStatus` (`shared/types/deviceData.ts`), resta invece fuori scope
+ * (F-29 — ancora sui 19 valori pre-riduzione).
+ */
+export const REMOVED_STATUS_TO_GENERIC: { [key: string]: string } = {
+  "famiglia contattata": "da gestire",
+  "definizione richiesta": "da gestire",
+  "valutazione fattibilità": "da gestire",
+  "scelta device e dimensionamento": "in produzione",
+  "personalizzazione": "in produzione",
+  "attesa materiali": "in produzione",
+  "fabbricazione": "in produzione",
+  "fitting": "in produzione",
+  "followup famiglia ko": "annullata",
+  "followup famiglia troppo piccolo": "annullata",
 };
 
 export function shortAmputationType(amputationType: string): "avambraccio" | "braccio" | "mano" | "altro" {

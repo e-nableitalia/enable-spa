@@ -16,7 +16,7 @@ import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
-import { REQUEST_STATUSES } from "../../../helpers/requestStatus";
+import { REQUEST_STATUSES, getPublicStatusGroup } from "../../../helpers/requestStatus";
 import { setRequiresAttention } from "../../../helpers/requiresAttention";
 import type { ShippingAddress } from "../../../shared/types/shippingAddress";
 import provinceList from "../../../helpers/province.json";
@@ -147,14 +147,14 @@ export default function RequestDetail() {
     const privateDataLoaded = privateSnap.exists() ? privateSnap.data() : null;
     setPrivateData(privateDataLoaded);
 
-    // Load public data (contains devicetype and publicStatus)
+    // Load public data (contains devicetype). Lo stato pubblico non è più letto da qui:
+    // è ricalcolato al volo da status via getPublicStatusGroup (EA-150).
     const publicSnap = await getDoc(doc(db, "publicDeviceRequests", id));
     if (publicSnap.exists()) {
       const publicData = publicSnap.data();
       setRequest((prev: any) => ({
         ...prev,
         deviceType: publicData.devicetype ?? prev?.deviceType,
-        publicStatus: publicData.publicStatus ?? prev?.publicStatus,
       }));
     }
 
@@ -521,8 +521,8 @@ export default function RequestDetail() {
   /**
    * Valida una richiesta con status "inviata":
    * 1. Salva i campi operativi in deviceRequests/{id}
-   * 2. Aggiorna publicDeviceRequests/{id} con publicStatus = "da gestire"
-   * 3. Cambia lo status interno a "famiglia contattata" via cloud function
+   * 2. Aggiorna publicDeviceRequests/{id} con il devicetype
+   * 3. Cambia lo status interno a "validata" via cloud function
    */
   const handleValidate = async () => {
     if (!id) return;
@@ -548,9 +548,8 @@ export default function RequestDetail() {
         amputationType: validationForm.amputationType.trim(),
       });
 
-      // 2. Rendi la richiesta visibile ai volontari (publicStatus) e aggiorna devicetype
+      // 2. Aggiorna il devicetype sulla proiezione pubblica
       await updateDoc(doc(db, "publicDeviceRequests", id), {
-        publicStatus: "da gestire",
         devicetype: valIsDeviceTypeOther ? valDeviceTypeOtherText.trim() : validationForm.deviceTypeVal.trim(),
       });
 
@@ -928,9 +927,9 @@ export default function RequestDetail() {
               </div>
               <div style={{ marginBottom: 10 }}>
                 <strong>Stato pubblico:</strong>
-                {request.publicStatus ? (
+                {request.status ? (
                   <span style={{ marginLeft: 8 }}>
-                    <Badge value={request.publicStatus} severity="warning" />
+                    <Badge value={getPublicStatusGroup(request.status)} severity="warning" />
                   </span>
                 ) : (
                   <span style={{ marginLeft: 8 }}>-</span>
@@ -1551,7 +1550,7 @@ export default function RequestDetail() {
       >
         <p>
           Confermando, la richiesta sarà resa visibile ai volontari con stato{" "}
-          <strong>«validata»</strong> e publicStatus <strong>«da gestire»</strong>.
+          <strong>«validata»</strong>.
           Questa operazione non può essere annullata automaticamente.
         </p>
       </Dialog>

@@ -8,7 +8,7 @@ import { Card } from "primereact/card";
 import { Tag } from "primereact/tag";
 import { Avatar } from "primereact/avatar";
 import { db } from "../../firebase";
-import { mapInternalStatusToPublic } from "../../helpers/requestStatus";
+import { getPublicStatusGroup } from "../../helpers/requestStatus";
 
 type Request = {
   id?: string;
@@ -20,7 +20,6 @@ type Request = {
   amputationType?: string;
   deviceType?: string;
   province?: string;
-  publicStatus?: string;
   status?: string;
   assignedVolunteers?: string[];
   description?: string;
@@ -81,10 +80,8 @@ async function buildBoard(requests: Request[]): Promise<Board> {
   console.debug("Building board with requests:", requests); // Log per debug
 
   requests.forEach((req) => {
-    // Usa requestStatus e mapInternalStatusToPublic per valutare lo stato pubblico
-    const publicStatus = mapInternalStatusToPublic(req.status || "")
-      ? mapInternalStatusToPublic(req.status || "")
-      : req.publicStatus || "";
+    // Raggruppamento pubblico display-only, ricalcolato al volo da status (EA-150)
+    const publicStatus = getPublicStatusGroup(req.status || "");
 
     const status = ALL_STATUSES.includes(publicStatus)
       ? publicStatus
@@ -108,7 +105,7 @@ async function buildBoard(requests: Request[]): Promise<Board> {
               description:
                 r.description ||
                 (r.province ? `Provincia: ${r.province}` : ""),
-              publicStatus: r.publicStatus,
+              publicStatus: getPublicStatusGroup(r.status || ""),
               status: r.status,
               assignedVolunteers: r.assignedVolunteers?.length
                 ? (await Promise.all(r.assignedVolunteers.map(getUserFullName))).join(", ")

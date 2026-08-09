@@ -44,6 +44,16 @@ const MAX_CHECKLISTS_PER_REQUEST = 5;
  * - `requestId`: id del documento `deviceRequests/{requestId}`.
  * - `title` (opzionale): titolo della checklist; se omesso viene generato
  *   un titolo di default a partire dal `requestNumber` della richiesta.
+ * - `items` (opzionale): elenco di item iniziali espliciti (stessa forma
+ *   accettata da `organizer/createChecklist`, es. `{ title, type }`). Se
+ *   presente, ha precedenza sulla risoluzione da template: nessun lookup su
+ *   `templates` viene eseguito e la checklist viene creata con esattamente
+ *   questi item (`organizer/createChecklist`). Introdotto per l'auto-
+ *   istanziazione della checklist di produzione (EA-151,
+ *   `device-requests/autoCreateProductionChecklist.ts`), ma non riservato:
+ *   qualunque consumer autorizzato può fornirlo, coerentemente con
+ *   `organizer/createChecklist` che accetta già `items` arbitrari da
+ *   qualunque utente autenticato.
  */
 export const createDeviceRequestChecklist = onCall(
   { region: REGION },
@@ -58,7 +68,7 @@ export const createDeviceRequestChecklist = onCall(
     }
 
     const data = request.data ?? {};
-    const { requestId, title } = data;
+    const { requestId, title, items } = data;
 
     if (!requestId || typeof requestId !== "string") {
       console.log("[createDeviceRequestChecklist] KO: Missing or invalid requestId");
@@ -68,6 +78,11 @@ export const createDeviceRequestChecklist = onCall(
     if (title !== undefined && title !== null && typeof title !== "string") {
       console.log("[createDeviceRequestChecklist] KO: title must be a string");
       throw new HttpsError("invalid-argument", "title must be a string");
+    }
+
+    if (items !== undefined && !Array.isArray(items)) {
+      console.log("[createDeviceRequestChecklist] KO: items must be an array");
+      throw new HttpsError("invalid-argument", "items must be an array");
     }
 
     const db = getFirestore();
@@ -136,7 +151,7 @@ export const createDeviceRequestChecklist = onCall(
       `Checklist di fabbricazione - ${requestData.requestNumber ?? requestId}`;
 
     let templateId: string | undefined;
-    if (devicetype) {
+    if (devicetype && items === undefined) {
       const templatesSnap = await db
         .collection("templates")
         .where("category", "==", devicetype)
@@ -148,7 +163,17 @@ export const createDeviceRequestChecklist = onCall(
     }
 
     let checklistId: string;
-    if (templateId) {
+    if (items !== undefined) {
+      console.log(
+        `[createDeviceRequestChecklist] Creating checklist with ${items.length} explicit item(s) ` +
+          `for request ${requestId}`
+      );
+      const result = await createChecklist.run({
+        ...request,
+        data: { category: devicetype ?? "unknown", title: resolvedTitle, items },
+      } as CallableRequest);
+      checklistId = (result as { checklistId: string }).checklistId;
+    } else if (templateId) {
       console.log(
         `[createDeviceRequestChecklist] Instantiating checklist from template ${templateId} ` +
           `(devicetype ${devicetype}) for request ${requestId}`

@@ -1,16 +1,15 @@
 import { HttpsError } from "firebase-functions/v2/https";
 
 /**
- * Le 5 transizioni di stato che un volontario assegnato può eseguire su una
- * deviceRequest. Contratto RBAC invariato rispetto alla versione inline
- * precedentemente in device/changeStatus.ts.
+ * Le 2 transizioni di stato che un volontario assegnato può eseguire su una
+ * deviceRequest. Ridotte dalle precedenti 5 coppie dalla Story EA-148
+ * (decisione opt-b di ss-device-request-macro-status, 2026-08-06): i 5 stati
+ * di produzione pre-spedizione collassano nell'unico valore `in produzione`,
+ * lasciando solo le due transizioni verso spedizione.
  */
 export function isAllowedVolunteerTransition(from: string, to: string): boolean {
   return (
-    (from === "scelta device e dimensionamento" && to === "personalizzazione") ||
-    (from === "personalizzazione" && to === "attesa materiali") ||
-    (from === "attesa materiali" && to === "fabbricazione") ||
-    (from === "fabbricazione" && to === "pronta per spedizione") ||
+    (from === "in produzione" && to === "pronta per spedizione") ||
     (from === "pronta per spedizione" && to === "spedita")
   );
 }
@@ -19,7 +18,7 @@ export function isAllowedVolunteerTransition(from: string, to: string): boolean 
  * Applica il contratto RBAC di device-requests/dc-volunteer-transition:
  * - admin: qualsiasi transizione consentita, nessun controllo aggiuntivo;
  * - volunteer: deve essere in assignedVolunteers e la transizione deve
- *   rientrare tra le 5 codificate in isAllowedVolunteerTransition;
+ *   rientrare tra le 2 codificate in isAllowedVolunteerTransition;
  * - qualsiasi altro ruolo: rifiutato.
  *
  * Lancia HttpsError permission-denied con gli stessi messaggi del

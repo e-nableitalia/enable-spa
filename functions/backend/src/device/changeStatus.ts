@@ -4,6 +4,7 @@ import {applyStatusChangeTransaction} from "./applyStatusChangeTransaction";
 import {requireVolunteerConsents} from "../utils/consents";
 import {sendChangeStatusNotifications, NotificaOptions} from "./changeStatusNotifications";
 import {assertVolunteerTransitionAllowed} from "../utils/volunteerTransitions";
+import {autoCreateProductionChecklistOnTransition} from "../device-requests/autoCreateProductionChecklist";
 
 export const changeStatus = onCall(
   {
@@ -60,13 +61,23 @@ export const changeStatus = onCall(
 
     await db.runTransaction(async (tx) => {
       applyStatusChangeTransaction(tx, requestRef, {
-        db,
-        requestId,
         currentStatus,
         newStatus,
         createdBy: uid,
         note
       });
+    });
+
+    // --- Auto-istanziazione checklist di produzione (EA-151) ---
+    // Nessun gate: un eventuale fallimento non blocca la transizione di
+    // stato, già commitata sopra. Il guard di idempotenza è letto e
+    // "claimato" atomicamente dentro autoCreateProductionChecklist.ts
+    // stesso (non qui): un valore letto prima di questa transazione, come
+    // in una prima versione di questo modulo, sarebbe stale sotto due
+    // changeStatus quasi simultanei sulla stessa richiesta.
+    await autoCreateProductionChecklistOnTransition(request, {
+      requestId,
+      newStatus,
     });
 
     // --- Notifiche opzionali ---

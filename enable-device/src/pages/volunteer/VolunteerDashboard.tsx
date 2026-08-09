@@ -13,7 +13,7 @@ import { Divider } from "primereact/divider";
 import { Panel } from "primereact/panel";
 import { Badge } from "primereact/badge";
 import type { GlobalMessage, PersonalMessage, EnrichedMessage } from "../../shared/types/messageData";
-import { REQUEST_STATUS_SEVERITY, CLOSED_STATUSES, PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
+import { REQUEST_STATUS_SEVERITY, CLOSED_STATUSES, PUBLIC_STATUS_GROUPS_FROM_STATUS, getPublicStatusGroup } from "../../helpers/requestStatus";
 
 // ---- Helpers ----
 
@@ -82,12 +82,25 @@ export default function VolunteerDashboard() {
 
   useEffect(() => {
     const fetchRequests = async () => {
-      // Public requests (for stats/charts only)
-      const publicReqSnap = await getDocs(collection(db, "publicDeviceRequests"));
-      setPublicRequests(publicReqSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      // Public requests (for stats/charts only): devicetype/province da publicDeviceRequests,
+      // status da deviceRequests, usato solo per ricalcolare il gruppo pubblico display-only (EA-150)
+      const [publicReqSnap, allReqSnap] = await Promise.all([
+        getDocs(collection(db, "publicDeviceRequests")),
+        getDocs(collection(db, "deviceRequests")),
+      ]);
+      const statusById = new Map(allReqSnap.docs.map((d) => [d.id, d.data().status as string | undefined]));
+      setPublicRequests(publicReqSnap.docs.map(doc => {
+        const status = statusById.get(doc.id);
+        return {
+          id: doc.id,
+          ...doc.data(),
+          status,
+          publicStatus: status ? getPublicStatusGroup(status) : undefined,
+        };
+      }));
 
       // Manageable requests: not yet assigned + da gestire status
-      const daGestireStatuses = PUBLIC_STATUS_GROUPS["da gestire"];
+      const daGestireStatuses = PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"];
       const manageableSnap = await getDocs(query(
         collection(db, "deviceRequests"),
         where("assignedVolunteers", "==", []),
@@ -100,7 +113,7 @@ export default function VolunteerDashboard() {
             const pubSnap = await getDoc(doc(db, "publicDeviceRequests", r.id));
             if (pubSnap.exists()) {
               const pub = pubSnap.data();
-              return { ...r, requestNumber: pub.requestNumber ?? null, ageRange: pub.ageRange ?? null, devicetype: pub.devicetype ?? null, province: pub.province ?? r.province ?? null, publicStatus: pub.publicStatus ?? null };
+              return { ...r, requestNumber: pub.requestNumber ?? null, ageRange: pub.ageRange ?? null, devicetype: pub.devicetype ?? null, province: pub.province ?? r.province ?? null, publicStatus: r.status ? getPublicStatusGroup(r.status) : null };
             }
           } catch { /* skip */ }
           return r;
