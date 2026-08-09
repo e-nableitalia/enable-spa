@@ -321,7 +321,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `enable-device/src/components/layout/AdminLayout.tsx:236` — voce di menu commentata
   - `enable-device/src/components/layout/AdminLayout.tsx:435` — rotta comunque attiva e funzionante
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-152, sessione 2026-08-08.
-- **Stato**: da decidere. Non corretto in questa Story: riabilitare la voce di menu è una modifica a `AdminLayout.tsx`, file fuori dal perimetro dichiarato da EA-152 (che tocca solo `AdminMaintenanceRequests.tsx`/`requestStatus.ts`), e la decisione di rendere permanentemente visibile in UI uno strumento di migrazione one-shot (vs. tenerlo raggiungibile solo da chi conosce l'URL, evitando riesecuzioni accidentali pur essendo idempotente) è una scelta di prodotto. Proposta: se si vuole che un admin possa effettivamente eseguire la migrazione EA-152 dalla UI senza conoscere l'URL a memoria, aprire un Task Jira per riabilitare la voce di menu — riferimento F-33.
+- **Stato**: risolto. L'operatore ha richiesto esplicitamente la riabilitazione (sessione 2026-08-09, per poter eseguire la migrazione EA-152 su staging/prod senza conoscere l'URL a memoria): voce di menu scommentata in `AdminLayout.tsx`, nessun'altra modifica. Lo stesso limite resta invece ancora presente sul bottone preesistente "Migra volontari" nello stesso file (non in scope di questa richiesta).
 
 ## F-34: la descrizione della Story Jira EA-154 rimanda a "docs/FINDINGS.md F-34" per spiegare perché dichiara `volunteer-management` in Target Domains, ma nessuna voce F-34 preesisteva in questo file al momento dell'implementazione
 

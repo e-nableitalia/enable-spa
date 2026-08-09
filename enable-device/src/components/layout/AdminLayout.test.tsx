@@ -88,6 +88,31 @@ describe("AdminLayout - voce di menu 'I miei item' (riuso di MyChecklistItems gi
   });
 });
 
+describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' riabilitata (era commentata, F-33)", () => {
+  it("l'admin raggiunge lo strumento di migrazione stati/publicStatus (EA-152) dal menu 'Richieste', senza dover conoscere l'URL a memoria", async () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/dashboard"]}>
+        <Routes>
+          <Route path="/admin/*" element={<AdminLayout />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apri menu" }));
+
+    const richiesteButton = (await screen.findAllByRole("button")).find(
+      (b) => b.textContent === "Richieste"
+    );
+    if (!richiesteButton) throw new Error("Voce di menu 'Richieste' non trovata");
+    await userEvent.click(richiesteButton);
+
+    const menuItem = await screen.findByRole("treeitem", { name: "Manutenzione (Import CSV)" });
+    await userEvent.click(within(menuItem).getByText("Manutenzione (Import CSV)"));
+
+    expect(await screen.findByText("Manutenzione richieste - Import CSV")).toBeInTheDocument();
+  });
+});
+
 describe("AdminLayout (EA-150) - classificazione delle richieste derivata da status, tranne i due filtri letterali", () => {
   it.each(cases)(
     "Scenario 4: %s mostra %s righe calcolate dall'helper display-only o dal filtro letterale invariato",
