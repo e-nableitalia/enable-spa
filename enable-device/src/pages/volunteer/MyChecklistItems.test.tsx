@@ -99,6 +99,33 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
     expect(mockNavigate).toHaveBeenCalledWith("/volunteer/my-requests/req-1");
   });
 
+  // Regressione: originBasePath e' usato da AdminLayout per riusare lo stesso
+  // componente con la propria rotta di dettaglio richiesta (/admin/request/:id),
+  // diversa da quella del volontario.
+  it("naviga a <originBasePath>/:id quando originBasePath e' passato esplicitamente", async () => {
+    firestoreDocs["deviceRequests/req-1"] = { requestNumber: "REQ-000042" };
+    callable.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "item-1",
+            checklistId: "checklist-a",
+            title: "Stampa mano",
+            status: "In corso",
+            origin: { type: "deviceRequest", id: "req-1" },
+          },
+        ],
+      },
+    });
+
+    render(<MyChecklistItems originBasePath="/admin/request" />);
+
+    const originButton = await screen.findByRole("button", { name: "Richiesta REQ-000042" });
+    await userEvent.click(originButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith("/admin/request/req-1");
+  });
+
   // Scenario: un item il cui origin e' null non mostra alcuna azione di navigazione (EA-155)
   it("non mostra alcuna azione di navigazione per un item con origin null", async () => {
     callable.mockResolvedValue({

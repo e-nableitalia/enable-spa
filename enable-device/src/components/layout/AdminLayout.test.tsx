@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 
-vi.mock("../../firebase", () => ({ auth: {}, db: {} }));
+vi.mock("../../firebase", () => ({ auth: {}, db: {}, functions: {} }));
 
 vi.mock("firebase/auth", () => ({
   onAuthStateChanged: (_auth: unknown, cb: (user: unknown) => void) => {
@@ -14,7 +15,7 @@ vi.mock("firebase/auth", () => ({
 }));
 
 vi.mock("firebase/functions", () => ({
-  httpsCallable: () => async () => ({ data: {} }),
+  httpsCallable: () => async () => ({ data: { items: [] } }),
 }));
 
 // 10 richieste che coprono gli 11 valori di status (EA-148/EA-150), progettate per
@@ -63,6 +64,29 @@ const cases: Array<[string, string, number]> = [
   ["/admin/requests/completed", "Richieste completate", 1], // completata
   ["/admin/requests/cancelled", "Richieste annullate / KO", 2], // annullata + standby
 ];
+
+describe("AdminLayout - voce di menu 'I miei item' (riuso di MyChecklistItems gia' introdotta per il volontario, EA-153/EA-154/EA-156)", () => {
+  it("l'admin vede la voce 'I miei item' nel menu e la usa per raggiungere la pagina (la navigazione con originBasePath=/admin/request e' verificata in MyChecklistItems.test.tsx)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/dashboard"]}>
+        <Routes>
+          <Route path="/admin/*" element={<AdminLayout />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apri menu" }));
+
+    const menuItem = await screen.findByRole("button", { name: "I miei item" });
+    expect(menuItem).toBeInTheDocument();
+
+    await userEvent.click(menuItem);
+
+    expect(
+      await screen.findByText("Non hai al momento nessun item di checklist assegnato.")
+    ).toBeInTheDocument();
+  });
+});
 
 describe("AdminLayout (EA-150) - classificazione delle richieste derivata da status, tranne i due filtri letterali", () => {
   it.each(cases)(

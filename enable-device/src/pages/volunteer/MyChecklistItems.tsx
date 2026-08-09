@@ -37,11 +37,21 @@ interface MyChecklistItem {
  * firestore.rules riga 39), non incluso nella risposta del backend.
  *
  * Il riferimento di provenienza e' cliccabile (EA-155) solo quando origin.type
- * === 'deviceRequest': naviga a /volunteer/my-requests/:id (VolunteerRequestDetail,
- * rotta gia' registrata in VolunteerLayout.tsx). Nessuna azione per origin null
- * (item non collegato a una deviceRequest) o assente (item completato).
+ * === 'deviceRequest': naviga a `${originBasePath}/:id`. Nessuna azione per
+ * origin null (item non collegato a una deviceRequest) o assente (item
+ * completato).
+ *
+ * Riusata identica sia da VolunteerLayout (default, dettaglio richiesta su
+ * /volunteer/my-requests/:id) sia da AdminLayout (dettaglio richiesta su
+ * /admin/request/:id, passato esplicitamente via originBasePath): la
+ * funzione di aggregazione backend (listMyChecklistItems) e' self-only e
+ * generica per qualunque utente autenticato, non specifica del volontario.
  */
-export default function MyChecklistItems() {
+export default function MyChecklistItems({
+  originBasePath = "/volunteer/my-requests",
+}: {
+  originBasePath?: string;
+}) {
   const navigate = useNavigate();
   const [items, setItems] = useState<MyChecklistItem[]>([]);
   const [requestLabels, setRequestLabels] = useState<Record<string, string>>({});
@@ -110,7 +120,7 @@ export default function MyChecklistItems() {
       <Button
         label={label}
         className="p-button-text p-button-sm"
-        onClick={() => navigate(`/volunteer/my-requests/${item.origin!.id}`)}
+        onClick={() => navigate(`${originBasePath}/${item.origin!.id}`)}
       />
     );
   };

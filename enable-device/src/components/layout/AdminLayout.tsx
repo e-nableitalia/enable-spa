@@ -34,6 +34,7 @@ import AdminEmailLogsPage from "../../pages/admin/AdminEmailLogsPage";
 import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
 import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
 import AdminChecklistTemplatesPage from "../../pages/admin/AdminChecklistTemplatesPage";
+import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
 import { version } from "../../../package.json";
 
 export default function AdminLayout() {
@@ -183,7 +184,12 @@ useEffect(() => {
       label: "Dashboard",
       icon: "pi pi-home",
       command: () => navigate("/admin/dashboard"),
-    }, 
+    },
+    {
+      label: "I miei item",
+      icon: "pi pi-check-square",
+      command: () => navigate("/admin/my-checklist-items"),
+    },
     {
       label: "Richieste",
       icon: "pi pi-folder-open", // folder open per richieste
@@ -433,6 +439,7 @@ useEffect(() => {
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
             <Route path="requests/attention" element={<AdminAttention requests={attentionRequests} />} />
             <Route path="requests/maintenance" element={<AdminMaintenanceRequests />} />
+            <Route path="my-checklist-items" element={<MyChecklistItems originBasePath="/admin/request" />} />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
             <Route path="volunteers/contacts" element={<ContactsList />} />
