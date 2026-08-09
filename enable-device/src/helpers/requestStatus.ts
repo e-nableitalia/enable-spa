@@ -1,61 +1,39 @@
+// I 10 valori rimossi da EA-148 (3 di triage + 5 di produzione pre-spedizione
+// + 2 di cancellazione specifica) sono stati tolti da qui: dopo che la
+// migrazione one-shot (handleMigrateStatuses, EA-152) è stata eseguita
+// sull'ambiente, nessuna deviceRequest reale li usa più — restano solo come
+// chiavi sorgente di REMOVED_STATUS_TO_GENERIC sotto, che lo strumento di
+// migrazione continua a leggere per riconoscerli sui dati storici non ancora
+// migrati. Dominio finale a 11 valori (F-29, risolto).
 export const REQUEST_STATUSES = [
   "inviata",
   "validata",
-  "famiglia contattata",
-  "definizione richiesta",
-  "valutazione fattibilità",
-  "followup famiglia ko",
-  "followup famiglia troppo piccolo",
+  "da gestire",
   "attesa volontario",
-  "scelta device e dimensionamento",
-  "personalizzazione",
-  "attesa materiali",
-  "fabbricazione",
-  "fitting",
+  "in produzione",
   "pronta per spedizione",
   "spedita",
   "followup famiglia",
   "completata",
   "annullata",
-  "standby",
-  // Story EA-152: "da gestire"/"in produzione" sono i 2 valori generici
-  // introdotti da EA-148 per i 10 stati rimossi (vedi REMOVED_STATUS_TO_GENERIC
-  // sotto) — aggiunti qui (additivo, i 10 valori rimossi restano per ora,
-  // rimuoverli è F-29, fuori scope) perché una deviceRequest migrata da
-  // handleMigrateStatuses resti filtrabile/bulk-editabile in
-  // AdminRequestTable.tsx e selezionabile nei dropdown "Cambia stato"
-  // (RequestDetail.tsx/VolunteerRequestDetail.tsx), che leggono da questo
-  // array senza fallback per i valori assenti (adversarial concern, panel
-  // review close-story --auto).
-  "da gestire",
-  "in produzione"
+  "standby"
 ];
 
 export const REQUEST_STATUS_DESCRIPTIONS: { [key: string]: string } = {
   "inviata": "La richiesta è stata inserita dalla famiglia e validata via email.",
   "validata": "La richiesta è stata validata dall'amministratore ed è ora visibile ai volontari.",
-  "famiglia contattata": "Primo contatto effettuato per raccolta informazioni.",
-  "definizione richiesta": "Fase collaborativa per chiarire esigenze, misure, obiettivi.",
-  "valutazione fattibilità": "Verifica tecnica della possibilità di realizzazione.",
-  "followup famiglia ko": "Chiusura per esito tecnico negativo.",
-  "followup famiglia troppo piccolo": "Chiusura temporanea per età non idonea.",
+  "da gestire": "Fase di triage: raccolta informazioni, definizione della richiesta e valutazione di fattibilità.",
   "attesa volontario": "Richiesta pronta per assegnazione.",
-  "scelta device e dimensionamento": "Selezione modello e adattamento misure.",
-  "personalizzazione": "Eventuali modifiche estetiche o funzionali.",
-  "attesa materiali": "In attesa componenti necessari.",
-  "fabbricazione": "Stampa e assemblaggio.",
-  "fitting": "Test delle dimensioni e verifica dell'adattamento del device.",
+  "in produzione": "Scelta del device, personalizzazione, attesa materiali, fabbricazione e fitting.",
   "pronta per spedizione": "Dispositivo completato.",
   "spedita": "Spedizione effettuata.",
   "followup famiglia": "Contatto post-consegna per verifica utilizzo e soddisfazione.",
   "completata": "Richiesta chiusa positivamente dopo followup.",
-  "annullata": "Richiesta chiusa anticipatamente per motivi organizzativi, rinuncia famiglia o altre cause non tecniche.",
+  "annullata": "Richiesta chiusa anticipatamente per motivi organizzativi, rinuncia famiglia, esito tecnico negativo o altre cause non tecniche.",
   "standby": "Richiesta in pausa temporanea, ad esempio per attesa di capire come gestirla o decisioni da parte della famiglia."
 };
 
 export const CLOSED_STATUSES = [
-  "followup famiglia ko",
-  "followup famiglia troppo piccolo",
   "annullata",
   "completata"
 ];
@@ -138,32 +116,18 @@ export const REQUEST_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "suc
   "inviata": "info",
   // da gestire → warning
   "validata": "warning",
-  "famiglia contattata": "warning",
-  "definizione richiesta": "warning",
-  "valutazione fattibilità": "warning",
+  "da gestire": "warning",
   "attesa volontario": "warning",
   // fabbricazione in corso → secondary
-  "scelta device e dimensionamento": "secondary",
-  "personalizzazione": "secondary",
-  "attesa materiali": "secondary",
-  "fabbricazione": "secondary",
-  "fitting": "secondary",
+  "in produzione": "secondary",
   "pronta per spedizione": "secondary",
   "spedita": "secondary",
   "followup famiglia": "secondary",
   // completati → success
   "completata": "success",
   // annullate / non completabili → danger
-  "followup famiglia ko": "danger",
-  "followup famiglia troppo piccolo": "danger",
   "annullata": "danger",
   "standby": "danger",
-  // Story EA-152 (vedi commento su REQUEST_STATUSES sopra): severity
-  // coerente col gruppo pubblico di appartenenza dei due valori generici
-  // (PUBLIC_STATUS_GROUPS_FROM_STATUS: "da gestire" -> gruppo "da gestire",
-  // "in produzione" -> gruppo "fabbricazione in corso").
-  "da gestire": "warning",
-  "in produzione": "secondary",
 };
 
 export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "success" | "secondary" | "contrast" | "danger" } = {
@@ -179,12 +143,11 @@ export const PUBLIC_STATUS_SEVERITY: { [key: string]: "info" | "warning" | "succ
  * opt-b di `ss-device-request-macro-status`, EA-148) al valore generico
  * corrispondente. Usata solo dallo strumento di migrazione one-shot in
  * `AdminMaintenanceRequests.tsx` per riconoscere e riscrivere le deviceRequest
- * già esistenti in uno di questi 10 valori. `REQUEST_STATUSES`/
- * `REQUEST_STATUS_SEVERITY` sono stati estesi (additivamente, vedi sopra) coi
- * 2 nuovi valori generici perché la migrazione non regredisse la UI admin;
- * la RIMOZIONE dei 10 valori qui sotto da quegli stessi elenchi, e da
- * `deviceStatus` (`shared/types/deviceData.ts`), resta invece fuori scope
- * (F-29 — ancora sui 19 valori pre-riduzione).
+ * già esistenti in uno di questi 10 valori. Resta qui anche dopo la potatura
+ * di `REQUEST_STATUSES`/`REQUEST_STATUS_SEVERITY` (F-29, risolto): lo
+ * strumento di migrazione deve poter riconoscere i 10 valori storici su
+ * qualunque ambiente su cui non sia ancora stato eseguito, anche se non sono
+ * più nel dominio "valido" corrente.
  */
 export const REMOVED_STATUS_TO_GENERIC: { [key: string]: string } = {
   "famiglia contattata": "da gestire",

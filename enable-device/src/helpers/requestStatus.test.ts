@@ -84,4 +84,14 @@ describe("REQUEST_STATUSES / REQUEST_STATUS_SEVERITY (EA-152) - i 2 valori gener
       expect(REQUEST_STATUS_SEVERITY[status]).toBeDefined();
     }
   });
+
+  // Regressione (F-29, risolto): dopo aver confermato la migrazione eseguita
+  // sull'ambiente, i 10 valori rimossi da EA-148 non devono più comparire nei
+  // dropdown "Cambia stato"/filtri/bulk-edit che leggono da REQUEST_STATUSES.
+  it("REQUEST_STATUSES contiene esattamente gli 11 valori del dominio ridotto, nessuno dei 10 rimossi", () => {
+    expect(REQUEST_STATUSES).toHaveLength(11);
+    for (const removed of Object.keys(REMOVED_STATUS_TO_GENERIC)) {
+      expect(REQUEST_STATUSES).not.toContain(removed);
+    }
+  });
 });
