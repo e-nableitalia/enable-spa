@@ -6,6 +6,7 @@ import { Avatar } from "primereact/avatar";
 import { Dialog } from "primereact/dialog";
 import { Sidebar } from "primereact/sidebar";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import type { User } from "firebase/auth";
 import { collection, query, orderBy, onSnapshot, getDocs, doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
@@ -34,14 +35,21 @@ import AdminEmailLogsPage from "../../pages/admin/AdminEmailLogsPage";
 import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
 import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
 import AdminChecklistTemplatesPage from "../../pages/admin/AdminChecklistTemplatesPage";
+import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
 import { version } from "../../../package.json";
 
+// Documenti Firestore arricchiti con sotto-dati privati/pubblici a forma
+// dinamica (deviceRequests+private+publicDeviceRequests, users+private
+// profile): nessuno schema fisso, coerente con l'`any[]` che i consumer
+// (AdminAll, AdminTriage, AdminVolunteers, ...) si aspettano ancora oggi.
+type AdminRecord = Record<string, unknown> & { id: string; status?: string };
+
 export default function AdminLayout() {
-  const [user, setUser] = useState<any | null>(null);
-  const [requests, setRequests] = useState<any[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+  const [requests, setRequests] = useState<AdminRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInfo, setShowInfo] = useState(false);
-  const [volunteers, setVolunteers] = useState<any[]>([]);
+  const [volunteers, setVolunteers] = useState<AdminRecord[]>([]);
   const [volunteersLoading, setVolunteersLoading] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const navigate = useNavigate();
@@ -133,7 +141,7 @@ useEffect(() => {
     unsubAuth();
     if (unsubRequests) unsubRequests();
   };
-}, [navigate]);
+}, [navigate, loadVolunteers]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -148,7 +156,7 @@ useEffect(() => {
   const validateRequests = requests.filter((r) => r.status === "inviata");
 
   const triageRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"].includes(r.status ?? "")
   );
 
   // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
@@ -157,20 +165,20 @@ useEffect(() => {
   );
 
   const productionRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status ?? "")
   );
 
   // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
   const shippingRequests = requests.filter((r) =>
-    ["pronta per spedizione", "spedita"].includes(r.status)
+    ["pronta per spedizione", "spedita"].includes(r.status ?? "")
   );
 
   const completedRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status ?? "")
   );
 
   const cancelledRequests = requests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["annullate / non completabili"].includes(r.status)
+    PUBLIC_STATUS_GROUPS_FROM_STATUS["annullate / non completabili"].includes(r.status ?? "")
   );
 
   const attentionRequests = requests.filter((r) => r.requiresAttention === true);
@@ -183,7 +191,12 @@ useEffect(() => {
       label: "Dashboard",
       icon: "pi pi-home",
       command: () => navigate("/admin/dashboard"),
-    }, 
+    },
+    {
+      label: "I miei item",
+      icon: "pi pi-check-square",
+      command: () => navigate("/admin/my-checklist-items"),
+    },
     {
       label: "Richieste",
       icon: "pi pi-folder-open", // folder open per richieste
@@ -233,7 +246,11 @@ useEffect(() => {
           icon: "pi pi-exclamation-triangle",
           command: () => navigate("/admin/requests/attention"),
         },
-        // { label: "Manutenzione (Import CSV)", icon: "pi pi-wrench", command: () => navigate("/admin/requests/maintenance") },
+        {
+          label: "Manutenzione (Import CSV)",
+          icon: "pi pi-wrench",
+          command: () => navigate("/admin/requests/maintenance"),
+        },
       ],
     },
     {
@@ -433,6 +450,7 @@ useEffect(() => {
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
             <Route path="requests/attention" element={<AdminAttention requests={attentionRequests} />} />
             <Route path="requests/maintenance" element={<AdminMaintenanceRequests />} />
+            <Route path="my-checklist-items" element={<MyChecklistItems originBasePath="/admin/request" />} />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
             <Route path="volunteers/contacts" element={<ContactsList />} />
