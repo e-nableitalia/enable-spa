@@ -23,6 +23,7 @@ import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
 import VolunteerRequestDetail from "../../pages/volunteer/VolunteerRequestDetail";
 import ManageableRequestsPage from "../../pages/volunteer/ManageableRequestsPage";
 import ManageableRequestDetail from "../../pages/volunteer/ManageableRequestDetail";
+import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { version } from "../../../package.json";
 
@@ -366,6 +367,7 @@ export default function VolunteerLayout() {
                         <Route path="profile" element={<VolunteerProfile />} />
                         <Route path="availability" element={<VolunteerAvailability />} />
                         <Route path="my-printers" element={<MyPrinters />} />
+                        <Route path="my-checklist-items" element={<MyChecklistItems />} />
                         <Route path="shipments" element={<ShipmentRequestsPage />} />
                         <Route path="*" element={<Navigate to="/volunteer" />} />
                     </Routes>
