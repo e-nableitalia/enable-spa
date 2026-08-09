@@ -11,21 +11,16 @@ export type publicStatus =
 
 export type deviceStatus =
     | "inviata"
-    | "famiglia contattata"
-    | "definizione richiesta"
-    | "valutazione fattibilità"
-    | "followup famiglia ko"
-    | "followup famiglia troppo piccolo"
+    | "validata"
+    | "da gestire"
     | "attesa volontario"
-    | "scelta device e dimensionamento"
-    | "personalizzazione"
-    | "attesa materiali"
-    | "fabbricazione"
+    | "in produzione"
     | "pronta per spedizione"
     | "spedita"
     | "followup famiglia"
     | "completata"
-    | "annullata";
+    | "annullata"
+    | "standby";
 
 export interface publicDeviceRequestData {
     createdAt: any; // Firestore Timestamp
