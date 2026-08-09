@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import MyChecklistItems from "./MyChecklistItems";
 
 vi.mock("../../firebase", () => ({ db: {}, functions: {} }));
@@ -8,6 +9,9 @@ const callable = vi.fn();
 vi.mock("firebase/functions", () => ({
   httpsCallable: (_functions: unknown, name: string) => (data: unknown) => callable(name, data),
 }));
+
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", () => ({ useNavigate: () => mockNavigate }));
 
 const firestoreDocs: Record<string, unknown> = {};
 vi.mock("firebase/firestore", () => ({
@@ -21,6 +25,7 @@ vi.mock("firebase/firestore", () => ({
 describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-154)", () => {
   beforeEach(() => {
     callable.mockReset();
+    mockNavigate.mockReset();
     for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
   });
 
@@ -69,7 +74,49 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
     expect(await screen.findByText("Richiesta REQ-000042")).toBeInTheDocument();
   });
 
-  // Scenario: un item completato non mostra alcun contesto di provenienza
+  // Scenario: click sul contesto di provenienza di un item non completato con origin di tipo deviceRequest naviga al dettaglio della richiesta (EA-155)
+  it("naviga a /volunteer/my-requests/:id quando si clicca sul riferimento alla richiesta di provenienza", async () => {
+    firestoreDocs["deviceRequests/req-1"] = { requestNumber: "REQ-000042" };
+    callable.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "item-1",
+            checklistId: "checklist-a",
+            title: "Stampa mano",
+            status: "In corso",
+            origin: { type: "deviceRequest", id: "req-1" },
+          },
+        ],
+      },
+    });
+
+    render(<MyChecklistItems />);
+
+    const originButton = await screen.findByRole("button", { name: "Richiesta REQ-000042" });
+    await userEvent.click(originButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith("/volunteer/my-requests/req-1");
+  });
+
+  // Scenario: un item il cui origin e' null non mostra alcuna azione di navigazione (EA-155)
+  it("non mostra alcuna azione di navigazione per un item con origin null", async () => {
+    callable.mockResolvedValue({
+      data: {
+        items: [
+          { id: "item-1", checklistId: "checklist-a", title: "Stampa mano", status: "In corso", origin: null },
+        ],
+      },
+    });
+
+    render(<MyChecklistItems />);
+
+    expect(await screen.findByText("Stampa mano")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Richiesta/ })).not.toBeInTheDocument();
+    expect(screen.getByText("-")).toBeInTheDocument();
+  });
+
+  // Scenario: un item completato (senza origin nella risposta) non mostra alcuna azione di navigazione (EA-155)
   it("non mostra alcun contesto di provenienza per un item con stato Completata (nessun campo origin)", async () => {
     callable.mockResolvedValue({
       data: {
@@ -83,6 +130,7 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
 
     expect(await screen.findByText("Stampa mano")).toBeInTheDocument();
     expect(screen.queryByText(/Richiesta/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Richiesta/ })).not.toBeInTheDocument();
     expect(screen.getByText("-")).toBeInTheDocument();
   });
 

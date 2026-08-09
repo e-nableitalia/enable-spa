@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
 import { db, functions } from "../../firebase";
@@ -6,6 +7,7 @@ import { Card } from "primereact/card";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Tag } from "primereact/tag";
+import { Button } from "primereact/button";
 
 interface ChecklistItemOrigin {
   type: string;
@@ -33,8 +35,14 @@ interface MyChecklistItem {
  * un riferimento leggibile (requestNumber) risolto con una lettura diretta
  * di `deviceRequests/{id}` (leggibile da qualunque volontario autenticato,
  * firestore.rules riga 39), non incluso nella risposta del backend.
+ *
+ * Il riferimento di provenienza e' cliccabile (EA-155) solo quando origin.type
+ * === 'deviceRequest': naviga a /volunteer/my-requests/:id (VolunteerRequestDetail,
+ * rotta gia' registrata in VolunteerLayout.tsx). Nessuna azione per origin null
+ * (item non collegato a una deviceRequest) o assente (item completato).
  */
 export default function MyChecklistItems() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<MyChecklistItem[]>([]);
   const [requestLabels, setRequestLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -95,6 +103,18 @@ export default function MyChecklistItems() {
     return `Richiesta ${requestLabels[item.origin.id] ?? item.origin.id}`;
   };
 
+  const originColumnBody = (item: MyChecklistItem) => {
+    const label = originLabel(item);
+    if (!label || !item.origin) return "-";
+    return (
+      <Button
+        label={label}
+        className="p-button-text p-button-sm"
+        onClick={() => navigate(`/volunteer/my-requests/${item.origin!.id}`)}
+      />
+    );
+  };
+
   return (
     <div style={{ width: "100%", padding: 32 }}>
       <Card title="I miei item">
@@ -106,7 +126,7 @@ export default function MyChecklistItems() {
           <DataTable value={items} loading={loading} size="small">
             <Column field="title" header="Titolo" />
             <Column header="Stato" body={(item: MyChecklistItem) => <Tag value={item.status} />} />
-            <Column header="Provenienza" body={(item: MyChecklistItem) => originLabel(item) ?? "-"} />
+            <Column header="Provenienza" body={originColumnBody} />
           </DataTable>
         )}
       </Card>
