@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import VolunteerLayout from "./VolunteerLayout";
 
-vi.mock("../../firebase", () => ({ auth: {}, db: {} }));
+vi.mock("../../firebase", () => ({ auth: {}, db: {}, functions: {} }));
 
 vi.mock("firebase/auth", () => ({
   onAuthStateChanged: (_auth: unknown, cb: (user: unknown) => void) => {
@@ -11,6 +12,10 @@ vi.mock("firebase/auth", () => ({
     return () => {};
   },
   signOut: async () => undefined,
+}));
+
+vi.mock("firebase/functions", () => ({
+  httpsCallable: () => async () => ({ data: { items: [] } }),
 }));
 
 const requestDocs = [
@@ -36,6 +41,7 @@ vi.mock("firebase/firestore", () => ({
     cb({ docs: requestDocs });
     return () => {};
   },
+  getDocs: async () => ({ docs: [] }),
 }));
 
 describe("VolunteerLayout (EA-150) - classificazione produzione/spedizione dal gruppo 'fabbricazione in corso' derivato da status", () => {
@@ -67,5 +73,28 @@ describe("VolunteerLayout (EA-150) - classificazione produzione/spedizione dal g
     const table = await screen.findByRole("table");
     expect(within(table).getByText("spedita")).toBeInTheDocument();
     expect(within(table).queryByText("in produzione")).not.toBeInTheDocument();
+  });
+});
+
+describe("VolunteerLayout (EA-156) - voce di menu reale per raggiungere 'I miei item'", () => {
+  it("Scenario: il volontario attivo vede la voce 'I miei item' nel menu e la usa per raggiungere la pagina introdotta da EA-154", async () => {
+    render(
+      <MemoryRouter initialEntries={["/volunteer"]}>
+        <Routes>
+          <Route path="/volunteer/*" element={<VolunteerLayout />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apri menu" }));
+
+    const menuItem = await screen.findByRole("button", { name: "I miei item" });
+    expect(menuItem).toBeInTheDocument();
+
+    await userEvent.click(menuItem);
+
+    expect(
+      await screen.findByText("Non hai al momento nessun item di checklist assegnato.")
+    ).toBeInTheDocument();
   });
 });
