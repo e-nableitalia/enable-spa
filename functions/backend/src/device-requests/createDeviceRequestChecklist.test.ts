@@ -225,6 +225,11 @@ describe("createDeviceRequestChecklist", () => {
         title: "Template Kinetic Hand",
         items: [{ title: "Stampa dita", quantity: 2 }],
       },
+      "template-kinetic-hand-collaudo": {
+        category: "Kinetic Hand",
+        title: "Template Kinetic Hand - Collaudo",
+        items: [{ title: "Verifica presa", quantity: 1 }],
+      },
     };
   });
 
@@ -408,6 +413,58 @@ describe("createDeviceRequestChecklist", () => {
     await expect(
       createDeviceRequestChecklist.run(buildRequest({ requestId: "req-2", items: "not-an-array" }, "admin-1"))
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "items must be an array"));
+
+    expect(batchSetMock).not.toHaveBeenCalled();
+  });
+
+  // Regressione (bug segnalato dall'operatore): il consumer deve poter
+  // scegliere QUALE template usare tra quelli disponibili per il
+  // devicetype, invece di subire sempre l'auto-lookup del primo trovato —
+  // "template-kinetic-hand-collaudo" non è il primo in ordine di
+  // inserimento, l'auto-lookup lo ignorerebbe.
+  it("uses the explicitly chosen template, not the one the auto-lookup would have picked", async () => {
+    await createDeviceRequestChecklist.run(
+      buildRequest({ requestId: "req-1", templateId: "template-kinetic-hand-collaudo" }, "admin-1")
+    );
+
+    expect(savedChecklistDocument()).toEqual(
+      expect.objectContaining({ category: "Kinetic Hand", fromTemplate: "template-kinetic-hand-collaudo" })
+    );
+    expect(savedItemDocuments()).toEqual([
+      expect.objectContaining({ title: "Verifica presa", quantity: 1 }),
+    ]);
+  });
+
+  it("throws not-found when the explicitly chosen template does not exist", async () => {
+    await expect(
+      createDeviceRequestChecklist.run(
+        buildRequest({ requestId: "req-1", templateId: "template-does-not-exist" }, "admin-1")
+      )
+    ).rejects.toMatchObject(new HttpsError("not-found", "Template not found"));
+
+    expect(batchSetMock).not.toHaveBeenCalled();
+  });
+
+  // templateId: null e' una scelta esplicita "nessuna checklist da
+  // template", distinta dal campo omesso (undefined, comportamento legacy
+  // con auto-lookup): anche se un template esiste per il devicetype della
+  // richiesta, non deve essere usato.
+  it("creates a blank checklist and skips the auto-lookup when templateId is explicitly null", async () => {
+    const result = await createDeviceRequestChecklist.run(
+      buildRequest({ requestId: "req-1", templateId: null }, "admin-1")
+    );
+
+    const savedDocument = savedChecklistDocument();
+    expect(savedDocument).toEqual(expect.objectContaining({ category: "Kinetic Hand", items: [] }));
+    expect(savedDocument).not.toHaveProperty("fromTemplate");
+    expect(savedItemDocuments()).toEqual([]);
+    expect(result).toEqual({ checklistId: GENERATED_CHECKLIST_ID });
+  });
+
+  it("throws invalid-argument when templateId is neither a string, null, nor omitted", async () => {
+    await expect(
+      createDeviceRequestChecklist.run(buildRequest({ requestId: "req-1", templateId: 42 }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "templateId must be a string or null"));
 
     expect(batchSetMock).not.toHaveBeenCalled();
   });

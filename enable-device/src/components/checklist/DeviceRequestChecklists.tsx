@@ -7,6 +7,7 @@ import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
+import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 import ChecklistPanel from "./ChecklistPanel";
@@ -26,6 +27,11 @@ interface CloneSource {
   requestNumber?: string;
   deviceType?: string;
   checklistIds: string[];
+}
+
+interface AvailableTemplate {
+  id: string;
+  title: string;
 }
 
 interface Props {
@@ -70,22 +76,79 @@ export default function DeviceRequestChecklists({
   const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
   const [cloneSourceChecklistId, setCloneSourceChecklistId] = useState<string | null>(null);
 
+  // Titolo reale di ciascuna checklist, risolto da ChecklistPanel al primo
+  // caricamento (onTitleResolved): usato per l'etichetta della tab invece
+  // del solo indice posizionale, che non rifletteva né il titolo scelto
+  // alla creazione né un'eventuale rinomina (bug segnalato dall'operatore).
+  const [titles, setTitles] = useState<Record<string, string>>({});
+
+  const [showCreateChecklistDialog, setShowCreateChecklistDialog] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  // null = "nessun template, checklist vuota" (scelta esplicita, distinta
+  // dal campo omesso: vedi createDeviceRequestChecklist.ts).
+  const [createTemplateId, setCreateTemplateId] = useState<string | null>(null);
+  const [availableTemplates, setAvailableTemplates] = useState<AvailableTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
   const atMaxChecklists = checklistIds.length >= MAX_CHECKLISTS_PER_REQUEST;
+
+  /**
+   * Recupera i template disponibili per il devicetype della richiesta
+   * (`listTemplates`, RBAC generico "autenticato", nessun nuovo endpoint
+   * necessario — stessa funzione già usata da AdminChecklistTemplatesPage).
+   * Nessun devicetype risolto: nessun template da proporre, solo l'opzione
+   * "vuota" resta disponibile nel dialog.
+   */
+  const fetchAvailableTemplates = useCallback(async () => {
+    if (!deviceType) {
+      setAvailableTemplates([]);
+      return;
+    }
+    setLoadingTemplates(true);
+    try {
+      const fn = httpsCallable<{ category: string }, { templates: AvailableTemplate[] }>(
+        functions,
+        "listTemplates"
+      );
+      const result = await fn({ category: deviceType });
+      setAvailableTemplates(result.data.templates ?? []);
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Impossibile recuperare i template disponibili.",
+        life: 4000,
+      });
+    }
+    setLoadingTemplates(false);
+  }, [deviceType]);
+
+  const openCreateChecklistDialog = () => {
+    setCreateTitle("");
+    setCreateTemplateId(null);
+    setShowCreateChecklistDialog(true);
+    fetchAvailableTemplates();
+  };
 
   const handleCreateChecklist = async () => {
     setCreatingChecklist(true);
     try {
-      const fn = httpsCallable<{ requestId: string }, { checklistId: string }>(
-        functions,
-        "createDeviceRequestChecklist"
-      );
-      await fn({ requestId });
+      const fn = httpsCallable<
+        { requestId: string; title?: string; templateId: string | null },
+        { checklistId: string }
+      >(functions, "createDeviceRequestChecklist");
+      await fn({
+        requestId,
+        title: createTitle.trim() || undefined,
+        templateId: createTemplateId,
+      });
       toast.current?.show({
         severity: "success",
         summary: "Checklist creata",
         detail: "La checklist di fabbricazione è stata collegata alla richiesta.",
         life: 4000,
       });
+      setShowCreateChecklistDialog(false);
       await onChecklistsChanged();
     } catch (err) {
       toast.current?.show({
@@ -192,8 +255,12 @@ export default function DeviceRequestChecklists({
       {checklistIds.length > 0 && (
         <TabView>
           {checklistIds.map((checklistId, index) => (
-            <TabPanel key={checklistId} header={`Checklist ${index + 1}`}>
-              <ChecklistPanel requestId={requestId} checklistId={checklistId} />
+            <TabPanel key={checklistId} header={titles[checklistId] ?? `Checklist ${index + 1}`}>
+              <ChecklistPanel
+                requestId={requestId}
+                checklistId={checklistId}
+                onTitleResolved={(title) => setTitles((prev) => ({ ...prev, [checklistId]: title }))}
+              />
             </TabPanel>
           ))}
         </TabView>
@@ -209,8 +276,7 @@ export default function DeviceRequestChecklists({
         <Button
           label="Crea checklist di fabbricazione"
           icon="pi pi-plus"
-          onClick={handleCreateChecklist}
-          loading={creatingChecklist}
+          onClick={openCreateChecklistDialog}
           disabled={atMaxChecklists}
           tooltip={atMaxChecklists ? `Numero massimo di checklist raggiunto (${MAX_CHECKLISTS_PER_REQUEST})` : undefined}
         />
@@ -226,6 +292,66 @@ export default function DeviceRequestChecklists({
           <Badge value={`Limite di ${MAX_CHECKLISTS_PER_REQUEST} checklist raggiunto`} severity="warning" />
         )}
       </div>
+
+      {/* Dialog creazione checklist: scelta esplicita di template/vuota + titolo */}
+      <Dialog
+        header="Crea checklist di fabbricazione"
+        visible={showCreateChecklistDialog}
+        style={{ width: "480px" }}
+        modal
+        onHide={() => setShowCreateChecklistDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setShowCreateChecklistDialog(false)}
+              disabled={creatingChecklist}
+            />
+            <Button
+              label="Crea"
+              icon="pi pi-plus"
+              onClick={handleCreateChecklist}
+              loading={creatingChecklist}
+            />
+          </div>
+        }
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="createChecklistTitle" style={{ display: "block", marginBottom: 4 }}>
+            Titolo
+          </label>
+          <InputText
+            id="createChecklistTitle"
+            value={createTitle}
+            onChange={(e) => setCreateTitle(e.target.value)}
+            placeholder="Checklist di fabbricazione - ..."
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div>
+          <label htmlFor="createChecklistTemplate" style={{ display: "block", marginBottom: 4 }}>
+            Template
+          </label>
+          <Dropdown
+            id="createChecklistTemplate"
+            value={createTemplateId}
+            onChange={(e) => setCreateTemplateId(e.value)}
+            options={[
+              { label: "Nessun template (checklist vuota)", value: null },
+              ...availableTemplates.map((t) => ({ label: t.title, value: t.id })),
+            ]}
+            loading={loadingTemplates}
+            placeholder={
+              !deviceType
+                ? "Nessun devicetype su questa richiesta: solo checklist vuota"
+                : "Seleziona un template"
+            }
+            disabled={!deviceType && availableTemplates.length === 0}
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Dialog>
 
       {/* Dialog clonazione checklist da device simile */}
       <Dialog

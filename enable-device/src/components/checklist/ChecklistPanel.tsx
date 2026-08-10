@@ -88,6 +88,14 @@ interface Props {
   requestId: string;
   /** Id della checklist collegata alla richiesta, se presente. */
   checklistId?: string | null;
+  /**
+   * Invocato dopo ogni caricamento riuscito con il `title` reale della
+   * checklist: usato dal genitore (`DeviceRequestChecklists.tsx`) per
+   * etichettare la tab col titolo effettivo invece del solo indice
+   * posizionale ("Checklist 1"/"2"/...), che non riflette il titolo scelto
+   * alla creazione né un'eventuale rinomina.
+   */
+  onTitleResolved?: (title: string) => void;
 }
 
 /**
@@ -112,7 +120,7 @@ interface Props {
  * validato lato backend da `isResolvableChecklistAssignee`
  * (`deviceRequestChecklistAccess.ts`).
  */
-export default function ChecklistPanel({ requestId, checklistId }: Props) {
+export default function ChecklistPanel({ requestId, checklistId, onTitleResolved }: Props) {
   const toast = useRef<Toast>(null);
   const [checklist, setChecklist] = useState<ChecklistData | null>(null);
   const [complete, setComplete] = useState<boolean | null>(null);
@@ -127,6 +135,15 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [generatingShareLink, setGeneratingShareLink] = useState(false);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+
+  // Ref stabile per onTitleResolved: evita di doverla includere nelle
+  // dipendenze di `load` sotto, dove causerebbe un loop di ricarica se il
+  // genitore non la memoizza (ogni render del genitore ricrea altrimenti
+  // una nuova identità di funzione).
+  const onTitleResolvedRef = useRef(onTitleResolved);
+  useEffect(() => {
+    onTitleResolvedRef.current = onTitleResolved;
+  }, [onTitleResolved]);
 
   /**
    * Utenti reali selezionabili come assegnatario di un item (EA-141):
@@ -205,6 +222,9 @@ export default function ChecklistPanel({ requestId, checklistId }: Props) {
       setChecklist(checklistResult.data);
       setComplete(completenessResult.data.complete);
       setDrafts({});
+      if (typeof checklistResult.data.title === "string") {
+        onTitleResolvedRef.current?.(checklistResult.data.title);
+      }
     } catch (err) {
       console.error("[ChecklistPanel] Failed to load checklist", err);
       setError(
