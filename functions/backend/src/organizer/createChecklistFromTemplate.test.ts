@@ -209,6 +209,42 @@ describe("createChecklistFromTemplate", () => {
     expect(savedChecklistDocument()?.fromTemplate).toBe(TEMPLATE_ID);
   });
 
+  // Scenario: createChecklistFromTemplate salva origin quando fornito, lo omette quando assente
+  // (regressione: bug segnalato dall'operatore, "To Do List" senza Note/Stato editabili
+  // ne' Provenienza navigabile — createDeviceRequestChecklist non passava mai origin
+  // a questo endpoint, l'unico percorso di creazione reale per checklist da template).
+  it("writes the origin field with the exact value provided by the consumer", async () => {
+    await createChecklistFromTemplate.run(
+      buildRequest({
+        templateId: TEMPLATE_ID,
+        title: "Checklist evento",
+        origin: { type: "deviceRequest", id: "request-42" },
+      })
+    );
+
+    expect(savedChecklistDocument()?.origin).toEqual({ type: "deviceRequest", id: "request-42" });
+  });
+
+  it("does not write an origin field when origin is not provided", async () => {
+    await createChecklistFromTemplate.run(
+      buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
+    );
+
+    expect(savedChecklistDocument()).not.toHaveProperty("origin");
+  });
+
+  it("throws invalid-argument when origin is provided but malformed", async () => {
+    await expect(
+      createChecklistFromTemplate.run(
+        buildRequest({
+          templateId: TEMPLATE_ID,
+          title: "Checklist evento",
+          origin: { type: "deviceRequest" },
+        })
+      )
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "origin must be an object with type and id"));
+  });
+
   it("inherits the category from the template when not overridden by the consumer", async () => {
     await createChecklistFromTemplate.run(
       buildRequest({ templateId: TEMPLATE_ID, title: "Checklist evento" })
