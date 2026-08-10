@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
@@ -6,8 +6,14 @@ import { db, functions } from "../../firebase";
 import { Card } from "primereact/card";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
-import { Tag } from "primereact/tag";
 import { Button } from "primereact/button";
+import { ToggleButton } from "primereact/togglebutton";
+import { MultiSelect } from "primereact/multiselect";
+import { Dropdown } from "primereact/dropdown";
+import { Checkbox } from "primereact/checkbox";
+import { Toast } from "primereact/toast";
+
+const CHECKLIST_ITEM_STATUSES = ["Assegnare", "Da iniziare", "In corso", "Completata"];
 
 interface ChecklistItemOrigin {
   type: string;
@@ -18,34 +24,45 @@ interface MyChecklistItem {
   id: string;
   checklistId: string;
   title: string;
+  notes?: string | null;
   status: string;
-  /** Presente solo per gli item non completati (listMyChecklistItems.ts,
-   * righe 78-93): assente (non `null`) per gli item completati. */
+  type?: "boolean" | "generic" | "numeric";
+  completed?: boolean | null;
+  /** Sempre presente da EA-152bis (risolto per ogni item, non solo i
+   * pending): null se la checklist padre non ne ha uno. */
   origin?: ChecklistItemOrigin | null;
 }
 
 /**
- * "I miei item" (EA-154, Epic EA-153): elenco piatto, senza raggruppamento
- * né ordinamento per checklist/richiesta di provenienza, di tutti gli item
- * di checklist assegnati al volontario autenticato, aggregati tra tutte le
- * checklist esistenti — via listMyChecklistItems (EA-142), invocata senza
- * parametro scope (fuori scope dell'intera Epic EA-153).
+ * Completezza type-aware coerente con `checklistCompleteness.ts` lato
+ * backend (duplicata qui, solo per il filtro "Solo aperti" — non decide
+ * nulla che venga persistito): un item boolean è completo solo se
+ * `completed === true`, ogni altro type è completo se `status ===
+ * "Completata"`.
+ */
+function isItemComplete(item: MyChecklistItem): boolean {
+  if (item.type === "boolean") return item.completed === true;
+  return item.status === "Completata";
+}
+
+/**
+ * "I miei item" (EA-154, Epic EA-153): elenco, aggregato tra tutte le
+ * checklist esistenti, di tutti gli item assegnati all'utente autenticato
+ * — via listMyChecklistItems (EA-142), invocata senza parametro scope
+ * (fuori scope dell'intera Epic EA-153).
  *
- * Per gli item non completati con provenienza da una deviceRequest, mostra
- * un riferimento leggibile (requestNumber) risolto con una lettura diretta
- * di `deviceRequests/{id}` (leggibile da qualunque volontario autenticato,
- * firestore.rules riga 39), non incluso nella risposta del backend.
+ * Nata per la gestione "in blocco" di tutti gli item assegnati: oltre alla
+ * sola consultazione, permette di aggiornare Stato/Completato direttamente
+ * da qui (stesso pattern autosave — nessun pulsante Salva — di
+ * ChecklistPanel.tsx), con un toggle "Solo aperti/Tutti" (default: solo
+ * aperti) e un filtro per stato.
  *
- * Il riferimento di provenienza e' cliccabile (EA-155) solo quando origin.type
- * === 'deviceRequest': naviga a `${originBasePath}/:id`. Nessuna azione per
- * origin null (item non collegato a una deviceRequest) o assente (item
- * completato).
- *
- * Riusata identica sia da VolunteerLayout (default, dettaglio richiesta su
- * /volunteer/my-requests/:id) sia da AdminLayout (dettaglio richiesta su
- * /admin/request/:id, passato esplicitamente via originBasePath): la
- * funzione di aggregazione backend (listMyChecklistItems) e' self-only e
- * generica per qualunque utente autenticato, non specifica del volontario.
+ * L'aggiornamento riusa `updateDeviceRequestChecklistItem` (non l'endpoint
+ * "nudo" del core Organizer) per mantenere lo stesso controllo RBAC
+ * (admin o volontario assegnato alla richiesta) già applicato in
+ * ChecklistPanel: richiede quindi che l'item abbia un `origin` di tipo
+ * "deviceRequest" risolto — se assente (checklist senza provenienza nota),
+ * i controlli restano disabilitati per quella riga.
  */
 export default function MyChecklistItems({
   originBasePath = "/volunteer/my-requests",
@@ -53,10 +70,14 @@ export default function MyChecklistItems({
   originBasePath?: string;
 }) {
   const navigate = useNavigate();
+  const toast = useRef<Toast>(null);
   const [items, setItems] = useState<MyChecklistItem[]>([]);
   const [requestLabels, setRequestLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showOnlyPending, setShowOnlyPending] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,19 +146,109 @@ export default function MyChecklistItems({
     );
   };
 
+  /**
+   * Aggiorna un campo (Stato o Completato) e lo mappa immediatamente sul
+   * backend: aggiornamento ottimistico dello stato locale (nessun reload
+   * completo dell'elenco dopo ogni singolo click, a differenza di
+   * ChecklistPanel — qui l'uso previsto è modificare molti item in
+   * sequenza rapida, un reload ad ogni click sarebbe troppo lento), con
+   * rollback locale se il salvataggio fallisce.
+   */
+  const updateItem = async (item: MyChecklistItem, patch: Partial<Pick<MyChecklistItem, "status" | "completed">>) => {
+    if (!item.origin || item.origin.type !== "deviceRequest") return;
+    const requestId = item.origin.id;
+    const previous = item;
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
+    setSavingItemId(item.id);
+    try {
+      const fn = httpsCallable(functions, "updateDeviceRequestChecklistItem");
+      await fn({ requestId, checklistId: item.checklistId, itemId: item.id, ...patch });
+    } catch (err) {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? previous : i)));
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante l'aggiornamento dell'item.",
+        life: 4000,
+      });
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const visibleItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          (!showOnlyPending || !isItemComplete(item)) &&
+          (statusFilter.length === 0 || statusFilter.includes(item.status))
+      ),
+    [items, showOnlyPending, statusFilter]
+  );
+
+  const statusColumnBody = (item: MyChecklistItem) => {
+    const editable = item.origin?.type === "deviceRequest";
+    if (item.type === "boolean") {
+      // Coerente con ChecklistPanel.tsx: per un item boolean lo stato non
+      // ha alcun ruolo nel gate di completezza ed è sincronizzato in
+      // automatico dal checkbox "Completato" sotto, non mostrato qui.
+      return (
+        <Checkbox
+          checked={item.completed === true}
+          disabled={!editable || savingItemId === item.id}
+          onChange={(e) => {
+            const completed = Boolean(e.checked);
+            updateItem(item, { completed, status: completed ? "Completata" : "Assegnare" });
+          }}
+        />
+      );
+    }
+    return (
+      <Dropdown
+        value={item.status}
+        options={CHECKLIST_ITEM_STATUSES}
+        disabled={!editable || savingItemId === item.id}
+        onChange={(e) => updateItem(item, { status: e.value })}
+        style={{ width: "100%" }}
+      />
+    );
+  };
+
   return (
     <div style={{ width: "100%", padding: 32 }}>
+      <Toast ref={toast} />
       <Card title="I miei item">
         {error && <div style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</div>}
         {!error && !loading && items.length === 0 && (
           <div>Non hai al momento nessun item di checklist assegnato.</div>
         )}
         {!error && (loading || items.length > 0) && (
-          <DataTable value={items} loading={loading} size="small">
-            <Column field="title" header="Titolo" />
-            <Column header="Stato" body={(item: MyChecklistItem) => <Tag value={item.status} />} />
-            <Column header="Provenienza" body={originColumnBody} />
-          </DataTable>
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+              <ToggleButton
+                checked={showOnlyPending}
+                onChange={(e) => setShowOnlyPending(e.value)}
+                onLabel="Solo aperti"
+                offLabel="Tutti"
+                onIcon="pi pi-filter"
+                offIcon="pi pi-list"
+              />
+              <MultiSelect
+                value={statusFilter}
+                options={CHECKLIST_ITEM_STATUSES}
+                onChange={(e) => setStatusFilter(e.value)}
+                placeholder="Filtra per stato"
+                display="chip"
+                style={{ minWidth: 220 }}
+              />
+            </div>
+            <DataTable value={visibleItems} loading={loading} size="small" emptyMessage="Nessun item corrispondente ai filtri.">
+              <Column field="title" header="Descrizione" />
+              <Column header="Stato" body={statusColumnBody} style={{ minWidth: 160 }} />
+              <Column field="notes" header="Note" body={(item: MyChecklistItem) => item.notes || "-"} />
+              <Column header="Provenienza" body={originColumnBody} />
+            </DataTable>
+          </>
         )}
       </Card>
     </div>
