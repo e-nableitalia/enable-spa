@@ -248,11 +248,11 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
     );
   });
 
-  // Regressione F-17: modificare un campo deve abilitare "Salva" e il click
-  // deve effettivamente inviare l'update (in precedenza la memoizzazione di
-  // PrimeReact DataTable ignorava lo stato locale "drafts", rendendo il
-  // bottone "Salva" permanentemente disabilitato).
-  it("modificare il titolo abilita 'Salva' e invia l'update con il checklistId esplicito del pannello", async () => {
+  // Regressione (bug segnalato dall'operatore): nessun pulsante "Salva"
+  // esplicito, ogni modifica è mappata automaticamente sul backend. Per un
+  // campo testo (Descrizione) il salvataggio è debounced (600ms dopo
+  // l'ultimo carattere digitato), non ad ogni singolo tasto.
+  it("modificare la Descrizione la mappa automaticamente sul backend dopo una breve pausa, senza alcun pulsante Salva", async () => {
     mockChecklistWithId("c42", [
       { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
     ]);
@@ -260,17 +260,17 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
     render(<ChecklistPanel requestId="r1" checklistId="c42" />);
     const row = await rowFor("Verifica batteria");
 
-    const saveButton = row.querySelector(".pi-save")?.closest("button");
-    if (!saveButton) throw new Error("Save button not found");
-    expect(saveButton).toBeDisabled();
+    expect(row.querySelector(".pi-save")).not.toBeInTheDocument();
 
     const titleInput = within(row).getByDisplayValue("Verifica batteria");
     await user.clear(titleInput);
     await user.type(titleInput, "Verifica batteria (aggiornato)");
     expect(within(row).getByDisplayValue("Verifica batteria (aggiornato)")).toBeInTheDocument();
-    expect(saveButton).not.toBeDisabled();
 
-    await user.click(saveButton);
+    // Nessuna chiamata immediata: il salvataggio è debounced.
+    expect(callable).not.toHaveBeenCalledWith("updateDeviceRequestChecklistItem", expect.anything());
+
+    await new Promise((resolve) => setTimeout(resolve, 700));
 
     expect(callable).toHaveBeenCalledWith(
       "updateDeviceRequestChecklistItem",
@@ -367,11 +367,9 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
     const row = await rowFor("Verifica batteria");
     const trigger = within(row).getByRole("button", { name: "Non assegnato" });
 
+    // Il cambio di un Dropdown è un evento discreto: mappato immediatamente
+    // sul backend, nessun pulsante Salva da cliccare.
     await selectDropdownOption(user, trigger, "Anna Bianchi");
-
-    const saveButton = row.querySelector(".pi-save")?.closest("button");
-    if (!saveButton) throw new Error("Save button not found");
-    await user.click(saveButton);
 
     expect(callable).toHaveBeenCalledWith(
       "updateDeviceRequestChecklistItem",
@@ -394,10 +392,6 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
     const trigger = within(row).getByRole("button", { name: "Non assegnato" });
 
     await selectDropdownOption(user, trigger, "Luca Verdi");
-
-    const saveButton = row.querySelector(".pi-save")?.closest("button");
-    if (!saveButton) throw new Error("Save button not found");
-    await user.click(saveButton);
 
     expect(callable).toHaveBeenCalledWith(
       "updateDeviceRequestChecklistItem",
@@ -477,7 +471,14 @@ describe("ChecklistPanel - controllo 'Completato' per item boolean (EA-146)", ()
     expect(within(row).getByRole("checkbox")).toBeChecked();
   });
 
-  it('Scenario 4: selezionare il controllo "Completato" e salvare invia completed=true a updateDeviceRequestChecklistItem, e dopo il reload il controllo risulta selezionato', async () => {
+  // Regressione (bug segnalato dall'operatore): la colonna "Stato" non ha
+  // alcun ruolo per un item boolean (isChecklistItemComplete la ignora del
+  // tutto per questo type) e non è quindi mostrata; il flag "Completato" è
+  // l'unica fonte di completezza e, quando cambia, sincronizza da solo lo
+  // status sottostante (Completata/Assegnare) invece di lasciarlo
+  // disallineato. Nessun pulsante Salva: il click sul checkbox mappa
+  // immediatamente sul backend.
+  it('Scenario 4: selezionare il controllo "Completato" invia completed=true e status="Completata" a updateDeviceRequestChecklistItem, senza mostrare la colonna Stato, e dopo il reload il controllo risulta selezionato', async () => {
     const item = { id: "i1", title: "Verifica batteria", type: "boolean", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false };
     callable.mockImplementation((name: string, data: unknown) => {
       if (name === "getDeviceRequestChecklist") {
@@ -487,8 +488,9 @@ describe("ChecklistPanel - controllo 'Completato' per item boolean (EA-146)", ()
         return Promise.resolve({ data: { complete: false } });
       }
       if (name === "updateDeviceRequestChecklistItem") {
-        const patch = data as { completed?: boolean };
+        const patch = data as { completed?: boolean; status?: string };
         item.completed = Boolean(patch.completed);
+        item.status = patch.status ?? item.status;
         return Promise.resolve({ data: { success: true } });
       }
       return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
@@ -498,15 +500,13 @@ describe("ChecklistPanel - controllo 'Completato' per item boolean (EA-146)", ()
     render(<ChecklistPanel requestId="r1" checklistId="c1" />);
     const row = await rowFor("Verifica batteria");
 
+    // Nessun dropdown "Stato" per un item boolean.
+    expect(within(row).queryByText("Assegnare")).not.toBeInTheDocument();
+
     const checkbox = within(row).getByRole("checkbox");
     expect(checkbox).not.toBeChecked();
     await user.click(checkbox);
     expect(checkbox).toBeChecked();
-
-    const saveButton = row.querySelector(".pi-save")?.closest("button");
-    if (!saveButton) throw new Error("Save button not found");
-    expect(saveButton).not.toBeDisabled();
-    await user.click(saveButton);
 
     expect(callable).toHaveBeenCalledWith(
       "updateDeviceRequestChecklistItem",
@@ -518,12 +518,57 @@ describe("ChecklistPanel - controllo 'Completato' per item boolean (EA-146)", ()
         assignee: null,
         quantity: null,
         notes: "",
-        status: "Assegnare",
+        status: "Completata",
         completed: true,
       })
     );
 
     const reloadedRow = await rowFor("Verifica batteria");
     expect(within(reloadedRow).getByRole("checkbox")).toBeChecked();
+  });
+});
+
+// Regressioni (bug segnalati dall'operatore): etichetta colonna e ordine.
+describe("ChecklistPanel - etichetta 'Descrizione' e colonna Note riposizionata prima di Azioni", () => {
+  beforeEach(() => {
+    callable.mockReset();
+  });
+
+  it("l'header della prima colonna è 'Descrizione', non più 'Titolo'", async () => {
+    mockChecklist([
+      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    await rowFor("Verifica batteria");
+
+    expect(screen.getByRole("columnheader", { name: "Descrizione" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Titolo" })).not.toBeInTheDocument();
+  });
+
+  it("la colonna Note è l'ultima prima di Azioni (dove si trova il pulsante Rimuovi)", async () => {
+    mockChecklist([
+      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
+    ]);
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    await rowFor("Verifica batteria");
+
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    const noteIndex = headers.indexOf("Note");
+    const azioniIndex = headers.indexOf("Azioni");
+    expect(noteIndex).toBeGreaterThan(-1);
+    expect(azioniIndex).toBe(noteIndex + 1);
+  });
+
+  it("il dialog 'Aggiungi item' etichetta il campo come 'Descrizione', non più 'Titolo'", async () => {
+    mockChecklist([]);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c1" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Aggiungi item" }));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByText("Descrizione")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Titolo")).not.toBeInTheDocument();
   });
 });
