@@ -6,6 +6,7 @@ const TOKEN = "share-token-1";
 
 let shareLinksStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
+let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
 
 function buildCollection(name: string) {
   if (name === "checklistShareLinks") {
@@ -34,14 +35,33 @@ function buildCollection(name: string) {
     };
   }
 
+  if (name === "checklistItems") {
+    return {
+      doc: jest.fn((id: string) => ({ id, __kind: "checklistItemRef" as const })),
+    };
+  }
+
   throw new Error(`Unexpected collection ${name}`);
 }
 
 const collectionMock = jest.fn((name: string) => buildCollection(name));
 
+// resolveChecklistItems.ts fa db.getAll(...refs): il mock simula esattamente
+// quella firma, risolvendo ogni ref da checklistItemsStore per id — stesso
+// pattern gia' usato da getChecklist.test.ts/getChecklistCompleteness.test.ts.
+const getAllMock = jest.fn((...refs: { id: string }[]) =>
+  Promise.resolve(
+    refs.map((ref) => ({
+      exists: checklistItemsStore[ref.id] !== undefined,
+      data: () => checklistItemsStore[ref.id],
+    }))
+  )
+);
+
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    getAll: (...refs: { id: string }[]) => getAllMock(...refs),
   })),
 }));
 
@@ -70,6 +90,7 @@ describe("getChecklistShareStatus", () => {
         createdAt: { seconds: 1, nanoseconds: 0 },
       },
     };
+    checklistItemsStore = {};
   });
 
   // Scenario: Chiunque acceda al link vede solo l'avanzamento macro, senza PII o dettagli interni
@@ -79,15 +100,17 @@ describe("getChecklistShareStatus", () => {
   // tentativo di risolvere un requestId farebbe fallire il test). Il
   // comportamento e la risposta (solo percentComplete) restano identici,
   // nessuna modifica a getChecklistShareStatus.ts in questa Story.
+  //
+  // Regressione F-24 (mai corretta qui da EA-138): `checklists/{id}.items`
+  // e' un array di soli `itemId` da EA-137, non piu' di oggetti item
+  // embedded — il mock riflette la shape reale, risolta via checklistItems.
   it("returns only percentComplete for an anonymous request with no auth", async () => {
     checklistsStore = {
-      [CHECKLIST_ID]: {
-        title: "Checklist di fabbricazione",
-        items: [
-          { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
-          { assignee: null, quantity: null, status: "Assegnare" },
-        ],
-      },
+      [CHECKLIST_ID]: { title: "Checklist di fabbricazione", items: ["item-1", "item-2"] },
+    };
+    checklistItemsStore = {
+      "item-1": { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
+      "item-2": { assignee: null, quantity: null, status: "Assegnare" },
     };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
@@ -101,13 +124,11 @@ describe("getChecklistShareStatus", () => {
   // un item generic in 'In corso' non viene più conteggiato come completo.
   it("does not count a generic item still 'In corso' as complete (type-aware gate propagation)", async () => {
     checklistsStore = {
-      [CHECKLIST_ID]: {
-        title: "Checklist di fabbricazione",
-        items: [
-          { type: "generic", assignee: "Mario Rossi", quantity: 2, status: "In corso" },
-          { type: "generic", assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
-        ],
-      },
+      [CHECKLIST_ID]: { title: "Checklist di fabbricazione", items: ["item-1", "item-2"] },
+    };
+    checklistItemsStore = {
+      "item-1": { type: "generic", assignee: "Mario Rossi", quantity: 2, status: "In corso" },
+      "item-2": { type: "generic", assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
     };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
@@ -132,13 +153,27 @@ describe("getChecklistShareStatus", () => {
         createdAt: { seconds: 1, nanoseconds: 0 }, // link generato "in passato"
       },
     };
-    checklistsStore = {
-      [CHECKLIST_ID]: {
-        items: [
-          { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
-          { assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
-        ],
-      },
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-2"] } };
+    checklistItemsStore = {
+      "item-1": { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
+      "item-2": { assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
+    };
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({ percentComplete: 100 });
+  });
+
+  // Regressione F-24: prima del fix, un item non ancora migrato al nuovo
+  // storage (checklistItems assente, es. documento cancellato o mai
+  // risolvibile) veniva comunque conteggiato come "presente" (una stringa
+  // sempre non-completa) invece di essere escluso — resolveChecklistItems
+  // filtra i soli snapshot esistenti, coerente con getChecklist/
+  // getChecklistCompleteness.
+  it("ignores an itemId that no longer resolves to a real checklistItems document", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-missing"] } };
+    checklistItemsStore = {
+      "item-1": { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
     };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));

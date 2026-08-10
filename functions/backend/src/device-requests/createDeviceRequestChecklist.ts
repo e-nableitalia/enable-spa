@@ -54,6 +54,16 @@ const MAX_CHECKLISTS_PER_REQUEST = 5;
  *   qualunque consumer autorizzato può fornirlo, coerentemente con
  *   `organizer/createChecklist` che accetta già `items` arbitrari da
  *   qualunque utente autenticato.
+ * - `templateId` (opzionale, ignorato se `items` è presente): permette al
+ *   consumer di scegliere esplicitamente un template invece di lasciare
+ *   che il backend ne selezioni uno da solo. Tre stati distinti:
+ *   `undefined` (campo omesso) → comportamento legacy, auto-lookup del
+ *   primo template trovato per il `devicetype` risolto (fallback di
+ *   compatibilità, nessun consumer noto lo usa più dopo questa Story);
+ *   `null` → scelta esplicita "nessun template", crea una checklist vuota
+ *   senza fare alcun lookup automatico; stringa → usa quel template
+ *   specifico (l'esistenza è validata da `createChecklistFromTemplate`,
+ *   che risponde `not-found` se non esiste).
  */
 export const createDeviceRequestChecklist = onCall(
   { region: REGION },
@@ -68,7 +78,7 @@ export const createDeviceRequestChecklist = onCall(
     }
 
     const data = request.data ?? {};
-    const { requestId, title, items } = data;
+    const { requestId, title, items, templateId: explicitTemplateId } = data;
 
     if (!requestId || typeof requestId !== "string") {
       console.log("[createDeviceRequestChecklist] KO: Missing or invalid requestId");
@@ -83,6 +93,15 @@ export const createDeviceRequestChecklist = onCall(
     if (items !== undefined && !Array.isArray(items)) {
       console.log("[createDeviceRequestChecklist] KO: items must be an array");
       throw new HttpsError("invalid-argument", "items must be an array");
+    }
+
+    if (
+      explicitTemplateId !== undefined &&
+      explicitTemplateId !== null &&
+      typeof explicitTemplateId !== "string"
+    ) {
+      console.log("[createDeviceRequestChecklist] KO: templateId must be a string or null");
+      throw new HttpsError("invalid-argument", "templateId must be a string or null");
     }
 
     const db = getFirestore();
@@ -151,7 +170,15 @@ export const createDeviceRequestChecklist = onCall(
       `Checklist di fabbricazione - ${requestData.requestNumber ?? requestId}`;
 
     let templateId: string | undefined;
-    if (devicetype && items === undefined) {
+    if (typeof explicitTemplateId === "string") {
+      // Scelta esplicita del consumer: nessun lookup, si tenta direttamente
+      // quel template (createChecklistFromTemplate risponde "not-found" se
+      // non esiste più).
+      templateId = explicitTemplateId;
+    } else if (explicitTemplateId === undefined && devicetype && items === undefined) {
+      // explicitTemplateId === null è una scelta esplicita "nessun template":
+      // salta il lookup automatico anche qui, a differenza di undefined
+      // (campo omesso, comportamento legacy di fallback).
       const templatesSnap = await db
         .collection("templates")
         .where("category", "==", devicetype)

@@ -3,6 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { logSecurityEvent } from "../security/securityLog";
 import { isChecklistItemComplete, ChecklistItemLike } from "../organizer/checklistCompleteness";
+import { resolveChecklistItems } from "../organizer/resolveChecklistItems";
 
 const REGION = "europe-west1";
 
@@ -18,6 +19,13 @@ const REGION = "europe-west1";
  * — solo `percentComplete`. Il token non scade e non e' revocabile
  * (decisione confermata in refinement EA-108, 2026-07-09): nessun
  * controllo di scadenza va introdotto qui.
+ *
+ * `checklists/{id}.items` e' un array di soli `itemId` da EA-137 (Epic
+ * EA-134): risolve i documenti reali via `resolveChecklistItems` (stesso
+ * modulo condiviso gia' usato da `getChecklist`/`getChecklistCompleteness`)
+ * prima di applicare il gate di completezza — leggere `items` direttamente
+ * come se contenesse oggetti item completi calcolava silenziosamente un
+ * `percentComplete` sempre errato (F-24, mai corretto qui da EA-138).
  */
 export const getChecklistShareStatus = onCall(
   { region: REGION },
@@ -49,7 +57,8 @@ export const getChecklistShareStatus = onCall(
       }
 
       const data = checklistSnap.data() ?? {};
-      const items: ChecklistItemLike[] = Array.isArray(data.items) ? data.items : [];
+      const itemIds: string[] = Array.isArray(data.items) ? data.items : [];
+      const items = (await resolveChecklistItems(db, itemIds)) as unknown as ChecklistItemLike[];
       const totalItems = items.length;
       const completedItems = items.filter(isChecklistItemComplete).length;
       const percentComplete = totalItems === 0 ? 100 : Math.round((completedItems / totalItems) * 100);
