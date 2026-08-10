@@ -136,6 +136,18 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
   const [generatingShareLink, setGeneratingShareLink] = useState(false);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
 
+  // Debounce per-item dell'autosave sui campi testo (Descrizione/Note): un
+  // salvataggio ad ogni singolo tasto digitato sarebbe troppo frequente,
+  // mentre per select/checkbox/numero (eventi discreti, non stream di
+  // keystroke) il salvataggio è sempre immediato.
+  const autosaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => {
+    const timers = autosaveTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
+
   // Ref stabile per onTitleResolved: evita di doverla includere nelle
   // dipendenze di `load` sotto, dove causerebbe un loop di ricarica se il
   // genitore non la memoizza (ogni render del genitore ricrea altrimenti
@@ -250,8 +262,11 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
     setDrafts((prev) => ({ ...prev, [itemId]: { ...prev[itemId], ...patch } }));
   };
 
-  const isDirty = (itemId: string) => Boolean(drafts[itemId]);
-
+  // Nessun pulsante "Salva" esplicito: ogni modifica a una riga è mappata
+  // immediatamente sul backend. Il toast di successo è stato rimosso
+  // (sarebbe apparso ad ogni singolo campo modificato, troppo invasivo per
+  // un salvataggio ormai silenzioso) — resta solo l'indicatore "in corso"
+  // per riga (vedi savingItemId nella colonna Azioni) e il toast di errore.
   const saveItem = async (item: ChecklistItem) => {
     setSavingItemId(item.id);
     try {
@@ -267,7 +282,6 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
         status: item.status,
         completed: item.completed,
       });
-      toast.current?.show({ severity: "success", summary: "Item aggiornato", life: 2500 });
       await load();
     } catch (err) {
       toast.current?.show({
@@ -279,6 +293,32 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
     } finally {
       setSavingItemId(null);
     }
+  };
+
+  /**
+   * Applica una modifica al draft locale (reattività immediata in UI) e la
+   * mappa sul backend: senza debounce per select/checkbox/numero (eventi
+   * discreti, salvataggio immediato), con debounce di 600ms per i campi
+   * testo (Descrizione/Note) per non salvare ad ogni singolo tasto.
+   */
+  const commitField = (item: ChecklistItem, patch: Partial<ChecklistItem>, debounce = false) => {
+    setDraftField(item.id, patch);
+    const updated: ChecklistItem = { ...item, ...patch };
+
+    const pendingTimer = autosaveTimers.current[item.id];
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      delete autosaveTimers.current[item.id];
+    }
+
+    if (!debounce) {
+      saveItem(updated);
+      return;
+    }
+    autosaveTimers.current[item.id] = setTimeout(() => {
+      delete autosaveTimers.current[item.id];
+      saveItem(updated);
+    }, 600);
   };
 
   const removeItem = (item: ChecklistItem) => {
@@ -424,11 +464,11 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
             size="small"
           >
             <Column
-              header="Titolo"
+              header="Descrizione"
               body={(item: ChecklistItem) => (
                 <InputText
                   value={item.title}
-                  onChange={(e) => setDraftField(item.id, { title: e.target.value })}
+                  onChange={(e) => commitField(item, { title: e.target.value }, true)}
                   style={{ width: "100%" }}
                 />
               )}
@@ -442,7 +482,7 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
                   options={assigneeOptionsFor(item.assignee)}
                   optionLabel="label"
                   optionValue="id"
-                  onChange={(e) => setDraftField(item.id, { assignee: e.value ?? null })}
+                  onChange={(e) => commitField(item, { assignee: e.value ?? null })}
                   placeholder="Non assegnato"
                   showClear
                   filter
@@ -461,7 +501,7 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
                 return (
                   <InputNumber
                     value={item.quantity ?? null}
-                    onValueChange={(e) => setDraftField(item.id, { quantity: e.value ?? null })}
+                    onValueChange={(e) => commitField(item, { quantity: e.value ?? null })}
                     min={0}
                     style={{ width: "100%" }}
                   />
@@ -478,18 +518,49 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
                 return (
                   <Checkbox
                     checked={item.completed}
-                    onChange={(e) => setDraftField(item.id, { completed: Boolean(e.checked) })}
+                    // Il flag è la sola fonte di completezza per un item
+                    // boolean (isBooleanItemComplete lo status non lo
+                    // considera): tenerlo comunque sincronizzato con status
+                    // evita un valore incoerente sul campo, anche se non più
+                    // mostrato/editabile direttamente per questo tipo (vedi
+                    // colonna "Stato" sotto).
+                    onChange={(e) => {
+                      const completed = Boolean(e.checked);
+                      commitField(item, { completed, status: completed ? "Completata" : "Assegnare" });
+                    }}
                   />
                 );
               }}
               style={{ minWidth: 100 }}
             />
             <Column
+              header="Stato"
+              body={(item: ChecklistItem) => {
+                // Per un item boolean lo stato non ha alcun ruolo nel gate
+                // di completezza (isBooleanItemComplete lo ignora del
+                // tutto) ed è tenuto sincronizzato automaticamente dal
+                // checkbox "Completato" sopra: mostrarlo come editabile
+                // qui suggerirebbe un controllo che non esiste.
+                if (item.type === "boolean") {
+                  return null;
+                }
+                return (
+                  <Dropdown
+                    value={item.status}
+                    options={CHECKLIST_ITEM_STATUSES}
+                    onChange={(e) => commitField(item, { status: e.value })}
+                    style={{ width: "100%" }}
+                  />
+                );
+              }}
+              style={{ minWidth: 150 }}
+            />
+            <Column
               header="Note"
               body={(item: ChecklistItem) => (
                 <InputTextarea
                   value={item.notes ?? ""}
-                  onChange={(e) => setDraftField(item.id, { notes: e.target.value })}
+                  onChange={(e) => commitField(item, { notes: e.target.value }, true)}
                   rows={1}
                   autoResize
                   style={{ width: "100%" }}
@@ -498,30 +569,12 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
               style={{ minWidth: 180 }}
             />
             <Column
-              header="Stato"
-              body={(item: ChecklistItem) => (
-                <Dropdown
-                  value={item.status}
-                  options={CHECKLIST_ITEM_STATUSES}
-                  onChange={(e) => setDraftField(item.id, { status: e.value })}
-                  style={{ width: "100%" }}
-                />
-              )}
-              style={{ minWidth: 150 }}
-            />
-            <Column
               header="Azioni"
               body={(item: ChecklistItem) => (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <Button
-                    icon="pi pi-save"
-                    size="small"
-                    className="p-button-text"
-                    tooltip="Salva"
-                    disabled={!isDirty(item.id)}
-                    loading={savingItemId === item.id}
-                    onClick={() => saveItem(item)}
-                  />
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {savingItemId === item.id && (
+                    <i className="pi pi-spin pi-spinner" title="Salvataggio in corso..." style={{ fontSize: 14 }} />
+                  )}
                   <Button
                     icon="pi pi-trash"
                     size="small"
@@ -558,7 +611,7 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 4 }}>Titolo</label>
+            <label style={{ display: "block", marginBottom: 4 }}>Descrizione</label>
             <InputText
               value={newItem.title}
               onChange={(e) => setNewItem((f) => ({ ...f, title: e.target.value }))}
