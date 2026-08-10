@@ -76,8 +76,8 @@ describe("VolunteerLayout (EA-150) - classificazione produzione/spedizione dal g
   });
 });
 
-describe("VolunteerLayout (EA-156) - voce di menu reale per raggiungere 'I miei item'", () => {
-  it("Scenario: il volontario attivo vede la voce 'I miei item' nel menu e la usa per raggiungere la pagina introdotta da EA-154", async () => {
+describe("VolunteerLayout (EA-156) - voce di menu reale per raggiungere 'To Do List'", () => {
+  it("Scenario: il volontario attivo vede la voce 'To Do List' nel menu e la usa per raggiungere la pagina introdotta da EA-154", async () => {
     render(
       <MemoryRouter initialEntries={["/volunteer"]}>
         <Routes>
@@ -88,7 +88,7 @@ describe("VolunteerLayout (EA-156) - voce di menu reale per raggiungere 'I miei 
 
     await userEvent.click(await screen.findByRole("button", { name: "Apri menu" }));
 
-    const menuItem = await screen.findByRole("button", { name: "I miei item" });
+    const menuItem = await screen.findByRole("button", { name: "To Do List" });
     expect(menuItem).toBeInTheDocument();
 
     await userEvent.click(menuItem);

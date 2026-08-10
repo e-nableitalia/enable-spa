@@ -193,7 +193,7 @@ useEffect(() => {
       command: () => navigate("/admin/dashboard"),
     },
     {
-      label: "I miei item",
+      label: "To Do List",
       icon: "pi pi-check-square",
       command: () => navigate("/admin/my-checklist-items"),
     },

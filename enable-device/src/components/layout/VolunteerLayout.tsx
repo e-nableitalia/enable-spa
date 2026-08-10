@@ -142,7 +142,7 @@ export default function VolunteerLayout() {
             command: () => navigate("/volunteer/my-requests")
         },
         {
-            label: "I miei item",
+            label: "To Do List",
             icon: "pi pi-check-square",
             command: () => navigate("/volunteer/my-checklist-items")
         },

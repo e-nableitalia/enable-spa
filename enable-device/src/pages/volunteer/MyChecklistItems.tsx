@@ -11,6 +11,8 @@ import { ToggleButton } from "primereact/togglebutton";
 import { MultiSelect } from "primereact/multiselect";
 import { Dropdown } from "primereact/dropdown";
 import { Checkbox } from "primereact/checkbox";
+import { InputTextarea } from "primereact/inputtextarea";
+import { InputNumber } from "primereact/inputnumber";
 import { Toast } from "primereact/toast";
 
 const CHECKLIST_ITEM_STATUSES = ["Assegnare", "Da iniziare", "In corso", "Completata"];
@@ -27,6 +29,7 @@ interface MyChecklistItem {
   notes?: string | null;
   status: string;
   type?: "boolean" | "generic" | "numeric";
+  quantity?: number | null;
   completed?: boolean | null;
   /** Sempre presente da EA-152bis (risolto per ogni item, non solo i
    * pending): null se la checklist padre non ne ha uno. */
@@ -46,16 +49,17 @@ function isItemComplete(item: MyChecklistItem): boolean {
 }
 
 /**
- * "I miei item" (EA-154, Epic EA-153): elenco, aggregato tra tutte le
+ * "To Do List" (EA-154, Epic EA-153): elenco, aggregato tra tutte le
  * checklist esistenti, di tutti gli item assegnati all'utente autenticato
  * — via listMyChecklistItems (EA-142), invocata senza parametro scope
  * (fuori scope dell'intera Epic EA-153).
  *
  * Nata per la gestione "in blocco" di tutti gli item assegnati: oltre alla
- * sola consultazione, permette di aggiornare Stato/Completato direttamente
- * da qui (stesso pattern autosave — nessun pulsante Salva — di
+ * sola consultazione, permette di aggiornare Stato/Completato/Note/Quantità
+ * direttamente da qui (stesso pattern autosave — nessun pulsante Salva — di
  * ChecklistPanel.tsx), con un toggle "Solo aperti/Tutti" (default: solo
- * aperti) e un filtro per stato.
+ * aperti) e un filtro per stato. L'assegnatario non è mostrato: è per
+ * costruzione sempre l'utente corrente.
  *
  * L'aggiornamento riusa `updateDeviceRequestChecklistItem` (non l'endpoint
  * "nudo" del core Organizer) per mantenere lo stesso controllo RBAC
@@ -78,6 +82,17 @@ export default function MyChecklistItems({
   const [showOnlyPending, setShowOnlyPending] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
+
+  // Debounce per-item dell'autosave sul campo testo (Note): stesso pattern
+  // di ChecklistPanel.tsx, salvataggio immediato per gli altri campi
+  // (eventi discreti: Dropdown/Checkbox/InputNumber).
+  const autosaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => {
+    const timers = autosaveTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -154,7 +169,10 @@ export default function MyChecklistItems({
    * sequenza rapida, un reload ad ogni click sarebbe troppo lento), con
    * rollback locale se il salvataggio fallisce.
    */
-  const updateItem = async (item: MyChecklistItem, patch: Partial<Pick<MyChecklistItem, "status" | "completed">>) => {
+  const updateItem = async (
+    item: MyChecklistItem,
+    patch: Partial<Pick<MyChecklistItem, "status" | "completed" | "notes" | "quantity">>
+  ) => {
     if (!item.origin || item.origin.type !== "deviceRequest") return;
     const requestId = item.origin.id;
     const previous = item;
@@ -174,6 +192,34 @@ export default function MyChecklistItems({
     } finally {
       setSavingItemId(null);
     }
+  };
+
+  /**
+   * Wrapper di `updateItem` con debounce opzionale (600ms), per il campo
+   * testo Note: un salvataggio ad ogni singolo tasto digitato sarebbe
+   * troppo frequente. Gli altri campi (Stato/Completato/Quantità) restano
+   * su `updateItem` diretto, eventi discreti già salvati immediatamente.
+   */
+  const commitField = (
+    item: MyChecklistItem,
+    patch: Partial<Pick<MyChecklistItem, "status" | "completed" | "notes" | "quantity">>,
+    debounce = false
+  ) => {
+    const pendingTimer = autosaveTimers.current[item.id];
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      delete autosaveTimers.current[item.id];
+    }
+    if (!debounce) {
+      updateItem(item, patch);
+      return;
+    }
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
+    const merged = { ...item, ...patch };
+    autosaveTimers.current[item.id] = setTimeout(() => {
+      delete autosaveTimers.current[item.id];
+      updateItem(merged, patch);
+    }, 600);
   };
 
   const visibleItems = useMemo(
@@ -214,10 +260,38 @@ export default function MyChecklistItems({
     );
   };
 
+  const quantityColumnBody = (item: MyChecklistItem) => {
+    if (item.type !== "numeric") return null;
+    const editable = item.origin?.type === "deviceRequest";
+    return (
+      <InputNumber
+        value={item.quantity ?? null}
+        disabled={!editable || savingItemId === item.id}
+        onValueChange={(e) => updateItem(item, { quantity: e.value ?? null })}
+        min={0}
+        style={{ width: "100%" }}
+      />
+    );
+  };
+
+  const notesColumnBody = (item: MyChecklistItem) => {
+    const editable = item.origin?.type === "deviceRequest";
+    return (
+      <InputTextarea
+        value={item.notes ?? ""}
+        disabled={!editable || savingItemId === item.id}
+        onChange={(e) => commitField(item, { notes: e.target.value }, true)}
+        rows={1}
+        autoResize
+        style={{ width: "100%" }}
+      />
+    );
+  };
+
   return (
     <div style={{ width: "100%", padding: 32 }}>
       <Toast ref={toast} />
-      <Card title="I miei item">
+      <Card title="To Do List">
         {error && <div style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</div>}
         {!error && !loading && items.length === 0 && (
           <div>Non hai al momento nessun item di checklist assegnato.</div>
@@ -245,7 +319,8 @@ export default function MyChecklistItems({
             <DataTable value={visibleItems} loading={loading} size="small" emptyMessage="Nessun item corrispondente ai filtri.">
               <Column field="title" header="Descrizione" />
               <Column header="Stato" body={statusColumnBody} style={{ minWidth: 160 }} />
-              <Column field="notes" header="Note" body={(item: MyChecklistItem) => item.notes || "-"} />
+              <Column header="Quantità" body={quantityColumnBody} style={{ minWidth: 100 }} />
+              <Column header="Note" body={notesColumnBody} style={{ minWidth: 180 }} />
               <Column header="Provenienza" body={originColumnBody} />
             </DataTable>
           </>

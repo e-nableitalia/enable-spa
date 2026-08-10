@@ -149,9 +149,9 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
     const row = await rowFor("Stampa mano");
 
     expect(within(row).queryByRole("button", { name: /Richiesta/ })).not.toBeInTheDocument();
-    // Colonne, in ordine: Descrizione, Stato, Note, Provenienza — l'ultima
-    // (Provenienza) mostra "-" quando origin e' null.
-    expect(row.querySelectorAll("td")[3]).toHaveTextContent("-");
+    // Colonne, in ordine: Descrizione, Stato, Quantità, Note, Provenienza —
+    // l'ultima (Provenienza) mostra "-" quando origin e' null.
+    expect(row.querySelectorAll("td")[4]).toHaveTextContent("-");
   });
 
   // Scenario: un item completato (senza origin nella risposta) non mostra alcuna azione di navigazione (EA-155)
@@ -173,7 +173,7 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
 
     const row = await rowFor("Stampa mano");
     expect(within(row).queryByText(/Richiesta/)).not.toBeInTheDocument();
-    expect(row.querySelectorAll("td")[3]).toHaveTextContent("-");
+    expect(row.querySelectorAll("td")[4]).toHaveTextContent("-");
   });
 
   // Scenario: il volontario senza item assegnati vede uno stato vuoto esplicativo
@@ -252,7 +252,7 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
     await screen.findByText("Nessun item corrispondente ai filtri.");
   });
 
-  it("mostra il contenuto del campo Note per ciascun item, '-' se assente", async () => {
+  it("mostra il contenuto del campo Note per ciascun item, editabile, vuoto se assente", async () => {
     callable.mockResolvedValue({
       data: {
         items: [
@@ -265,9 +265,94 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
     render(<MyChecklistItems />);
 
     const row1 = await rowFor("Con nota");
-    expect(within(row1).getByText("Attenzione al peso")).toBeInTheDocument();
+    expect(within(row1).getByDisplayValue("Attenzione al peso")).toBeInTheDocument();
     const row2 = await rowFor("Senza nota");
-    expect(row2.querySelectorAll("td")[2]).toHaveTextContent("-");
+    expect(row2.querySelector("textarea")).toHaveValue("");
+  });
+
+  it("modificare il campo Note la mappa (con debounce) su updateDeviceRequestChecklistItem", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "listMyChecklistItems") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "item-1",
+                checklistId: "checklist-a",
+                title: "Stampa mano",
+                type: "generic",
+                status: "Assegnare",
+                notes: "",
+                origin: { type: "deviceRequest", id: "req-1" },
+              },
+            ],
+          },
+        });
+      }
+      if (name === "updateDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: {} });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    render(<MyChecklistItems />);
+    const row = await rowFor("Stampa mano");
+    // Il Dropdown "Stato" espone anche un input nascosto di sola lettura
+    // con role="textbox" per l'accessibilita': va selezionata direttamente
+    // la textarea delle Note, non tramite role (ambiguo in questa riga).
+    const notesInput = row.querySelector("textarea") as HTMLTextAreaElement;
+    await userEvent.type(notesInput, "Peso verificato");
+
+    await vi.waitFor(
+      () => {
+        expect(callable).toHaveBeenCalledWith("updateDeviceRequestChecklistItem", {
+          requestId: "req-1",
+          checklistId: "checklist-a",
+          itemId: "item-1",
+          notes: "Peso verificato",
+        });
+      },
+      { timeout: 1500 }
+    );
+  });
+
+  it("modificare la Quantità di un item numeric la mappa immediatamente su updateDeviceRequestChecklistItem", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "listMyChecklistItems") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "item-1",
+                checklistId: "checklist-a",
+                title: "Filamento",
+                type: "numeric",
+                status: "Assegnare",
+                quantity: null,
+                origin: { type: "deviceRequest", id: "req-1" },
+              },
+            ],
+          },
+        });
+      }
+      if (name === "updateDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: {} });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    render(<MyChecklistItems />);
+    const row = await rowFor("Filamento");
+    const quantityInput = within(row).getByRole("spinbutton");
+    await userEvent.type(quantityInput, "3");
+    await userEvent.tab();
+
+    expect(callable).toHaveBeenCalledWith("updateDeviceRequestChecklistItem", {
+      requestId: "req-1",
+      checklistId: "checklist-a",
+      itemId: "item-1",
+      quantity: 3,
+    });
   });
 
   it("cambiare lo Stato di un item generic lo mappa immediatamente su updateDeviceRequestChecklistItem, senza reload dell'intero elenco", async () => {
