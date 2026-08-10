@@ -106,11 +106,18 @@ describe("listMyChecklistItems", () => {
 
     expect(chain.where).toHaveBeenNthCalledWith(1, "assignee", "==", "user-1");
     expect(chain.where).toHaveBeenNthCalledWith(2, "category", "==", "devicetype-mano");
-    expect((result as { items: unknown[] }).items).toEqual(items);
+    // origin: null aggiunto (nessun checklist match nel batch-read mockato
+    // a []): non più "invariato", vedi regressione sotto sul perché origin
+    // è ora risolto anche per item completati.
+    expect((result as { items: unknown[] }).items).toEqual([{ ...items[0], origin: null }]);
   });
 
-  // Scenario: origin viene risolto per gli item pending tramite batch-read
-  it("resolves origin for pending items via a single db.getAll batch read of distinct parent checklists, but not for completed items", async () => {
+  // Regressione (bug segnalato dall'operatore, pagina "I miei item" —
+  // gestione in blocco): origin va risolto per OGNI item, non solo quelli
+  // pending, perché il consumer frontend ne ha bisogno anche per risolvere
+  // il requestId di un item già completato che l'utente vuole comunque
+  // modificare (riaprire, correggere una nota).
+  it("resolves origin for every item via a single db.getAll batch read of distinct parent checklists, including completed items", async () => {
     const items = [
       { id: "item-1", checklistId: "checklist-a", assignee: "user-1", type: "generic", status: "Assegnare", completed: false },
       { id: "item-2", checklistId: "checklist-a", assignee: "user-1", type: "generic", status: "Assegnare", completed: false },
@@ -119,31 +126,28 @@ describe("listMyChecklistItems", () => {
     mockChecklistItemsQuery(items);
     getAllMock.mockResolvedValue([
       buildDocSnap("checklist-a", { origin: { type: "deviceRequest", id: "req-1" } }),
+      buildDocSnap("checklist-b", { origin: { type: "deviceRequest", id: "req-2" } }),
     ]);
 
     const result = await listMyChecklistItems.run(buildRequest({}));
 
     expect(getAllMock).toHaveBeenCalledTimes(1);
-    expect(getAllMock.mock.calls[0]).toHaveLength(1); // solo checklist-a: distinta e pending
+    expect(getAllMock.mock.calls[0]).toHaveLength(2); // checklist-a e checklist-b, entrambe distinte
     const resultItems = (result as { items: Record<string, unknown>[] }).items;
     expect(resultItems.find((i) => i.id === "item-1")?.origin).toEqual({ type: "deviceRequest", id: "req-1" });
     expect(resultItems.find((i) => i.id === "item-2")?.origin).toEqual({ type: "deviceRequest", id: "req-1" });
-    expect(resultItems.find((i) => i.id === "item-3")).toEqual(items[2]);
-    expect(resultItems.find((i) => i.id === "item-3")?.origin).toBeUndefined();
+    expect(resultItems.find((i) => i.id === "item-3")?.origin).toEqual({ type: "deviceRequest", id: "req-2" });
   });
 
-  it("does not call db.getAll when there are no pending items", async () => {
-    const items = [
-      { id: "item-1", checklistId: "checklist-a", assignee: "user-1", type: "boolean", status: "Completata", completed: true },
-    ];
-    mockChecklistItemsQuery(items);
+  it("does not call db.getAll when there are no items at all", async () => {
+    mockChecklistItemsQuery([]);
 
     await listMyChecklistItems.run(buildRequest({}));
 
     expect(getAllMock).not.toHaveBeenCalled();
   });
 
-  it("resolves origin to null when the pending item's parent checklist has no origin field", async () => {
+  it("resolves origin to null when an item's parent checklist has no origin field", async () => {
     const items = [
       { id: "item-1", checklistId: "checklist-a", assignee: "user-1", status: "Assegnare", completed: false },
     ];
@@ -177,7 +181,7 @@ describe("listMyChecklistItems", () => {
     const result = await listMyChecklistItems.run(buildRequest({ uid: "user-2" }, "admin-1"));
 
     expect(chain.where).toHaveBeenCalledWith("assignee", "==", "user-2");
-    expect((result as { items: unknown[] }).items).toEqual(otherUsersItems);
+    expect((result as { items: unknown[] }).items).toEqual([{ ...otherUsersItems[0], origin: null }]);
   });
 
   it("does not require an admin check when the explicit uid matches the caller's own uid", async () => {

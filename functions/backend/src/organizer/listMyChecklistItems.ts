@@ -2,7 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
-import { isChecklistItemComplete, ChecklistItemLike } from "./checklistCompleteness";
+import { ChecklistItemLike } from "./checklistCompleteness";
 
 const REGION = "europe-west1";
 
@@ -27,10 +27,14 @@ interface ChecklistItemDoc extends ChecklistItemLike {
  * `category`, già denormalizzata su ogni `checklistItems`). Nessun
  * post-filtro applicativo per `scope`.
  *
- * Per i soli item pending (non completi, gate di completezza in
- * `checklistCompleteness.ts`) risolve `origin` delle rispettive checklist
- * padre con un'unica lettura batch (`db.getAll`) sui `checklistId` distinti
- * referenziati — non richiesta per gli item chiusi.
+ * Risolve `origin` delle rispettive checklist padre per OGNI item (non solo
+ * quelli pending) con un'unica lettura batch (`db.getAll`) sui `checklistId`
+ * distinti referenziati: il consumer frontend (pagina "I miei item",
+ * gestione in blocco di tutti gli item assegnati) ne ha bisogno anche per
+ * gli item già completati, per poter risolvere il `requestId` necessario a
+ * `updateDeviceRequestChecklistItem` se l'utente vuole comunque modificarli
+ * (riaprirli, correggere una nota, ecc.), non solo per il contesto di
+ * provenienza mostrato in sola lettura.
  */
 export const listMyChecklistItems = onCall(
   { region: REGION },
@@ -71,13 +75,11 @@ export const listMyChecklistItems = onCall(
       const snap = await query.get();
       const items = snap.docs.map((doc) => doc.data() as unknown as ChecklistItemDoc);
 
-      const pendingChecklistIds = Array.from(
-        new Set(items.filter((item) => !isChecklistItemComplete(item)).map((item) => item.checklistId))
-      );
+      const referencedChecklistIds = Array.from(new Set(items.map((item) => item.checklistId)));
 
       const originByChecklistId = new Map<string, unknown>();
-      if (pendingChecklistIds.length > 0) {
-        const checklistRefs = pendingChecklistIds.map((checklistId) => db.collection("checklists").doc(checklistId));
+      if (referencedChecklistIds.length > 0) {
+        const checklistRefs = referencedChecklistIds.map((checklistId) => db.collection("checklists").doc(checklistId));
         const checklistSnaps = await db.getAll(...checklistRefs);
         checklistSnaps.forEach((checklistSnap) => {
           if (checklistSnap.exists) {
@@ -86,12 +88,10 @@ export const listMyChecklistItems = onCall(
         });
       }
 
-      const responseItems = items.map((item) => {
-        if (isChecklistItemComplete(item)) {
-          return item;
-        }
-        return { ...item, origin: originByChecklistId.get(item.checklistId) ?? null };
-      });
+      const responseItems = items.map((item) => ({
+        ...item,
+        origin: originByChecklistId.get(item.checklistId) ?? null,
+      }));
 
       await logSecurityEvent({
         type: "system",
