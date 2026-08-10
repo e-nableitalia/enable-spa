@@ -468,4 +468,40 @@ describe("createDeviceRequestChecklist", () => {
 
     expect(batchSetMock).not.toHaveBeenCalled();
   });
+
+  // Regressione (bug segnalato dall'operatore): la "To Do List" (EA-154)
+  // mostrava Note/Stato non editabili e Provenienza assente/non navigabile
+  // per OGNI item, perche' questa funzione non passava mai `origin` al core
+  // Organizer in nessuno dei tre rami di creazione — listMyChecklistItems
+  // risolveva quindi sempre origin a null. Verificato sui tre rami.
+  describe("origin (regressione: Note/Stato/Provenienza mancanti in 'To Do List')", () => {
+    it("sets origin to the deviceRequest when instantiating from the auto-resolved template", async () => {
+      await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-1" }, "admin-1"));
+
+      expect(savedChecklistDocument()).toEqual(
+        expect.objectContaining({ origin: { type: "deviceRequest", id: "req-1" } })
+      );
+    });
+
+    it("sets origin to the deviceRequest when creating a blank checklist (no matching template)", async () => {
+      await createDeviceRequestChecklist.run(buildRequest({ requestId: "req-2" }, "admin-1"));
+
+      expect(savedChecklistDocument()).toEqual(
+        expect.objectContaining({ origin: { type: "deviceRequest", id: "req-2" } })
+      );
+    });
+
+    it("sets origin to the deviceRequest when creating with explicit items", async () => {
+      await createDeviceRequestChecklist.run(
+        buildRequest(
+          { requestId: "req-1", items: [{ title: "Scelta device", type: "generic" }] },
+          "admin-1"
+        )
+      );
+
+      expect(savedChecklistDocument()).toEqual(
+        expect.objectContaining({ origin: { type: "deviceRequest", id: "req-1" } })
+      );
+    });
+  });
 });

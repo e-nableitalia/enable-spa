@@ -21,7 +21,7 @@ interface NormalizedInitialItem {
   completed: boolean;
 }
 
-interface ChecklistOrigin {
+export interface ChecklistOrigin {
   type: string;
   id: string;
 }
@@ -95,7 +95,7 @@ function normalizeInitialItem(input: unknown): NormalizedInitialItem {
  * fornisce, in modo che il chiamante possa omettere del tutto la chiave dal
  * documento invece di scriverla valorizzata a `undefined`.
  */
-function normalizeOrigin(input: unknown): ChecklistOrigin | undefined {
+export function normalizeOrigin(input: unknown): ChecklistOrigin | undefined {
   if (input === undefined) {
     return undefined;
   }

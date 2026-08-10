@@ -40,6 +40,14 @@ const MAX_CHECKLISTS_PER_REQUEST = 5;
  * quella categoria). Altrimenti viene creata una checklist vuota
  * (`organizer/createChecklist`).
  *
+ * In tutti e tre i rami di creazione (item espliciti, da template, vuota)
+ * viene sempre passato `origin: { type: "deviceRequest", id: requestId }`
+ * al core Organizer: senza questo campo `listMyChecklistItems` non può
+ * risolvere la provenienza degli item ("To Do List", EA-154) e
+ * `updateDeviceRequestChecklistItem` risulta invocabile ma senza un modo
+ * per il consumer di recuperare `requestId` — bug corretto qui, il campo
+ * non veniva mai scritto per le checklist collegate a una deviceRequest.
+ *
  * Riceve dal consumer:
  * - `requestId`: id del documento `deviceRequests/{requestId}`.
  * - `title` (opzionale): titolo della checklist; se omesso viene generato
@@ -189,6 +197,8 @@ export const createDeviceRequestChecklist = onCall(
       }
     }
 
+    const origin = { type: "deviceRequest", id: requestId };
+
     let checklistId: string;
     if (items !== undefined) {
       console.log(
@@ -197,7 +207,7 @@ export const createDeviceRequestChecklist = onCall(
       );
       const result = await createChecklist.run({
         ...request,
-        data: { category: devicetype ?? "unknown", title: resolvedTitle, items },
+        data: { category: devicetype ?? "unknown", title: resolvedTitle, items, origin },
       } as CallableRequest);
       checklistId = (result as { checklistId: string }).checklistId;
     } else if (templateId) {
@@ -207,7 +217,7 @@ export const createDeviceRequestChecklist = onCall(
       );
       const result = await createChecklistFromTemplate.run({
         ...request,
-        data: { templateId, title: resolvedTitle, category: devicetype },
+        data: { templateId, title: resolvedTitle, category: devicetype, origin },
       } as CallableRequest);
       checklistId = (result as { checklistId: string }).checklistId;
     } else {
@@ -217,7 +227,7 @@ export const createDeviceRequestChecklist = onCall(
       );
       const result = await createChecklist.run({
         ...request,
-        data: { category: devicetype ?? "unknown", title: resolvedTitle, items: [] },
+        data: { category: devicetype ?? "unknown", title: resolvedTitle, items: [], origin },
       } as CallableRequest);
       checklistId = (result as { checklistId: string }).checklistId;
     }

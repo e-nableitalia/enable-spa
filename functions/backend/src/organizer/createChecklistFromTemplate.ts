@@ -3,6 +3,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import { CHECKLIST_ITEM_STATUSES, ChecklistItemType, isChecklistItemType } from "./checklistItemStatus";
+import { normalizeOrigin } from "./createChecklist";
 
 const REGION = "europe-west1";
 
@@ -61,6 +62,10 @@ function cloneTemplateItem(templateItem: Record<string, unknown>): ClonedItemFie
  * - `category` (opzionale): identificatore di categoria opaco con cui
  *   sovrascrivere quello del template. Se omesso, la categoria è ereditata
  *   dal template.
+ * - `origin` (opzionale): `{ type, id }` dell'entità proprietaria della
+ *   checklist, stessa forma e stessa validazione (`normalizeOrigin`,
+ *   condivisa) di `organizer/createChecklist.ts`. Se omesso, il documento
+ *   non contiene il campo.
  *
  * Crea un nuovo documento `checklistItems` per ciascun item del template
  * (titolo, type e quantità copiati, stato impostato ad 'Assegnare',
@@ -89,7 +94,7 @@ export const createChecklistFromTemplate = onCall(
       const uid = request.auth.uid;
 
       const data = request.data ?? {};
-      const { templateId, title, category } = data;
+      const { templateId, title, category, origin } = data;
 
       if (!templateId || typeof templateId !== "string") {
         console.log("[createChecklistFromTemplate] KO: Missing or invalid templateId");
@@ -115,6 +120,8 @@ export const createChecklistFromTemplate = onCall(
         throw new HttpsError("not-found", "Template not found");
       }
 
+      const normalizedOrigin = normalizeOrigin(origin);
+
       const templateData = templateSnap.data() ?? {};
       const templateItems: Record<string, unknown>[] = Array.isArray(templateData.items) ? templateData.items : [];
       const clonedItems: ClonedItemFields[] = templateItems.map(cloneTemplateItem);
@@ -135,6 +142,7 @@ export const createChecklistFromTemplate = onCall(
         fromTemplate: templateId,
         createdBy: uid,
         createdAt: FieldValue.serverTimestamp(),
+        ...(normalizedOrigin ? { origin: normalizedOrigin } : {}),
       });
 
       itemRefs.forEach((itemRef, index) => {
