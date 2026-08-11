@@ -1152,6 +1152,7 @@ export default function RequestDetail() {
             checklistIds={Array.isArray(request.checklistIds) ? request.checklistIds : []}
             deviceType={request.deviceType}
             onChecklistsChanged={loadData}
+            isAdmin
           />
         </div>
       </div>

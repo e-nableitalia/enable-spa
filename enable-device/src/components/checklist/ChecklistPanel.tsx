@@ -96,6 +96,17 @@ interface Props {
    * alla creazione né un'eventuale rinomina.
    */
   onTitleResolved?: (title: string) => void;
+  /**
+   * Monta il proprio `<ConfirmDialog />` (usato da `confirmDialog()` per la
+   * rimozione item) — default `true`, per restare autonomo se usato
+   * standalone (es. nei test). `DeviceRequestChecklists.tsx` monta N
+   * istanze di `ChecklistPanel` in parallelo (una per tab, tutte mostrate
+   * grazie a `renderActiveOnly={false}`): `confirmDialog()` è un servizio
+   * globale, N `<ConfirmDialog />` mostrerebbero N dialog sovrapposti alla
+   * stessa conferma (bug scoperto insieme a quel fix) — il genitore passa
+   * `false` qui e monta un unico `<ConfirmDialog />` condiviso.
+   */
+  renderConfirmDialog?: boolean;
 }
 
 /**
@@ -120,7 +131,12 @@ interface Props {
  * validato lato backend da `isResolvableChecklistAssignee`
  * (`deviceRequestChecklistAccess.ts`).
  */
-export default function ChecklistPanel({ requestId, checklistId, onTitleResolved }: Props) {
+export default function ChecklistPanel({
+  requestId,
+  checklistId,
+  onTitleResolved,
+  renderConfirmDialog = true,
+}: Props) {
   const toast = useRef<Toast>(null);
   const [checklist, setChecklist] = useState<ChecklistData | null>(null);
   const [complete, setComplete] = useState<boolean | null>(null);
@@ -418,7 +434,7 @@ export default function ChecklistPanel({ requestId, checklistId, onTitleResolved
   return (
     <div>
       <Toast ref={toast} />
-      <ConfirmDialog />
+      {renderConfirmDialog && <ConfirmDialog />}
 
       {loading && !checklist && <div style={{ color: "#888" }}>Caricamento checklist...</div>}
 
