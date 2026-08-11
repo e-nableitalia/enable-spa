@@ -93,30 +93,40 @@ describe("getChecklistShareStatus", () => {
     checklistItemsStore = {};
   });
 
-  // Scenario: Chiunque acceda al link vede solo l'avanzamento macro, senza PII o dettagli interni
+  // Scenario: Chiunque acceda al link vede l'avanzamento macro e l'elenco
+  // item semplificato (title + completed), senza PII o dettagli interni
   // Scenario 5 (EA-132, non-regressione): la funzione risolve sempre
   // token -> checklistId -> checklists, mai da requestId (il mock delle
   // collection non definisce nemmeno "deviceRequests": qualunque
-  // tentativo di risolvere un requestId farebbe fallire il test). Il
-  // comportamento e la risposta (solo percentComplete) restano identici,
-  // nessuna modifica a getChecklistShareStatus.ts in questa Story.
+  // tentativo di risolvere un requestId farebbe fallire il test).
   //
   // Regressione F-24 (mai corretta qui da EA-138): `checklists/{id}.items`
   // e' un array di soli `itemId` da EA-137, non piu' di oggetti item
   // embedded — il mock riflette la shape reale, risolta via checklistItems.
-  it("returns only percentComplete for an anonymous request with no auth", async () => {
+  it("returns percentComplete and a simplified items list (title + completed only) for an anonymous request", async () => {
     checklistsStore = {
       [CHECKLIST_ID]: { title: "Checklist di fabbricazione", items: ["item-1", "item-2"] },
     };
     checklistItemsStore = {
-      "item-1": { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
-      "item-2": { assignee: null, quantity: null, status: "Assegnare" },
+      "item-1": { title: "Stampa mano", assignee: "Mario Rossi", quantity: 2, notes: "Nota interna", status: "Completata" },
+      "item-2": { title: "Verifica misure", assignee: null, quantity: null, status: "Assegnare" },
     };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
-    expect(result).toEqual({ percentComplete: 50 });
-    expect(Object.keys(result as object)).toEqual(["percentComplete"]);
+    expect(result).toEqual({
+      percentComplete: 50,
+      items: [
+        { title: "Stampa mano", completed: true },
+        { title: "Verifica misure", completed: false },
+      ],
+    });
+    // Confine dc-private-data-separation: ogni item espone solo title e
+    // completed, mai assegnatario/note/quantita'/status grezzo.
+    expect(Object.keys(result as { items: object[] }).sort()).toEqual(["items", "percentComplete"]);
+    (result as { items: object[] }).items.forEach((item) => {
+      expect(Object.keys(item).sort()).toEqual(["completed", "title"]);
+    });
   });
 
   // Scenario 6 (EA-127): il fix del gate di completezza si propaga
@@ -127,21 +137,27 @@ describe("getChecklistShareStatus", () => {
       [CHECKLIST_ID]: { title: "Checklist di fabbricazione", items: ["item-1", "item-2"] },
     };
     checklistItemsStore = {
-      "item-1": { type: "generic", assignee: "Mario Rossi", quantity: 2, status: "In corso" },
-      "item-2": { type: "generic", assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
+      "item-1": { title: "Item 1", type: "generic", assignee: "Mario Rossi", quantity: 2, status: "In corso" },
+      "item-2": { title: "Item 2", type: "generic", assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
     };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
-    expect(result).toEqual({ percentComplete: 50 });
+    expect(result).toEqual({
+      percentComplete: 50,
+      items: [
+        { title: "Item 1", completed: false },
+        { title: "Item 2", completed: true },
+      ],
+    });
   });
 
-  it("returns 100% for a checklist without items", async () => {
+  it("returns 100% and an empty items list for a checklist without items", async () => {
     checklistsStore = { [CHECKLIST_ID]: { items: [] } };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
-    expect(result).toEqual({ percentComplete: 100 });
+    expect(result).toEqual({ percentComplete: 100, items: [] });
   });
 
   // Scenario: Il link non scade e resta valido indefinitamente
@@ -155,13 +171,19 @@ describe("getChecklistShareStatus", () => {
     };
     checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-2"] } };
     checklistItemsStore = {
-      "item-1": { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
-      "item-2": { assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
+      "item-1": { title: "Item 1", assignee: "Mario Rossi", quantity: 2, status: "Completata" },
+      "item-2": { title: "Item 2", assignee: "Luigi Bianchi", quantity: 1, status: "Completata" },
     };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
-    expect(result).toEqual({ percentComplete: 100 });
+    expect(result).toEqual({
+      percentComplete: 100,
+      items: [
+        { title: "Item 1", completed: true },
+        { title: "Item 2", completed: true },
+      ],
+    });
   });
 
   // Regressione F-24: prima del fix, un item non ancora migrato al nuovo
@@ -173,12 +195,34 @@ describe("getChecklistShareStatus", () => {
   it("ignores an itemId that no longer resolves to a real checklistItems document", async () => {
     checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-missing"] } };
     checklistItemsStore = {
-      "item-1": { assignee: "Mario Rossi", quantity: 2, status: "Completata" },
+      "item-1": { title: "Item 1", assignee: "Mario Rossi", quantity: 2, status: "Completata" },
     };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
-    expect(result).toEqual({ percentComplete: 100 });
+    expect(result).toEqual({ percentComplete: 100, items: [{ title: "Item 1", completed: true }] });
+  });
+
+  // Rappresentazione omogenea richiesta dall'operatore: un item boolean
+  // e' completo/non completo tramite `completed`, non `status` (che per
+  // un boolean non ha alcun ruolo nel gate) — stesso flag semplificato
+  // di un item generic/numeric, senza distinzione di type nella risposta.
+  it("derives completed for a boolean item from its completed flag, not its status", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-2"] } };
+    checklistItemsStore = {
+      "item-1": { title: "Verifica batteria", type: "boolean", assignee: "Mario Rossi", status: "Assegnare", completed: true },
+      "item-2": { title: "Controllo cinghia", type: "boolean", assignee: "Luigi Bianchi", status: "Completata", completed: false },
+    };
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({
+      percentComplete: 50,
+      items: [
+        { title: "Verifica batteria", completed: true },
+        { title: "Controllo cinghia", completed: false },
+      ],
+    });
   });
 
   it("throws not-found for an unknown or mistyped token", async () => {
