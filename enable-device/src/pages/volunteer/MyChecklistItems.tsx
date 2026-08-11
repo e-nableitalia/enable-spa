@@ -79,7 +79,7 @@ export default function MyChecklistItems({
   const [requestLabels, setRequestLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showOnlyPending, setShowOnlyPending] = useState(true);
+  const [showAll, setShowAll] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
@@ -226,10 +226,10 @@ export default function MyChecklistItems({
     () =>
       items.filter(
         (item) =>
-          (!showOnlyPending || !isItemComplete(item)) &&
+          (showAll || !isItemComplete(item)) &&
           (statusFilter.length === 0 || statusFilter.includes(item.status))
       ),
-    [items, showOnlyPending, statusFilter]
+    [items, showAll, statusFilter]
   );
 
   const statusColumnBody = (item: MyChecklistItem) => {
@@ -260,17 +260,28 @@ export default function MyChecklistItems({
     );
   };
 
-  const quantityColumnBody = (item: MyChecklistItem) => {
-    if (item.type !== "numeric") return null;
+  /**
+   * Niente colonna Quantità dedicata (svuota per il 99% degli item, non
+   * numeric — bug segnalato dall'operatore, proposta scelta: inline sotto
+   * la Descrizione, visibile e gestibile solo dove serve davvero).
+   */
+  const descriptionColumnBody = (item: MyChecklistItem) => {
+    if (item.type !== "numeric") return item.title;
     const editable = item.origin?.type === "deviceRequest";
     return (
-      <InputNumber
-        value={item.quantity ?? null}
-        disabled={!editable || savingItemId === item.id}
-        onValueChange={(e) => updateItem(item, { quantity: e.value ?? null })}
-        min={0}
-        style={{ width: "100%" }}
-      />
+      <div>
+        <div>{item.title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>Quantità:</span>
+          <InputNumber
+            value={item.quantity ?? null}
+            disabled={!editable || savingItemId === item.id}
+            onValueChange={(e) => updateItem(item, { quantity: e.value ?? null })}
+            min={0}
+            inputStyle={{ width: 70 }}
+          />
+        </div>
+      </div>
     );
   };
 
@@ -300,12 +311,12 @@ export default function MyChecklistItems({
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
               <ToggleButton
-                checked={showOnlyPending}
-                onChange={(e) => setShowOnlyPending(e.value)}
-                onLabel="Solo aperti"
-                offLabel="Tutti"
-                onIcon="pi pi-filter"
-                offIcon="pi pi-list"
+                checked={showAll}
+                onChange={(e) => setShowAll(e.value)}
+                onLabel="Tutti"
+                offLabel="Solo aperti"
+                onIcon="pi pi-list"
+                offIcon="pi pi-filter"
               />
               <MultiSelect
                 value={statusFilter}
@@ -317,9 +328,8 @@ export default function MyChecklistItems({
               />
             </div>
             <DataTable value={visibleItems} loading={loading} size="small" emptyMessage="Nessun item corrispondente ai filtri.">
-              <Column field="title" header="Descrizione" />
+              <Column header="Descrizione" body={descriptionColumnBody} />
               <Column header="Stato" body={statusColumnBody} style={{ minWidth: 160 }} />
-              <Column header="Quantità" body={quantityColumnBody} style={{ minWidth: 100 }} />
               <Column header="Note" body={notesColumnBody} style={{ minWidth: 180 }} />
               <Column header="Provenienza" body={originColumnBody} />
             </DataTable>
