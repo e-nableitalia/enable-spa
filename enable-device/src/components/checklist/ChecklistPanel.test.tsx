@@ -74,12 +74,12 @@ async function rowFor(title: string) {
   return row;
 }
 
-describe("ChecklistPanel - colonna Quantità condizionale sul type dell'item", () => {
+describe("ChecklistPanel - campo Quantità (inline sotto Descrizione) condizionale sul type dell'item", () => {
   beforeEach(() => {
     callable.mockReset();
   });
 
-  it("Scenario 1: un item con type='boolean' non mostra la colonna Quantità", async () => {
+  it("Scenario 1: un item con type='boolean' non mostra il campo Quantità", async () => {
     mockChecklist([
       {
         id: "i1",
@@ -99,7 +99,7 @@ describe("ChecklistPanel - colonna Quantità condizionale sul type dell'item", (
     expect(within(row).queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 
-  it("Scenario 2: un item con type='numeric' mostra la colonna Quantità editabile", async () => {
+  it("Scenario 2: un item con type='numeric' mostra il campo Quantità editabile", async () => {
     mockChecklist([
       {
         id: "i2",
@@ -119,7 +119,7 @@ describe("ChecklistPanel - colonna Quantità condizionale sul type dell'item", (
     expect(within(row).getByRole("spinbutton")).toBeInTheDocument();
   });
 
-  it("Scenario 3: un item con type='generic' non mostra la colonna Quantità", async () => {
+  it("Scenario 3: un item con type='generic' non mostra il campo Quantità", async () => {
     mockChecklist([
       {
         id: "i3",
