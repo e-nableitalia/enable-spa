@@ -107,12 +107,6 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
   const actionTemplate = (row: any) => (
     <div style={{ display: "flex", flexDirection: "row", gap: "0.5rem" }}>
       <Button
-        icon="pi pi-search"
-        onClick={() => handleOpen(row.id)}
-        rounded
-        text
-      />
-      <Button
         icon="pi pi-trash"
         className="p-button-danger"
         onClick={() => handleDelete(row.id)}
@@ -548,25 +542,35 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
       >
         <Column selectionMode="multiple" style={{ width: "3rem" }} />
         <Column
-          header="Copia ID"
           body={(row) => (
-        <Button
-          icon="pi pi-copy"
-          tooltip="Copia ID"
-          tooltipOptions={{ position: "top" }}
-          rounded
-          text
-          onClick={async () => {
-            await navigator.clipboard.writeText(row.id);
-            toast.current?.show({
-          severity: "info",
-          summary: "ID copiato",
-          detail: `ID ${row.id} copiato negli appunti.`,
-          life: 2000,
-            });
-          }}
-        />
+        <div style={{ display: "flex", flexDirection: "row", gap: "0.5rem" }}>
+          <Button
+            icon="pi pi-search"
+            tooltip="Dettaglio"
+            tooltipOptions={{ position: "top" }}
+            onClick={() => handleOpen(row.id)}
+            rounded
+            text
+          />
+          <Button
+            icon="pi pi-copy"
+            tooltip="Copia ID"
+            tooltipOptions={{ position: "top" }}
+            rounded
+            text
+            onClick={async () => {
+              await navigator.clipboard.writeText(row.id);
+              toast.current?.show({
+                severity: "info",
+                summary: "ID copiato",
+                detail: `ID ${row.id} copiato negli appunti.`,
+                life: 2000,
+              });
+            }}
+          />
+        </div>
           )}
+          style={{ width: "100px" }}
         />
         <Column field="seqId" header="ID" sortable style={{ width: "55px" }} />
         <Column

@@ -8,16 +8,24 @@ import { functions } from "../firebase";
 import logo from "../assets/logo.png";
 import Footer from "../components/layout/Footer";
 
+interface ShareChecklistItem {
+  title: string;
+  completed: boolean;
+}
+
 /**
  * Pagina pubblica (nessuna autenticazione) aperta dal link di
  * condivisione a sola lettura di una checklist di fabbricazione (Story
- * EA-113, livello famiglia/visibilita' esterna). Mostra esclusivamente
- * la percentuale di avanzamento restituita da `getChecklistShareStatus`
- * — nessun nome assegnatario, nota o altro dettaglio interno.
+ * EA-113, livello famiglia/visibilita' esterna). Mostra la percentuale di
+ * avanzamento e l'elenco degli item restituiti da `getChecklistShareStatus`
+ * — solo titolo e un flag di completamento omogeneo per ogni item, senza
+ * distinzione tra i type (`boolean`/`numeric`/`generic`): nessun nome
+ * assegnatario, nota, quantita' o altro dettaglio interno.
  */
 export default function ChecklistShareStatus() {
   const { token } = useParams<{ token: string }>();
   const [percentComplete, setPercentComplete] = useState<number | null>(null);
+  const [items, setItems] = useState<ShareChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +37,13 @@ export default function ChecklistShareStatus() {
         return;
       }
       try {
-        const fn = httpsCallable<{ token: string }, { percentComplete: number }>(
-          functions,
-          "getChecklistShareStatus"
-        );
+        const fn = httpsCallable<
+          { token: string },
+          { percentComplete: number; items: ShareChecklistItem[] }
+        >(functions, "getChecklistShareStatus");
         const result = await fn({ token });
         setPercentComplete(result.data.percentComplete);
+        setItems(result.data.items ?? []);
       } catch (err) {
         console.error("[ChecklistShareStatus] Failed to load share status", err);
         setError(
@@ -64,6 +73,28 @@ export default function ChecklistShareStatus() {
               Questa pagina mostra solo l'avanzamento macro della checklist di fabbricazione, senza
               dettagli interni sugli item o sugli assegnatari.
             </p>
+            {items.length > 0 && (
+              <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0 }}>
+                {items.map((item, index) => (
+                  <li
+                    key={index}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 0",
+                      borderBottom: index < items.length - 1 ? "1px solid #e5e7eb" : "none",
+                    }}
+                  >
+                    <i
+                      className={item.completed ? "pi pi-check-circle" : "pi pi-circle"}
+                      style={{ color: item.completed ? "#22c55e" : "#9ca3af", fontSize: 18 }}
+                    />
+                    <span style={{ color: item.completed ? "#374151" : "#6b7280" }}>{item.title}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         )}
       </Card>

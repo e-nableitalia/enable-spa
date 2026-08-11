@@ -7,6 +7,10 @@ import { resolveChecklistItems } from "../organizer/resolveChecklistItems";
 
 const REGION = "europe-west1";
 
+interface ShareChecklistItemLike extends ChecklistItemLike {
+  title?: string;
+}
+
 /**
  * Cloud Function callable pubblica (nessuna autenticazione Firebase, sul
  * modello di `device/createDeviceRequest.ts`): risolve un token di
@@ -26,6 +30,15 @@ const REGION = "europe-west1";
  * prima di applicare il gate di completezza — leggere `items` direttamente
  * come se contenesse oggetti item completi calcolava silenziosamente un
  * `percentComplete` sempre errato (F-24, mai corretto qui da EA-138).
+ *
+ * Oltre a `percentComplete`, la risposta include ora anche `items`
+ * (richiesto dall'operatore): un elenco semplificato, un oggetto per
+ * item con solo `title` e un flag booleano `completed`, MAI assegnatario,
+ * note, quantita' o lo `status` grezzo. Il flag e' calcolato con lo
+ * stesso gate type-aware condiviso (`isChecklistItemComplete`), cosi' da
+ * presentare in modo omogeneo i tre type (`boolean`/`numeric`/`generic`)
+ * su questa pagina pubblica, senza esporre la colonna Quantita' (rilevante
+ * solo per `numeric`, fonte di confusione se mostrata per gli altri type).
  */
 export const getChecklistShareStatus = onCall(
   { region: REGION },
@@ -58,10 +71,14 @@ export const getChecklistShareStatus = onCall(
 
       const data = checklistSnap.data() ?? {};
       const itemIds: string[] = Array.isArray(data.items) ? data.items : [];
-      const items = (await resolveChecklistItems(db, itemIds)) as unknown as ChecklistItemLike[];
+      const items = (await resolveChecklistItems(db, itemIds)) as unknown as ShareChecklistItemLike[];
       const totalItems = items.length;
       const completedItems = items.filter(isChecklistItemComplete).length;
       const percentComplete = totalItems === 0 ? 100 : Math.round((completedItems / totalItems) * 100);
+      const itemsSummary = items.map((item) => ({
+        title: typeof item.title === "string" ? item.title : "",
+        completed: isChecklistItemComplete(item),
+      }));
 
       await logSecurityEvent({
         type: "system",
@@ -73,7 +90,7 @@ export const getChecklistShareStatus = onCall(
       });
 
       console.log(`[getChecklistShareStatus] OK: token ${token} percentComplete=${percentComplete}`);
-      return { percentComplete };
+      return { percentComplete, items: itemsSummary };
     } catch (error) {
       console.error("[getChecklistShareStatus] KO:", error);
       await logSecurityEvent({
