@@ -149,9 +149,9 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
     const row = await rowFor("Stampa mano");
 
     expect(within(row).queryByRole("button", { name: /Richiesta/ })).not.toBeInTheDocument();
-    // Colonne, in ordine: Descrizione, Stato, Quantità, Note, Provenienza —
-    // l'ultima (Provenienza) mostra "-" quando origin e' null.
-    expect(row.querySelectorAll("td")[4]).toHaveTextContent("-");
+    // Colonne, in ordine: Descrizione, Stato, Note, Provenienza — l'ultima
+    // (Provenienza) mostra "-" quando origin e' null.
+    expect(row.querySelectorAll("td")[3]).toHaveTextContent("-");
   });
 
   // Scenario: un item completato (senza origin nella risposta) non mostra alcuna azione di navigazione (EA-155)
@@ -173,7 +173,7 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
 
     const row = await rowFor("Stampa mano");
     expect(within(row).queryByText(/Richiesta/)).not.toBeInTheDocument();
-    expect(row.querySelectorAll("td")[4]).toHaveTextContent("-");
+    expect(row.querySelectorAll("td")[3]).toHaveTextContent("-");
   });
 
   // Scenario: il volontario senza item assegnati vede uno stato vuoto esplicativo
