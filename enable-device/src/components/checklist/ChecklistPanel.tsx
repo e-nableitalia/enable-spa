@@ -482,11 +482,28 @@ export default function ChecklistPanel({
             <Column
               header="Descrizione"
               body={(item: ChecklistItem) => (
-                <InputText
-                  value={item.title}
-                  onChange={(e) => commitField(item, { title: e.target.value }, true)}
-                  style={{ width: "100%" }}
-                />
+                <div>
+                  <InputText
+                    value={item.title}
+                    onChange={(e) => commitField(item, { title: e.target.value }, true)}
+                    style={{ width: "100%" }}
+                  />
+                  {item.type === "numeric" && (
+                    // Niente colonna Quantità dedicata (vuota per gli item
+                    // non numeric, bug segnalato dall'operatore — stesso
+                    // pattern già applicato a MyChecklistItems.tsx): inline
+                    // sotto la Descrizione, solo dove serve davvero.
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>Quantità:</span>
+                      <InputNumber
+                        value={item.quantity ?? null}
+                        onValueChange={(e) => commitField(item, { quantity: e.value ?? null })}
+                        min={0}
+                        inputStyle={{ width: 70 }}
+                      />
+                    </div>
+                  )}
+                </div>
               )}
               style={{ minWidth: 160 }}
             />
@@ -507,23 +524,6 @@ export default function ChecklistPanel({
                 />
               )}
               style={{ minWidth: 180 }}
-            />
-            <Column
-              header="Quantità"
-              body={(item: ChecklistItem) => {
-                if (item.type !== "numeric") {
-                  return null;
-                }
-                return (
-                  <InputNumber
-                    value={item.quantity ?? null}
-                    onValueChange={(e) => commitField(item, { quantity: e.value ?? null })}
-                    min={0}
-                    style={{ width: "100%" }}
-                  />
-                );
-              }}
-              style={{ minWidth: 100 }}
             />
             <Column
               header="Completato"
