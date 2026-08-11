@@ -104,6 +104,7 @@ export default function VolunteerAdminList({
       sortField="lastName"
       sortOrder={1}
     >
+      <Column header="Dettaglio" body={detailBody} style={{ width: "100px" }} />
       <Column field="firstName" header="Nome" sortable />
       <Column field="lastName" header="Cognome" sortable />
       <Column field="email" header="Email" sortable />
@@ -116,7 +117,6 @@ export default function VolunteerAdminList({
       <Column field="hasActivePrinter" header="Stampanti attive" body={hasActivePrinterBody} sortable />
       <Column field="role" header="Ruolo" body={roleBody} sortable />
       <Column field="active" header="Attivo" body={activeBody} sortable />
-      <Column header="Dettaglio" body={detailBody} style={{ width: "100px" }} />
       <Column header="Azioni" body={roleActionBody} style={{ width: "150px" }} />
     </DataTable>
   );

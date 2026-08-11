@@ -75,7 +75,6 @@ describe("DeviceRequestChecklists - vista a tab multi-checklist (EA-133)", () =>
   });
 
   it("Scenario 2: più checklist collegate mostrano una tab per ciascuna, ognuna col proprio checklistId esplicito", async () => {
-    const user = userEvent.setup();
     render(
       <DeviceRequestChecklists
         requestId="req1"
@@ -87,19 +86,20 @@ describe("DeviceRequestChecklists - vista a tab multi-checklist (EA-133)", () =>
     const tabs = screen.getAllByRole("tab");
     expect(tabs).toHaveLength(3);
 
-    // Prima tab attiva di default: monta ChecklistPanel con checklistId "c1".
+    // renderActiveOnly={false}: ogni ChecklistPanel monta subito, non solo
+    // quello della tab attiva — le tab si etichettano col titolo reale già
+    // al primo render, senza dover cliccare sopra (bug segnalato
+    // dall'operatore: prima "Checklist 2"/"Checklist 3" restavano come
+    // placeholder finché non ci si cliccava sopra).
     expect(await screen.findAllByText("Titolo c1")).toHaveLength(2);
-
-    // Passando alla seconda tab (ancora etichettata per indice: il suo
-    // ChecklistPanel non è mai stato montato prima d'ora, onTitleResolved
-    // non è ancora stato invocato), monta ChecklistPanel col checklistId
-    // esplicito "c2".
-    await user.click(screen.getByRole("tab", { name: "Checklist 2" }));
-    expect(await screen.findAllByText("Titolo c2")).toHaveLength(2);
+    expect(await screen.findAllByText("Titolo c2", { selector: "*" })).not.toHaveLength(0);
+    expect(await screen.findAllByText("Titolo c3", { selector: "*" })).not.toHaveLength(0);
     expect(callable).toHaveBeenCalledWith("getDeviceRequestChecklist", { requestId: "req1", checklistId: "c2" });
+    expect(callable).toHaveBeenCalledWith("getDeviceRequestChecklist", { requestId: "req1", checklistId: "c3" });
 
-    // La tab si rietichetta col titolo reale una volta risolto.
+    expect(screen.getByRole("tab", { name: "Titolo c1" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Titolo c2" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Titolo c3" })).toBeInTheDocument();
   });
 
   it("Scenario 3: 'Crea checklist' resta disponibile con checklist esistenti e aggiunge una nuova tab senza errore", async () => {
@@ -186,6 +186,73 @@ describe("DeviceRequestChecklists - vista a tab multi-checklist (EA-133)", () =>
     expect(screen.getByText("Nessuna checklist di fabbricazione collegata a questa richiesta.")).toBeInTheDocument();
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Crea checklist di fabbricazione" })).not.toBeDisabled();
+  });
+});
+
+// Regressione (bug segnalato dall'operatore): non esisteva alcuna azione di
+// eliminazione checklist in UI — aggiunta riservata all'admin (isAdmin),
+// che deve anche eliminare gli item della checklist (verificato lato
+// backend in deleteDeviceRequestChecklist.test.ts; qui si verifica solo che
+// il consumer chiami il callable coi parametri giusti dopo conferma).
+describe("DeviceRequestChecklists - eliminazione checklist (solo admin)", () => {
+  beforeEach(() => {
+    callable.mockReset();
+    mockChecklistLoad();
+  });
+
+  it("senza isAdmin (default), nessuna icona di eliminazione è mostrata sulle tab", async () => {
+    render(
+      <DeviceRequestChecklists requestId="req1" checklistIds={["c1"]} onChecklistsChanged={vi.fn()} />
+    );
+
+    await screen.findAllByText("Titolo c1");
+    expect(screen.queryByRole("button", { name: /Elimina checklist/ })).not.toBeInTheDocument();
+  });
+
+  it("con isAdmin, cliccando l'icona sulla tab e confermando elimina la checklist e ricarica il genitore", async () => {
+    const user = userEvent.setup();
+    const onChecklistsChanged = vi.fn();
+    callable.mockImplementation((name: string, data: { checklistId?: string }) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({
+          data: { checklistId: data.checklistId, title: `Titolo ${data.checklistId}`, category: "cat", items: [] },
+        });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "deleteDeviceRequestChecklist") {
+        return Promise.resolve({ data: { success: true } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    render(
+      <DeviceRequestChecklists requestId="req1" checklistIds={["c1"]} onChecklistsChanged={onChecklistsChanged} isAdmin />
+    );
+
+    await screen.findAllByText("Titolo c1");
+    await user.click(screen.getByRole("button", { name: "Elimina checklist Titolo c1" }));
+    await user.click(await screen.findByRole("button", { name: "Elimina" }));
+
+    expect(callable).toHaveBeenCalledWith("deleteDeviceRequestChecklist", { requestId: "req1", checklistId: "c1" });
+    expect(onChecklistsChanged).toHaveBeenCalled();
+  });
+
+  it("con isAdmin, annullando la conferma non elimina nulla", async () => {
+    const user = userEvent.setup();
+    const onChecklistsChanged = vi.fn();
+
+    render(
+      <DeviceRequestChecklists requestId="req1" checklistIds={["c1"]} onChecklistsChanged={onChecklistsChanged} isAdmin />
+    );
+
+    await screen.findAllByText("Titolo c1");
+    await user.click(screen.getByRole("button", { name: "Elimina checklist Titolo c1" }));
+    await user.click(await screen.findByRole("button", { name: "Annulla" }));
+
+    expect(callable).not.toHaveBeenCalledWith("deleteDeviceRequestChecklist", expect.anything());
+    expect(onChecklistsChanged).not.toHaveBeenCalled();
   });
 });
 

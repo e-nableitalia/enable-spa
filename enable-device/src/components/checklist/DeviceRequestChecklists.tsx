@@ -5,6 +5,7 @@ import { db, functions } from "../../firebase";
 import { Badge } from "primereact/badge";
 import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
+import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { InputText } from "primereact/inputtext";
@@ -44,6 +45,10 @@ interface Props {
   /** Invocato dopo una creazione/clonazione riuscita, per far ricaricare
    * al componente padre il documento `deviceRequests` (nuovo `checklistIds`). */
   onChecklistsChanged: () => Promise<void> | void;
+  /** Mostra l'azione di eliminazione checklist (icona sulla tab), riservata
+   * all'admin (bug/richiesta operatore): default false, passato esplicito
+   * `true` solo dal consumer admin (`RequestDetail`). */
+  isAdmin?: boolean;
 }
 
 /**
@@ -65,9 +70,11 @@ export default function DeviceRequestChecklists({
   checklistIds,
   deviceType,
   onChecklistsChanged,
+  isAdmin = false,
 }: Props) {
   const toast = useRef<Toast>(null);
   const [creatingChecklist, setCreatingChecklist] = useState(false);
+  const [deletingChecklistId, setDeletingChecklistId] = useState<string | null>(null);
   const [showCloneChecklistDialog, setShowCloneChecklistDialog] = useState(false);
   const [cloningChecklist, setCloningChecklist] = useState(false);
   const [loadingCloneSources, setLoadingCloneSources] = useState(false);
@@ -162,6 +169,47 @@ export default function DeviceRequestChecklists({
   };
 
   /**
+   * Elimina una checklist collegata alla richiesta (solo admin, azione
+   * distruttiva confermata dall'utente): `deleteDeviceRequestChecklist`
+   * elimina anche tutti gli item della checklist (bug segnalato
+   * dall'operatore, prima non c'era alcuna azione di eliminazione in UI) e
+   * rimuove il riferimento da `deviceRequests.checklistIds`.
+   */
+  const handleDeleteChecklist = (checklistId: string, title: string) => {
+    confirmDialog({
+      message: `Eliminare la checklist "${title}"? Verranno eliminati anche tutti i suoi item. L'operazione non è reversibile.`,
+      header: "Conferma eliminazione checklist",
+      icon: "pi pi-exclamation-triangle",
+      acceptLabel: "Elimina",
+      rejectLabel: "Annulla",
+      acceptClassName: "p-button-danger",
+      accept: async () => {
+        setDeletingChecklistId(checklistId);
+        try {
+          const fn = httpsCallable(functions, "deleteDeviceRequestChecklist");
+          await fn({ requestId, checklistId });
+          toast.current?.show({
+            severity: "success",
+            summary: "Checklist eliminata",
+            detail: "La checklist e i suoi item sono stati eliminati.",
+            life: 3000,
+          });
+          await onChecklistsChanged();
+        } catch (err) {
+          toast.current?.show({
+            severity: "error",
+            summary: "Errore",
+            detail: err instanceof Error ? err.message : "Errore durante l'eliminazione della checklist.",
+            life: 5000,
+          });
+        } finally {
+          setDeletingChecklistId(null);
+        }
+      },
+    });
+  };
+
+  /**
    * Recupera le deviceRequest candidate come sorgente di clonazione: tutte
    * le richieste diverse da quella corrente che hanno almeno una checklist
    * collegata (`checklistIds` non vuoto). Il `deviceType` mostrato segue la
@@ -251,18 +299,55 @@ export default function DeviceRequestChecklists({
   return (
     <div>
       <Toast ref={toast} />
+      <ConfirmDialog />
 
       {checklistIds.length > 0 && (
-        <TabView>
-          {checklistIds.map((checklistId, index) => (
-            <TabPanel key={checklistId} header={titles[checklistId] ?? `Checklist ${index + 1}`}>
-              <ChecklistPanel
-                requestId={requestId}
-                checklistId={checklistId}
-                onTitleResolved={(title) => setTitles((prev) => ({ ...prev, [checklistId]: title }))}
-              />
-            </TabPanel>
-          ))}
+        // renderActiveOnly={false}: senza, PrimeReact monta solo il ChecklistPanel
+        // della tab attiva (default renderActiveOnly=true) — i titoli reali delle
+        // altre tab (risolti da ChecklistPanel via onTitleResolved al primo
+        // caricamento) restavano quindi al placeholder "Checklist N" finché non
+        // si cliccava sopra la tab (bug segnalato dall'operatore).
+        <TabView renderActiveOnly={false}>
+          {checklistIds.map((checklistId, index) => {
+            const title = titles[checklistId] ?? `Checklist ${index + 1}`;
+            return (
+              <TabPanel
+                key={checklistId}
+                header={
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {title}
+                    {isAdmin && (
+                      <i
+                        className="pi pi-trash"
+                        role="button"
+                        aria-label={`Elimina checklist ${title}`}
+                        title="Elimina checklist"
+                        style={{
+                          fontSize: 12,
+                          color: "#b91c1c",
+                          opacity: deletingChecklistId === checklistId ? 0.5 : 1,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (deletingChecklistId) return;
+                          handleDeleteChecklist(checklistId, title);
+                        }}
+                      />
+                    )}
+                  </span>
+                }
+              >
+                <ChecklistPanel
+                  requestId={requestId}
+                  checklistId={checklistId}
+                  onTitleResolved={(resolvedTitle) =>
+                    setTitles((prev) => ({ ...prev, [checklistId]: resolvedTitle }))
+                  }
+                  renderConfirmDialog={false}
+                />
+              </TabPanel>
+            );
+          })}
         </TabView>
       )}
 
