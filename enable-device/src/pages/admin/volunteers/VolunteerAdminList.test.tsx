@@ -3,7 +3,9 @@ import { render, screen } from "@testing-library/react";
 import VolunteerAdminList from "./VolunteerAdminList";
 import type { VolunteerAdminRow } from "./volunteerAdminHelpers";
 
-const row: VolunteerAdminRow = {
+// Fixture minimale: solo i campi letti da VolunteerAdminList, il resto della
+// forma reale di VolunteerAdminRow (printer/skills/raw) non è rilevante qui.
+const row = {
   uid: "vol-1",
   firstName: "Mario",
   lastName: "Rossi",
@@ -17,7 +19,7 @@ const row: VolunteerAdminRow = {
   hasActivePrinter: true,
   role: "volunteer",
   active: true,
-} as VolunteerAdminRow;
+} as unknown as VolunteerAdminRow;
 
 // Regressione (bug segnalato dall'operatore): il pulsante di dettaglio
 // (occhio) era in fondo alla riga, dopo tutte le altre colonne — spostato
