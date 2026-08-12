@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db, functions } from "../../firebase";
+import { db, functions } from "../../firebase";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
@@ -174,12 +174,16 @@ export default function ChecklistPanel({
   }, [onTitleResolved]);
 
   /**
-   * Utenti reali selezionabili come assegnatario di un item (EA-141):
-   * i volontari assegnati alla deviceRequest (`assignedVolunteers`, leggibile
-   * da qualunque volontario o admin autenticato, vedi `firestore.rules`) più
-   * l'utente corrente se admin — stesso perimetro RBAC validato lato backend
-   * da `isResolvableChecklistAssignee`. Sostituisce il precedente campo di
-   * testo libero, mai risolto a un'identità reale.
+   * Utenti reali selezionabili come assegnatario di un item (EA-141,
+   * estesa da F-27): i volontari assegnati alla deviceRequest più
+   * **tutti** gli admin dell'organizzazione, risolti lato server da
+   * `listAssignableChecklistUsers` — le regole Firestore non permettono a
+   * un client di enumerare gli admin diversi da sé stesso (`match
+   * /users/{userId}`, lettura root permessa solo ad admin o al proprietario
+   * stesso), quindi prima di questa funzione un volontario non vedeva mai
+   * un admin diverso da chi stava operando. Stesso perimetro RBAC
+   * validato lato backend da `isResolvableChecklistAssignee`. Sostituisce
+   * il precedente campo di testo libero, mai risolto a un'identità reale.
    */
   const loadAssignableUsers = useCallback(async () => {
     if (!requestId) {
@@ -187,22 +191,14 @@ export default function ChecklistPanel({
       return;
     }
     try {
-      const requestSnap = await getDoc(doc(db, "deviceRequests", requestId));
-      const assignedVolunteers: string[] = requestSnap.exists()
-        ? ((requestSnap.data()?.assignedVolunteers as string[] | undefined) ?? [])
-        : [];
-
-      const candidateUids = new Set(assignedVolunteers);
-      const selfUid = auth.currentUser?.uid;
-      if (selfUid) {
-        const selfSnap = await getDoc(doc(db, "users", selfUid));
-        if (selfSnap.exists() && selfSnap.data()?.role === "admin") {
-          candidateUids.add(selfUid);
-        }
-      }
+      const fn = httpsCallable<{ requestId: string }, { uids: string[] }>(
+        functions,
+        "listAssignableChecklistUsers"
+      );
+      const result = await fn({ requestId });
 
       const users = await Promise.all(
-        Array.from(candidateUids).map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) }))
+        result.data.uids.map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) }))
       );
       setAssignableUsers(users);
     } catch (err) {
