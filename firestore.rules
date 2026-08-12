@@ -193,6 +193,14 @@ service cloud.firestore {
       allow write: if false; // solo backend
     }
 
+    // Template usati da `mail.template.name` (estensione Trigger Email,
+    // meccanismo nativo a template — EA-160). Documenti gestiti solo
+    // manualmente sul progetto Firebase live, nessun writer applicativo.
+    match /emailTemplates/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // solo backend/console, nessun editor UI (EA-160)
+    }
+
     // =========================================================
     // 🔒 SECURITY LOGS
     // =========================================================

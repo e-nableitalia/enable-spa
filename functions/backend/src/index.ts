@@ -38,5 +38,6 @@ export { updateDeviceRequestChecklistItem } from "./device-requests/updateDevice
 export { removeDeviceRequestChecklistItem } from "./device-requests/removeDeviceRequestChecklistItem";
 export { createChecklistShareLink } from "./device-requests/createChecklistShareLink";
 export { getChecklistShareStatus } from "./device-requests/getChecklistShareStatus";
+export { sendDocumentsEmail } from "./device-requests/sendDocumentsEmail";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
