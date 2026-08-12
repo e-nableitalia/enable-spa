@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import RequestDetail from "./RequestDetail";
 
@@ -186,5 +186,99 @@ describe("RequestDetail (admin) - handleValidate non scrive più publicStatus (E
     for (const [, payload] of publicWrites) {
       expect(payload).not.toHaveProperty("publicStatus");
     }
+  });
+});
+
+describe("RequestDetail (admin) - invio email documenti alla famiglia (EA-160)", () => {
+  beforeEach(() => {
+    for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
+    for (const key of Object.keys(firestoreCollections)) delete firestoreCollections[key];
+    callable.mockClear();
+    callable.mockResolvedValue({ data: {} });
+    updateDocMock.mockClear();
+  });
+
+  // Scenario 1 EA-160: email valorizzata + documentsEmailSent === false -> abilitato
+  it("Scenario 1: command button abilitato con email valorizzata e invio non ancora effettuato", async () => {
+    setRequestDoc({ requestNumber: "42", documentsEmailSent: false, assignedVolunteers: [] });
+    firestoreDocs["deviceRequests/req1/private/data"] = { email: "famiglia@example.com" };
+    render(<RequestDetail />);
+
+    expect(await screen.findByRole("button", { name: "Invia documenti" })).toBeEnabled();
+  });
+
+  // Scenario 2 EA-160: email assente/vuota -> disabilitato
+  it("Scenario 2: command button disabilitato se l'email privata non è valorizzata", async () => {
+    setRequestDoc({ requestNumber: "42", documentsEmailSent: false, assignedVolunteers: [] });
+    firestoreDocs["deviceRequests/req1/private/data"] = { email: "" };
+    render(<RequestDetail />);
+
+    expect(await screen.findByRole("button", { name: "Invia documenti" })).toBeDisabled();
+  });
+
+  it("Scenario 2b: command button disabilitato se non esiste alcun documento private/data", async () => {
+    setRequestDoc({ requestNumber: "42", documentsEmailSent: false, assignedVolunteers: [] });
+    render(<RequestDetail />);
+
+    expect(await screen.findByRole("button", { name: "Invia documenti" })).toBeDisabled();
+  });
+
+  // Scenario 3 EA-160: documentsEmailSent === true -> disabilitato indipendentemente dall'email
+  it("Scenario 3: command button disabilitato se l'invio è già stato effettuato, anche con email valorizzata", async () => {
+    setRequestDoc({ requestNumber: "42", documentsEmailSent: true, assignedVolunteers: [] });
+    firestoreDocs["deviceRequests/req1/private/data"] = { email: "famiglia@example.com" };
+    render(<RequestDetail />);
+
+    expect(await screen.findByRole("button", { name: "Invia documenti" })).toBeDisabled();
+  });
+
+  // Scenario 4 EA-160: click invoca la Cloud Function e ricarica il flag aggiornato
+  it("Scenario 4: click sul command button invoca sendDocumentsEmail e ricarica documentsEmailSent", async () => {
+    const user = userEvent.setup();
+    setRequestDoc({ requestNumber: "42", documentsEmailSent: false, assignedVolunteers: [] });
+    firestoreDocs["deviceRequests/req1/private/data"] = { email: "famiglia@example.com" };
+    callable.mockImplementationOnce(async (name: string) => {
+      if (name === "sendDocumentsEmail") {
+        firestoreDocs["deviceRequests/req1"] = {
+          ...(firestoreDocs["deviceRequests/req1"] as Record<string, unknown>),
+          documentsEmailSent: true,
+        };
+      }
+      return { data: { success: true } };
+    });
+    render(<RequestDetail />);
+
+    const button = await screen.findByRole("button", { name: "Invia documenti" });
+    await user.click(button);
+
+    expect(callable).toHaveBeenCalledWith("sendDocumentsEmail", { requestId: "req1" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Invia documenti" })).toBeDisabled());
+  });
+
+  // Scenario 5 EA-160 (lato UI): il pulsante si disabilita già durante l'invio
+  // in corso, prima ancora che la callable risolva — la garanzia "un solo
+  // invio riuscito" resta comunque della Cloud Function (vedi
+  // sendDocumentsEmail.test.ts, claim in transazione), qui si verifica solo
+  // che un secondo click nella stessa finestra non possa partire dalla UI.
+  it("Scenario 5 (UI): il command button si disabilita mentre l'invio è in corso, impedendo un secondo click immediato", async () => {
+    const user = userEvent.setup();
+    setRequestDoc({ requestNumber: "42", documentsEmailSent: false, assignedVolunteers: [] });
+    firestoreDocs["deviceRequests/req1/private/data"] = { email: "famiglia@example.com" };
+    let resolveCallable: (() => void) | undefined;
+    callable.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCallable = () => resolve({ data: { success: true } });
+        })
+    );
+    render(<RequestDetail />);
+
+    const button = await screen.findByRole("button", { name: "Invia documenti" });
+    await user.click(button);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Invia documenti" })).toBeDisabled());
+    expect(callable).toHaveBeenCalledTimes(1);
+
+    resolveCallable?.();
   });
 });

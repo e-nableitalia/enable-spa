@@ -48,6 +48,7 @@ export default function RequestDetail() {
   const [removingVolunteer, setRemovingVolunteer] = useState(false);
   const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [showChangeDeviceTypeDialog, setShowChangeDeviceTypeDialog] = useState(false);
+  const [sendingDocumentsEmail, setSendingDocumentsEmail] = useState(false);
 
   // ── Validazione richiesta (status "inviata") ─────────────────────────────
   const [showValidateDialog, setShowValidateDialog] = useState(false);
@@ -481,6 +482,38 @@ export default function RequestDetail() {
       toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
     }
     setSavingPublic(false);
+  };
+
+  /**
+   * Invia alla famiglia i documenti (scarico di responsabilità + accessori)
+   * via email (EA-160). Il command button che la invoca è già disabilitato
+   * quando l'email privata è assente o l'invio è già stato effettuato
+   * (`documentsEmailSent === true`): la Cloud Function ripete comunque
+   * entrambe le verifiche server-side (claim in transazione, guard-then-set)
+   * per essere sicura contro click concorrenti o stato client stale.
+   */
+  const handleSendDocumentsEmail = async () => {
+    if (!id) return;
+    setSendingDocumentsEmail(true);
+    try {
+      const fn = httpsCallable(functions, "sendDocumentsEmail");
+      await fn({ requestId: id });
+      toast.current?.show({
+        severity: "success",
+        summary: "Documenti inviati",
+        detail: "I documenti sono stati inviati via email alla famiglia.",
+        life: 4000,
+      });
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err?.message || "Errore durante l'invio dei documenti.",
+        life: 5000,
+      });
+    }
+    setSendingDocumentsEmail(false);
   };
 
   const handleSetAttention = async () => {
@@ -1003,21 +1036,38 @@ export default function RequestDetail() {
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>
         <div className="p-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span>Dati richiedente (privati)</span>
-          <Button
-            label="Modifica"
-            icon="pi pi-pencil"
-            className="p-button-text"
-            onClick={() => {
-              setPrivateForm({
-                email: privateData?.email || "",
-                firstName: privateData?.firstName || "",
-                lastName: privateData?.lastName || "",
-                amputationType: privateData?.amputationType || "",
-                phone: privateData?.phone || "",
-              });
-              setShowEditPrivateDialog(true);
-            }}
-          />
+          <div style={{ display: "flex", gap: 4 }}>
+            <Button
+              label="Invia documenti"
+              icon="pi pi-send"
+              className="p-button-text"
+              tooltip={
+                request.documentsEmailSent
+                  ? "Documenti già inviati alla famiglia"
+                  : !privateData?.email
+                    ? "Email del richiedente non valorizzata"
+                    : undefined
+              }
+              disabled={!privateData?.email || request.documentsEmailSent === true || sendingDocumentsEmail}
+              loading={sendingDocumentsEmail}
+              onClick={handleSendDocumentsEmail}
+            />
+            <Button
+              label="Modifica"
+              icon="pi pi-pencil"
+              className="p-button-text"
+              onClick={() => {
+                setPrivateForm({
+                  email: privateData?.email || "",
+                  firstName: privateData?.firstName || "",
+                  lastName: privateData?.lastName || "",
+                  amputationType: privateData?.amputationType || "",
+                  phone: privateData?.phone || "",
+                });
+                setShowEditPrivateDialog(true);
+              }}
+            />
+          </div>
         </div>
         <div className="p-panel-content">
           {privateData ? (
