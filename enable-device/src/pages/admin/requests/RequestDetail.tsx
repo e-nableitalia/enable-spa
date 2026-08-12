@@ -97,6 +97,12 @@ export default function RequestDetail() {
   const [attentionNotificaVolontari, setAttentionNotificaVolontari] = useState(false);
   const [attentionNotificaTelegram, setAttentionNotificaTelegram] = useState(false);
 
+  // ── Liberatorie familiari: scarico di responsabilità e liberatoria foto (EA-158) ──
+  const [savingWaiver, setSavingWaiver] = useState(false);
+  const [savingPhotoRelease, setSavingPhotoRelease] = useState(false);
+  const [waiverAcquiredByName, setWaiverAcquiredByName] = useState("");
+  const [photoReleaseAcquiredByName, setPhotoReleaseAcquiredByName] = useState("");
+
   const toast = useRef<any>(null);
 
   /**
@@ -231,6 +237,22 @@ export default function RequestDetail() {
     loadData();
     fetchVolunteers();
   }, [id, loadData, fetchVolunteers]);
+
+  useEffect(() => {
+    if (request?.waiverAcquiredBy) {
+      getUserFullName(request.waiverAcquiredBy).then(setWaiverAcquiredByName);
+    } else {
+      setWaiverAcquiredByName("");
+    }
+  }, [request?.waiverAcquiredBy]);
+
+  useEffect(() => {
+    if (request?.photoReleaseAcquiredBy) {
+      getUserFullName(request.photoReleaseAcquiredBy).then(setPhotoReleaseAcquiredByName);
+    } else {
+      setPhotoReleaseAcquiredByName("");
+    }
+  }, [request?.photoReleaseAcquiredBy]);
 
   useEffect(() => {
     if (!showAssignVolunteerDialog) {
@@ -549,6 +571,28 @@ export default function RequestDetail() {
       toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
     }
     setSavingAttention(false);
+  };
+
+  const handleAcquireConsent = async (consentType: "waiver" | "photoRelease") => {
+    if (!id) return;
+    const setSaving = consentType === "waiver" ? setSavingWaiver : setSavingPhotoRelease;
+    setSaving(true);
+    try {
+      const fn = httpsCallable(functions, "setDeviceRequestConsent");
+      await fn({ requestId: id, consentType });
+      toast.current?.show({
+        severity: "success",
+        summary: "Salvato",
+        detail: consentType === "waiver"
+          ? "Scarico di responsabilità acquisito."
+          : "Liberatoria foto acquisita.",
+        life: 3000,
+      });
+      await loadData();
+    } catch (err: any) {
+      toast.current?.show({ severity: "error", summary: "Errore", detail: err?.message || "Errore durante il salvataggio.", life: 4000 });
+    }
+    setSaving(false);
   };
 
   /**
@@ -1188,6 +1232,69 @@ export default function RequestDetail() {
           ) : (
             <div style={{ color: "#888" }}>Nessun indirizzo di spedizione inserito.</div>
           )}
+        </div>
+      </div>
+
+      {/* Liberatorie familiari (EA-158) */}
+      <div className="p-panel p-component" style={{ marginBottom: 30 }}>
+        <div className="p-panel-header">
+          <span>Liberatorie familiari</span>
+        </div>
+        <div className="p-panel-content">
+          <div style={{ display: "flex", gap: 40 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                <strong>Scarico di responsabilità:</strong>
+                {request.waiverAcquired
+                  ? <Badge value="Acquisito" severity="success" />
+                  : <Badge value="Non acquisito" severity="warning" />
+                }
+                {!request.waiverAcquired && (
+                  <Button
+                    label="Segna come acquisito"
+                    icon="pi pi-check"
+                    className="p-button-text p-button-sm"
+                    loading={savingWaiver}
+                    onClick={() => handleAcquireConsent("waiver")}
+                  />
+                )}
+              </div>
+              {request.waiverAcquired && (
+                <div style={{ color: "#6b7280" }}>
+                  <small>
+                    {request.waiverAcquiredDate?.toDate ? request.waiverAcquiredDate.toDate().toLocaleString() : "-"}
+                    {waiverAcquiredByName ? ` — ${waiverAcquiredByName}` : ""}
+                  </small>
+                </div>
+              )}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                <strong>Liberatoria foto:</strong>
+                {request.photoReleaseAcquired
+                  ? <Badge value="Acquisita" severity="success" />
+                  : <Badge value="Non acquisita" severity="warning" />
+                }
+                {!request.photoReleaseAcquired && (
+                  <Button
+                    label="Segna come acquisita"
+                    icon="pi pi-check"
+                    className="p-button-text p-button-sm"
+                    loading={savingPhotoRelease}
+                    onClick={() => handleAcquireConsent("photoRelease")}
+                  />
+                )}
+              </div>
+              {request.photoReleaseAcquired && (
+                <div style={{ color: "#6b7280" }}>
+                  <small>
+                    {request.photoReleaseAcquiredDate?.toDate ? request.photoReleaseAcquiredDate.toDate().toLocaleString() : "-"}
+                    {photoReleaseAcquiredByName ? ` — ${photoReleaseAcquiredByName}` : ""}
+                  </small>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

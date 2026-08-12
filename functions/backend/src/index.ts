@@ -6,6 +6,7 @@ export {createDeviceRequest} from "./device/createDeviceRequest";
 export {createDeviceRequestInternal} from "./device/createDeviceRequestInternal";
 export {changeStatus} from "./device/changeStatus";
 export {assignVolunteer} from "./device/assignVolunteer";
+export {setDeviceRequestConsent} from "./device/setDeviceRequestConsent";
 export { register, checkRegistration, completeRegistration, registerWithIntegratedAuth, doLogin } from "./auth/register";
 export { setPassword } from "./auth/setPassword";
 export { activateVolunteers, deactivateVolunteers } from "./volunteer/volunteerState";

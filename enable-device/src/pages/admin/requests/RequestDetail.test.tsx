@@ -6,7 +6,24 @@ import RequestDetail from "./RequestDetail";
 vi.mock("react-router-dom", () => ({ useParams: () => ({ id: "req1" }) }));
 vi.mock("../../../firebase", () => ({ db: {}, functions: {}, auth: {} }));
 
-const callable = vi.fn().mockResolvedValue({ data: {} });
+// setDeviceRequestConsent (EA-158) è una Cloud Function: a differenza delle
+// altre azioni di questo file, non c'è un updateDoc locale a fianco della
+// chiamata. Per poter verificare che la UI rilegga lo stato aggiornato dopo
+// il click (loadData()), questo mock simula la scrittura che il backend
+// reale farebbe su deviceRequests/{id}.
+const callable = vi.fn((name: string, data: unknown) => {
+  if (name === "setDeviceRequestConsent") {
+    const { requestId, consentType } = data as { requestId: string; consentType: "waiver" | "photoRelease" };
+    const path = `deviceRequests/${requestId}`;
+    firestoreDocs[path] = {
+      ...(firestoreDocs[path] as Record<string, unknown> | undefined),
+      [`${consentType}Acquired`]: true,
+      [`${consentType}AcquiredDate`]: { toDate: () => new Date("2026-03-01T09:00:00Z") },
+      [`${consentType}AcquiredBy`]: "admin-9",
+    };
+  }
+  return Promise.resolve({ data: {} });
+});
 vi.mock("firebase/functions", () => ({
   httpsCallable: (_functions: unknown, name: string) => (data: unknown) => callable(name, data),
 }));
@@ -186,6 +203,74 @@ describe("RequestDetail (admin) - handleValidate non scrive più publicStatus (E
     for (const [, payload] of publicWrites) {
       expect(payload).not.toHaveProperty("publicStatus");
     }
+  });
+});
+
+describe("RequestDetail (admin) - liberatorie familiari: scarico di responsabilità e liberatoria foto (EA-158)", () => {
+  beforeEach(() => {
+    for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
+    for (const key of Object.keys(firestoreCollections)) delete firestoreCollections[key];
+    callable.mockClear();
+    updateDocMock.mockClear();
+  });
+
+  // Scenario 1: Admin acquisisce lo scarico di responsabilità
+  it("Scenario 1: click su 'Segna come acquisito' invoca il backend e la UI riflette waiverAcquired=true con data e admin", async () => {
+    const user = userEvent.setup();
+    setRequestDoc({ requestNumber: "42", status: "in produzione", assignedVolunteers: [] });
+    firestoreDocs["users/admin-9/private/profile"] = { firstName: "Anna", lastName: "Admin" };
+    render(<RequestDetail />);
+
+    expect(await screen.findByText("Non acquisito")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Segna come acquisito" }));
+
+    expect(callable).toHaveBeenCalledWith("setDeviceRequestConsent", {
+      requestId: "req1",
+      consentType: "waiver",
+    });
+    expect(await screen.findByText("Acquisito")).toBeInTheDocument();
+    expect(await screen.findByText(/Anna Admin/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Segna come acquisito" })).not.toBeInTheDocument();
+  });
+
+  // Scenario 2: Admin acquisisce la liberatoria foto
+  it("Scenario 2: click su 'Segna come acquisita' invoca il backend con consentType photoRelease e la UI riflette lo stato aggiornato", async () => {
+    const user = userEvent.setup();
+    setRequestDoc({ requestNumber: "42", status: "in produzione", assignedVolunteers: [] });
+    firestoreDocs["users/admin-9/private/profile"] = { firstName: "Anna", lastName: "Admin" };
+    render(<RequestDetail />);
+
+    expect(await screen.findByText("Non acquisita")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Segna come acquisita" }));
+
+    expect(callable).toHaveBeenCalledWith("setDeviceRequestConsent", {
+      requestId: "req1",
+      consentType: "photoRelease",
+    });
+    expect(await screen.findByText("Acquisita")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Segna come acquisita" })).not.toBeInTheDocument();
+  });
+
+  // Scenario 4: Admin visualizza lo stato corrente delle liberatorie
+  it("Scenario 4: mostra lo stato di entrambi i flag, con data e admin per quello già acquisito", async () => {
+    setRequestDoc({
+      requestNumber: "42",
+      status: "in produzione",
+      assignedVolunteers: [],
+      waiverAcquired: true,
+      waiverAcquiredDate: { toDate: () => new Date("2026-02-15T08:30:00Z") },
+      waiverAcquiredBy: "admin-7",
+      photoReleaseAcquired: false,
+    });
+    firestoreDocs["users/admin-7/private/profile"] = { firstName: "Mario", lastName: "Rossi" };
+    render(<RequestDetail />);
+
+    expect(await screen.findByText("Acquisito")).toBeInTheDocument();
+    expect(await screen.findByText(/Mario Rossi/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Segna come acquisito" })).not.toBeInTheDocument();
+
+    expect(await screen.findByText("Non acquisita")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Segna come acquisita" })).toBeInTheDocument();
   });
 });
 

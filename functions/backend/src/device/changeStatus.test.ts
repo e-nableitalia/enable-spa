@@ -162,6 +162,7 @@ describe("changeStatus", () => {
       "req-1": {
         status: "in produzione",
         assignedVolunteers: ["volunteer-1"],
+        waiverAcquired: true,
       },
     };
 
@@ -264,6 +265,7 @@ describe("changeStatus", () => {
     expect(deviceRequestsStore["req-1"]).toEqual({
       status: "pronta per spedizione",
       assignedVolunteers: ["volunteer-1"],
+      waiverAcquired: true,
       updatedAt: SERVER_TIMESTAMP_SENTINEL,
     });
     expect(deviceRequestsStore["req-1"]).not.toHaveProperty("publicStatus");
@@ -292,6 +294,7 @@ describe("changeStatus", () => {
     expect(deviceRequestsStore["req-1"]).toEqual({
       status: "in produzione",
       assignedVolunteers: ["volunteer-1"],
+      waiverAcquired: true,
     });
     expect(eventsStore["req-1"]).toBeUndefined();
   });
@@ -323,6 +326,7 @@ describe("changeStatus - EA-148 (riduzione dominio status a 11 valori)", () => {
       "req-prod": {
         status: "in produzione",
         assignedVolunteers: ["volunteer-1"],
+        waiverAcquired: true,
       },
       "req-manage": {
         status: "da gestire",
@@ -421,6 +425,7 @@ describe("changeStatus - EA-151 (delega dell'auto-istanziazione checklist di pro
       "req-prod": {
         status: "in produzione",
         assignedVolunteers: [],
+        waiverAcquired: true,
       },
     };
 
@@ -465,5 +470,115 @@ describe("changeStatus - EA-151 (delega dell'auto-istanziazione checklist di pro
 
     const [, params] = autoCreateProductionChecklistOnTransitionMock.mock.calls[0];
     expect(params).toMatchObject({ newStatus: "pronta per spedizione" });
+  });
+});
+
+describe("changeStatus - EA-159 (gate obbligatorio: scarico di responsabilità)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    forceEventWriteFailure = false;
+
+    usersStore = {
+      "admin-1": { role: "admin", consents: ACCEPTED_CONSENTS },
+      "volunteer-1": { role: "volunteer", consents: ACCEPTED_CONSENTS },
+    };
+
+    deviceRequestsStore = {
+      "req-no-waiver": {
+        status: "in produzione",
+        assignedVolunteers: ["volunteer-1"],
+      },
+      "req-waiver-false": {
+        status: "in produzione",
+        assignedVolunteers: ["volunteer-1"],
+        waiverAcquired: false,
+      },
+      "req-waiver-true": {
+        status: "in produzione",
+        assignedVolunteers: ["volunteer-1"],
+        waiverAcquired: true,
+      },
+      "req-no-waiver-early-status": {
+        status: "da gestire",
+        assignedVolunteers: [],
+      },
+    };
+
+    eventsStore = {};
+  });
+
+  // Scenario 1: transizione bloccata senza scarico di responsabilità, per
+  // ciascuno dei 3 stati target.
+  it.each(["pronta per spedizione", "spedita", "completata"])(
+    "blocks the transition to '%s' with failed-precondition when waiverAcquired is not true, leaving the status unchanged",
+    async (newStatus) => {
+      await expect(
+        changeStatus.run(buildRequest({ requestId: "req-no-waiver", newStatus }, "admin-1"))
+      ).rejects.toMatchObject({ code: "failed-precondition" });
+
+      expect(runTransactionMock).not.toHaveBeenCalled();
+      expect(deviceRequestsStore["req-no-waiver"]).toMatchObject({ status: "in produzione" });
+    }
+  );
+
+  // Scenario 1 (variante): waiverAcquired presente ma esplicitamente false,
+  // non solo assente, blocca comunque.
+  it("blocks the transition when waiverAcquired is explicitly false", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-waiver-false", newStatus: "spedita" }, "admin-1"))
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+  });
+
+  // Scenario 2: con scarico di responsabilità acquisito, la transizione
+  // procede normalmente, per ciascuno dei 3 stati target.
+  it.each(["pronta per spedizione", "spedita", "completata"])(
+    "allows the transition to '%s' when waiverAcquired is true",
+    async (newStatus) => {
+      const result = await changeStatus.run(
+        buildRequest({ requestId: "req-waiver-true", newStatus }, "admin-1")
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(deviceRequestsStore["req-waiver-true"]).toMatchObject({ status: newStatus });
+    }
+  );
+
+  // Scenario 3: il gate si applica indipendentemente dal currentStatus di
+  // partenza, anche per una transizione diretta da uno stato non
+  // immediatamente precedente ai 3 stati target (qui ammessa via admin RBAC).
+  it("blocks a direct transition from a non-adjacent currentStatus when waiverAcquired is not true", async () => {
+    await expect(
+      changeStatus.run(
+        buildRequest({ requestId: "req-no-waiver-early-status", newStatus: "completata" }, "admin-1")
+      )
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+    expect(deviceRequestsStore["req-no-waiver-early-status"]).toMatchObject({ status: "da gestire" });
+  });
+
+  // Scenario 4: transizioni verso stati non coperti dal gate non sono
+  // impattate, anche senza scarico di responsabilità.
+  it("does not block a transition to a status outside the gated set even without waiverAcquired", async () => {
+    const result = await changeStatus.run(
+      buildRequest({ requestId: "req-no-waiver", newStatus: "in produzione" }, "admin-1")
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(deviceRequestsStore["req-no-waiver"]).toMatchObject({ status: "in produzione" });
+  });
+
+  // Regression: il gate si applica anche al percorso volontario, non solo
+  // admin — coerente con "indipendente da ruolo" della Story.
+  it("blocks an assigned volunteer's allowed transition when waiverAcquired is not true", async () => {
+    await expect(
+      changeStatus.run(
+        buildRequest({ requestId: "req-no-waiver", newStatus: "pronta per spedizione" }, "volunteer-1")
+      )
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
   });
 });
