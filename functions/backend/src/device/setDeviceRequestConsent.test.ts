@@ -5,16 +5,45 @@ const SERVER_TIMESTAMP_SENTINEL = { __type: "serverTimestamp" };
 
 /**
  * Store in-memory minimale che simula le collection Firestore coinvolte:
- * `users` (RBAC) e `deviceRequests` (documento principale, solo `update`).
- * Stesso pattern di `device-requests/createDeviceRequestChecklist.test.ts`.
+ * `users` (RBAC), `deviceRequests` (documento principale) e la
+ * sottocollezione `events` (event sourcing, `dc-request-event`) — stesso
+ * pattern di `device/changeStatus.test.ts`: le write sono accodate dentro
+ * la callback della transazione e "committate" sugli store solo al termine,
+ * per simulare l'atomicità reale di `db.runTransaction`.
  */
 let usersStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
+let eventsStore: Record<string, Array<Record<string, unknown>>>;
 
-const deviceRequestUpdateMock = jest.fn((id: string, updates: Record<string, unknown>) => {
-  deviceRequestsStore[id] = { ...(deviceRequestsStore[id] ?? {}), ...updates };
-  return Promise.resolve();
-});
+type WriteRef =
+  | { __kind: "deviceRequest"; __id: string }
+  | { __kind: "event"; __id: string };
+
+interface QueuedWrite {
+  ref: WriteRef;
+  data: Record<string, unknown>;
+}
+
+function buildDeviceRequestRef(id: string) {
+  return {
+    __kind: "deviceRequest" as const,
+    __id: id,
+    get: jest.fn(() =>
+      Promise.resolve({
+        exists: deviceRequestsStore[id] !== undefined,
+        data: () => deviceRequestsStore[id],
+      })
+    ),
+    collection: jest.fn((sub: string) => {
+      if (sub !== "events") {
+        throw new Error(`Unexpected subcollection ${sub}`);
+      }
+      return {
+        doc: jest.fn(() => ({ __kind: "event" as const, __id: id })),
+      };
+    }),
+  };
+}
 
 function buildCollection(name: string) {
   if (name === "users") {
@@ -31,17 +60,7 @@ function buildCollection(name: string) {
   }
 
   if (name === "deviceRequests") {
-    return {
-      doc: jest.fn((id: string) => ({
-        get: jest.fn(() =>
-          Promise.resolve({
-            exists: deviceRequestsStore[id] !== undefined,
-            data: () => deviceRequestsStore[id],
-          })
-        ),
-        update: jest.fn((updates: Record<string, unknown>) => deviceRequestUpdateMock(id, updates)),
-      })),
-    };
+    return { doc: jest.fn((id: string) => buildDeviceRequestRef(id)) };
   }
 
   throw new Error(`Unexpected collection ${name}`);
@@ -49,9 +68,42 @@ function buildCollection(name: string) {
 
 const collectionMock = jest.fn((name: string) => buildCollection(name));
 
+const runTransactionMock = jest.fn(
+  async (updateFn: (tx: { update: jest.Mock; set: jest.Mock }) => Promise<void> | void) => {
+    const writes: QueuedWrite[] = [];
+    const tx = {
+      update: jest.fn((ref: WriteRef, data: Record<string, unknown>) => {
+        writes.push({ ref, data });
+      }),
+      set: jest.fn((ref: WriteRef, data: Record<string, unknown>) => {
+        writes.push({ ref, data });
+      }),
+    };
+
+    await updateFn(tx);
+
+    for (const w of writes) {
+      if (w.ref.__kind === "deviceRequest") {
+        deviceRequestsStore[w.ref.__id] = { ...(deviceRequestsStore[w.ref.__id] ?? {}), ...w.data };
+      } else if (w.ref.__kind === "event") {
+        eventsStore[w.ref.__id] = eventsStore[w.ref.__id] ?? [];
+        eventsStore[w.ref.__id].push(w.data);
+      }
+    }
+  }
+);
+
+// Alias retro-compatibile con le asserzioni esistenti che si aspettavano un
+// `update` diretto sul documento: la transazione produce lo stesso effetto
+// visibile su `deviceRequestsStore`, quindi le assert su quello store restano
+// valide invariate; solo le assert dirette su "e' stato chiamato update()"
+// vanno riferite a `runTransactionMock`.
+const deviceRequestUpdateMock = runTransactionMock;
+
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(() => ({
     collection: (name: string) => collectionMock(name),
+    runTransaction: (updateFn: (tx: unknown) => Promise<void>) => runTransactionMock(updateFn),
   })),
   FieldValue: {
     serverTimestamp: jest.fn(() => SERVER_TIMESTAMP_SENTINEL),
@@ -90,6 +142,7 @@ describe("setDeviceRequestConsent", () => {
         assignedVolunteers: ["volunteer-1"],
       },
     };
+    eventsStore = {};
   });
 
   // Scenario 1: Admin acquisisce lo scarico di responsabilità
@@ -145,6 +198,39 @@ describe("setDeviceRequestConsent", () => {
         requestId: "req-1",
         metadata: { consentType: "photoRelease" },
       },
+    });
+  });
+
+  // Regressione (panel review EA-158): senza un evento in
+  // deviceRequests/{id}/events, l'acquisizione della liberatoria resta
+  // invisibile nella RequestTimeline consultata dall'admin — stesso pattern
+  // di event-sourcing (dc-request-event) usato da ogni altra scrittura sulla
+  // deviceRequest (changeStatus, setAssignedVolunteers).
+  it("records an event in deviceRequests/{id}/events with fromStatus===toStatus (update, not a status transition)", async () => {
+    await setDeviceRequestConsent.run(
+      buildRequest({ requestId: "req-1", consentType: "waiver" }, "admin-1")
+    );
+
+    expect(eventsStore["req-1"]).toHaveLength(1);
+    expect(eventsStore["req-1"][0]).toMatchObject({
+      type: "set_waiver_consent",
+      fromStatus: "in produzione",
+      toStatus: "in produzione",
+      createdBy: "admin-1",
+      note: "Scarico di responsabilità acquisito",
+      timestamp: SERVER_TIMESTAMP_SENTINEL,
+    });
+  });
+
+  it("records a distinct event type and note for the photo-release consent", async () => {
+    await setDeviceRequestConsent.run(
+      buildRequest({ requestId: "req-1", consentType: "photoRelease" }, "admin-1")
+    );
+
+    expect(eventsStore["req-1"]).toHaveLength(1);
+    expect(eventsStore["req-1"][0]).toMatchObject({
+      type: "set_photo_release_consent",
+      note: "Liberatoria foto acquisita",
     });
   });
 

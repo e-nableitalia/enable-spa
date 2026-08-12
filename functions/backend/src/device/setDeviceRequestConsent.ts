@@ -14,6 +14,16 @@ const SECURITY_ACTION: Record<ConsentType, string> = {
   photoRelease: "set_photo_release_acquired",
 };
 
+const EVENT_TYPE: Record<ConsentType, string> = {
+  waiver: "set_waiver_consent",
+  photoRelease: "set_photo_release_consent",
+};
+
+const EVENT_NOTE: Record<ConsentType, string> = {
+  waiver: "Scarico di responsabilità acquisito",
+  photoRelease: "Liberatoria foto acquisita",
+};
+
 /**
  * Cloud Function callable per l'acquisizione, da parte del solo admin, delle
  * liberatorie familiari collegate a una deviceRequest (EA-158): scarico di
@@ -30,7 +40,15 @@ const SECURITY_ACTION: Record<ConsentType, string> = {
  *
  * Registra inoltre un evento di security (stesso pattern di
  * `createDeviceRequest.ts`, `saveGlobalMessage.ts`,
- * `utils/volunteerAssignment.ts`).
+ * `utils/volunteerAssignment.ts`) E un evento in
+ * `deviceRequests/{requestId}/events` (event sourcing leggero,
+ * `dc-request-event`): stesso pattern di `setAssignedVolunteers`
+ * (`utils/volunteerAssignment.ts`) per un aggiornamento che non cambia
+ * `status` — `fromStatus`/`toStatus` invariati (uguali al valore
+ * corrente), così da comparire nella `RequestTimeline` come
+ * "Aggiornamento / Nota" invece di una transizione di stato. Senza
+ * questo evento l'acquisizione della liberatoria resterebbe invisibile
+ * nella timeline consultata dall'admin.
  */
 export const setDeviceRequestConsent = onCall(
   { region: REGION },
@@ -73,12 +91,25 @@ export const setDeviceRequestConsent = onCall(
     const dateField = `${consentType}AcquiredDate`;
     const byField = `${consentType}AcquiredBy`;
 
+    const currentStatus = requestSnap.data()?.status ?? null;
+
     try {
-      await requestRef.update({
-        [acquiredField]: true,
-        [dateField]: FieldValue.serverTimestamp(),
-        [byField]: authUid,
-        updatedAt: FieldValue.serverTimestamp(),
+      await db.runTransaction(async (tx) => {
+        tx.update(requestRef, {
+          [acquiredField]: true,
+          [dateField]: FieldValue.serverTimestamp(),
+          [byField]: authUid,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        tx.set(requestRef.collection("events").doc(), {
+          type: EVENT_TYPE[consentType],
+          fromStatus: currentStatus,
+          toStatus: currentStatus,
+          timestamp: FieldValue.serverTimestamp(),
+          createdBy: authUid,
+          note: EVENT_NOTE[consentType],
+        });
       });
 
       await logSecurityEvent({
