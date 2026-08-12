@@ -3,7 +3,7 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { addChecklistItem } from "../organizer/addChecklistItem";
-import { resolveDeviceRequestChecklistAccess } from "./deviceRequestChecklistAccess";
+import { resolveDeviceRequestChecklistAccess, isResolvableChecklistAssignee } from "./deviceRequestChecklistAccess";
 
 const REGION = "europe-west1";
 
@@ -18,6 +18,15 @@ const REGION = "europe-west1";
  * (`deviceRequestChecklistAccess.ts`, stesso perimetro di
  * `device/changeStatus.ts`) prima di delegare al core Organizer
  * (`organizer/addChecklistItem.ts`).
+ *
+ * EA-141/F-26: se `assignee` è presente e non nullo, viene validato con lo
+ * stesso controllo di `updateDeviceRequestChecklistItem.ts`
+ * (`isResolvableChecklistAssignee`) — deve risolvere a un uid Firebase tra
+ * gli `assignedVolunteers` della `deviceRequest` collegata oppure a un
+ * utente con ruolo `admin`, altrimenti la richiesta è rifiutata con
+ * `invalid-argument`. Prima di questo fix, la creazione di un item era
+ * l'unico endpoint del layer che accettava ancora `assignee` come stringa
+ * libera non risolta.
  */
 export const addDeviceRequestChecklistItem = onCall(
   { region: REGION },
@@ -35,7 +44,7 @@ export const addDeviceRequestChecklistItem = onCall(
       checklistId?: string;
       title?: string;
       type?: string;
-      assignee?: string;
+      assignee?: string | null;
       quantity?: number;
       notes?: string;
     };
@@ -48,7 +57,16 @@ export const addDeviceRequestChecklistItem = onCall(
     }
 
     const db = getFirestore();
-    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
+    const { assignedVolunteers } = await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
+
+    if (assignee !== undefined && assignee !== null) {
+      if (typeof assignee !== "string" || !(await isResolvableChecklistAssignee(db, assignee, assignedVolunteers))) {
+        throw new HttpsError(
+          "invalid-argument",
+          "Assignee must be a Firebase uid of a volunteer assigned to this request or an admin"
+        );
+      }
+    }
 
     const result = (await addChecklistItem.run({
       ...request,
