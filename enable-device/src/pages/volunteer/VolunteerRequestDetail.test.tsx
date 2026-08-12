@@ -64,3 +64,28 @@ describe("VolunteerRequestDetail - stessa vista a tab multi-checklist dell'admin
     expect(checklists).toHaveAttribute("data-checklist-ids", JSON.stringify([]));
   });
 });
+
+describe("VolunteerRequestDetail - liberatorie familiari non visibili al volontario (EA-158 Scenario 3)", () => {
+  beforeEach(() => {
+    for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
+    for (const key of Object.keys(firestoreCollections)) delete firestoreCollections[key];
+  });
+
+  it("un volontario assegnato, anche con liberatorie già acquisite sulla richiesta, non vede alcun controllo né lo stato dei flag", async () => {
+    setRequestDoc({
+      requestNumber: "42",
+      assignedVolunteers: ["vol1"],
+      waiverAcquired: true,
+      waiverAcquiredBy: "admin-1",
+      photoReleaseAcquired: false,
+    });
+    render(<VolunteerRequestDetail />);
+
+    await screen.findByTestId("checklists");
+
+    expect(screen.queryByText("Liberatorie familiari")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Scarico di responsabilità/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Liberatoria foto/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Segna come acquisit/ })).not.toBeInTheDocument();
+  });
+});
