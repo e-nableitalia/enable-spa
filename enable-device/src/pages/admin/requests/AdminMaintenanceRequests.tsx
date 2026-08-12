@@ -11,7 +11,26 @@ import { Timestamp } from "firebase/firestore";
 import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import { ToggleButton } from "primereact/togglebutton";
-import { mapInternalStatusToPublic, REMOVED_STATUS_TO_GENERIC } from "../../../helpers/requestStatus";
+import { getPublicStatusGroup, REMOVED_STATUS_TO_GENERIC } from "../../../helpers/requestStatus";
+
+/**
+ * F-31: sostituisce il vecchio `mapInternalStatusToPublic` (dominio a 19
+ * valori) con `getPublicStatusGroup` (dominio a 11 valori, EA-148) — unico
+ * consumer rimasto del vecchio helper, ora aggiornato per poter infine
+ * rimuovere `mapInternalStatusToPublic`/`PUBLIC_STATUS_GROUPS`.
+ *
+ * Le righe CSV (soprattutto il formato legacy) contengono spesso ancora uno
+ * dei 10 valori di `status` rimossi da EA-148 (es. "famiglia contattata"),
+ * normalizzati solo *dopo* l'import dal bottone "Migra stati" separato più
+ * sotto (`REMOVED_STATUS_TO_GENERIC`, righe 639+). Per restare coerente con
+ * lo stato che la richiesta avrà *dopo* quella migrazione (invece di
+ * classificare male un valore che `getPublicStatusGroup` non riconosce
+ * ancora), la preview normalizza qui lo stesso modo.
+ */
+function publicStatusPreview(status: string): string {
+  const normalized = REMOVED_STATUS_TO_GENERIC[status] ?? status;
+  return getPublicStatusGroup(normalized);
+}
 import { TabView, TabPanel } from "primereact/tabview";
 
 export default function AdminMaintenanceRequests() {
@@ -127,7 +146,7 @@ export default function AdminMaintenanceRequests() {
     // Public Request
     const publicData = {
       province: row["Provincia"] || "",
-      publicStatus: mapInternalStatusToPublic(statusChange.newStatus),
+      publicStatus: publicStatusPreview(statusChange.newStatus),
       createdAt,
       devicetype: "unknown", // potremmo mappare da preferenze o descrizione in futuro
     };
@@ -155,9 +174,7 @@ export default function AdminMaintenanceRequests() {
 
     // --- Device status mapping ---
     const stato = (row["Stato"] || "").trim().toLowerCase();
-    const mappedStatus = mapInternalStatusToPublic(
-      stato
-    );
+    const mappedStatus = publicStatusPreview(stato);
 
     // --- Build status note ---
     const noteParts: string[] = [];

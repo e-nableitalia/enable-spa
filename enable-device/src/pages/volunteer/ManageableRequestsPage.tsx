@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDocs, collection, getDoc, doc, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
-import { PUBLIC_STATUS_GROUPS } from "../../helpers/requestStatus";
+import { PUBLIC_STATUS_GROUPS_FROM_STATUS } from "../../helpers/requestStatus";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { MultiSelect } from "primereact/multiselect";
@@ -114,7 +114,12 @@ export default function ManageableRequestsPage() {
   useEffect(() => {
     const fetchRequests = async () => {
       try {
-        const daGestireStatuses = PUBLIC_STATUS_GROUPS["da gestire"];
+        // F-31: PUBLIC_STATUS_GROUPS_FROM_STATUS (dominio status a 11 valori,
+        // post EA-148), non il vecchio PUBLIC_STATUS_GROUPS (19 valori) — le
+        // richieste con status === "da gestire" (letterale, valore collassato
+        // da EA-148) non comparivano nel vecchio gruppo, sotto-contando
+        // silenziosamente l'elenco.
+        const daGestireStatuses = PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"];
         const q = query(
           collection(db, "deviceRequests"),
           where("assignedVolunteers", "==", []),
@@ -123,7 +128,7 @@ export default function ManageableRequestsPage() {
         const snap = await getDocs(q);
         const base = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-        // Enrich with public fields (requestNumber, ageRange, devicetype, province, publicStatus)
+        // Enrich with public fields (requestNumber, ageRange, devicetype, province)
         const enriched = await Promise.all(
           base.map(async (r: any) => {
             try {
@@ -136,7 +141,6 @@ export default function ManageableRequestsPage() {
                   ageRange: pub.ageRange ?? null,
                   devicetype: pub.devicetype ?? null,
                   province: pub.province ?? r.province ?? null,
-                  publicStatus: pub.publicStatus ?? null,
                 };
               }
             } catch { /* permission denied or missing — skip */ }

@@ -13,7 +13,7 @@ import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
 import RequestTimeline from "../../components/timeline/RequestTimeline";
 import DeviceRequestChecklists from "../../components/checklist/DeviceRequestChecklists";
-import { REQUEST_STATUSES } from "../../helpers/requestStatus";
+import { REQUEST_STATUSES, getPublicStatusGroup } from "../../helpers/requestStatus";
 
 export default function VolunteerRequestDetail() {
   const { id } = useParams();
@@ -54,14 +54,16 @@ export default function VolunteerRequestDetail() {
     const privateSnap = await getDoc(doc(db, "deviceRequests", id, "private", "data"));
     setPrivateData(privateSnap.exists() ? privateSnap.data() : null);
 
-    // Load public data (contains devicetype and publicStatus)
+    // Load public data (contains devicetype). F-31: publicStatus non viene
+    // più scritto su publicDeviceRequests da EA-149 — ricalcolato al volo da
+    // status (dominio a 11 valori), non più letto dal documento pubblico.
     const publicSnap = await getDoc(doc(db, "publicDeviceRequests", id));
     if (publicSnap.exists()) {
       const publicData = publicSnap.data();
       setRequest((prev: any) => ({
         ...prev,
         deviceType: publicData.devicetype ?? prev?.deviceType,
-        publicStatus: publicData.publicStatus ?? prev?.publicStatus,
+        publicStatus: prev?.status ? getPublicStatusGroup(prev.status) : prev?.publicStatus,
       }));
     }
 
