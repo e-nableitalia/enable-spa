@@ -38,61 +38,15 @@ export const CLOSED_STATUSES = [
   "completata"
 ];
 
-export const PUBLIC_STATUS_GROUPS = {
-  /**
-   * "da validare" non è un publicStatus Firestore: è derivato da status==="inviata".
-   * Usato solo per la classificazione interna nell'AdminLayout.
-   */
-  "da validare": [
-    "inviata"
-  ],
-  "da gestire": [
-    "validata",
-    "famiglia contattata",
-    "definizione richiesta",
-    "valutazione fattibilità",
-    "attesa volontario"
-  ],
-  "fabbricazione in corso": [
-    "scelta device e dimensionamento",
-    "personalizzazione",
-    "attesa materiali",
-    "fabbricazione",
-    "fitting",
-    "pronta per spedizione",
-    "spedita",
-    "followup famiglia"
-  ],
-  "completati": [
-    "completata"
-  ],
-  "annullate / non completabili": [
-    "followup famiglia ko",
-    "followup famiglia troppo piccolo",
-    "annullata",
-    "standby"
-  ]
-};
-
-// Funzione di mapping da stato interno a pubblico
-export function mapInternalStatusToPublic(status: string): string {
-  for (const [publicStatus, internalStates] of Object.entries(PUBLIC_STATUS_GROUPS)) {
-    if (internalStates.includes(status)) {
-      return publicStatus;
-    }
-  }
-  return "da gestire"; // Default se non trovato
-}
-
 /**
  * Raggruppamento pubblico a 5 gruppi calcolato sugli 11 valori di `status`
  * introdotti dalla Story EA-148 (decisione opt-b di ss-device-request-macro-status).
  *
- * Sostituto display-only di PUBLIC_STATUS_GROUPS/mapInternalStatusToPublic sopra
- * (che restano invariati solo perché ancora usati da AdminMaintenanceRequests.tsx,
- * l'unico consumer non incluso nel perimetro della Story EA-150): nessun campo
- * `publicStatus` viene più persistito da EA-149, quindi qui il raggruppamento è
- * ricalcolato al volo da `status` a ogni chiamata, non letto da Firestore.
+ * Sostituisce il precedente `PUBLIC_STATUS_GROUPS`/`mapInternalStatusToPublic`
+ * (dominio a 19 valori, rimossi da F-31 — `AdminMaintenanceRequests.tsx` era
+ * l'ultimo consumer residuo): nessun campo `publicStatus` viene più
+ * persistito da EA-149, quindi qui il raggruppamento è ricalcolato al volo
+ * da `status` a ogni chiamata, non letto da Firestore.
  */
 export const PUBLIC_STATUS_GROUPS_FROM_STATUS: { [key: string]: string[] } = {
   "da validare": ["inviata"],

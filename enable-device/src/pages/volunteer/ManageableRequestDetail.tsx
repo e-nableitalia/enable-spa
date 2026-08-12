@@ -8,7 +8,7 @@ import { Panel } from "primereact/panel";
 import { Divider } from "primereact/divider";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
-import { PUBLIC_STATUS_SEVERITY } from "../../helpers/requestStatus";
+import { PUBLIC_STATUS_SEVERITY, getPublicStatusGroup } from "../../helpers/requestStatus";
 
 function toDate(val: unknown): Date | null {
   if (!val) return null;
@@ -83,6 +83,9 @@ export default function ManageableRequestDetail() {
           (publicData as Record<string, unknown>).relation = d.relation ?? null;
           (publicData as Record<string, unknown>).descriptionPublic = d.descriptionPublic ?? null;
           (publicData as Record<string, unknown>).preferencesPublic = d.preferencesPublic ?? null;
+          // F-31: publicStatus non viene più scritto su publicDeviceRequests
+          // da EA-149 — ricalcolato al volo da status (dominio a 11 valori).
+          (publicData as Record<string, unknown>).publicStatus = d.status ? getPublicStatusGroup(d.status) : null;
         }
       } catch {
         // not accessible — skip
