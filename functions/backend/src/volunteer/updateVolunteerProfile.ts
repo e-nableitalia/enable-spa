@@ -27,7 +27,7 @@ export const updateVolunteerProfile = onCall(
     console.log(`[updateVolunteerProfile] Invoke ID: ${invokeId} - Function called`);
     const { auth, data, rawRequest } = req;
     if (!auth) {
-      console.log(`[updateVolunteerProfile] KO: Unauthenticated`);
+      console.log("[updateVolunteerProfile] KO: Unauthenticated");
       throw new HttpsError("unauthenticated", "Authentication required");
     }
     const uid = auth.uid;

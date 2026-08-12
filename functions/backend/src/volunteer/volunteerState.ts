@@ -55,11 +55,11 @@ export const activateVolunteers = onCall(
           message: {
             subject: "La tua utenza è stata attivata - e-Nable Italia",
             html: `
-              <div style=\"font-family: Arial, sans-serif; max-width:600px; margin:auto;\">
-                <h2 style=\"color:#2c7be5;\">Utenza attivata</h2>
+              <div style="font-family: Arial, sans-serif; max-width:600px; margin:auto;">
+                <h2 style="color:#2c7be5;">Utenza attivata</h2>
                 <p>Ciao, la tua utenza su <b>e-Nable Italia</b> è stata attivata.<br>
                 Ora puoi accedere alla piattaforma e partecipare come volontario.</p>
-                <p style=\"font-size:14px;color:#555;\">Se non hai richiesto questa email puoi ignorarla.</p>
+                <p style="font-size:14px;color:#555;">Se non hai richiesto questa email puoi ignorarla.</p>
               </div>
             `,
           },

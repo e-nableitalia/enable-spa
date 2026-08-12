@@ -92,7 +92,7 @@ export const setPassword = onCall(
           },
         },
       });
-      console.error(`[setPassword] KO:`, err);
+      console.error("[setPassword] KO:", err);
       throw err;
     }
   }

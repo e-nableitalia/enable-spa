@@ -249,11 +249,11 @@ export const createDeviceRequest = onCall(
         const telegramApiUrl = process.env.TELEGRAM_API_URL;
         const telegramApiSecret = process.env.TELEGRAM_API_SECRET;
         if (telegramApiUrl && telegramApiSecret) {
-            await sendTelegramMessage(
+          await sendTelegramMessage(
             telegramApiUrl,
             telegramApiSecret,
             `📥 E' stata ricevuta una nuova richiesta di device da ${data.firstName} in provincia di ${data.province}`
-            );
+          );
           console.log("[createDeviceRequest] Telegram notification sent");
         } else {
           console.warn("[createDeviceRequest] Telegram credentials not set, skipping notification");

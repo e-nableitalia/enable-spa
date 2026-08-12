@@ -98,13 +98,13 @@ export const register = onCall(
       const actionCodeSettings = {
         url: "https://app.e-nableitalia.it/complete-registration",
         handleCodeInApp: true,
-        iOS: { bundleId: 'app.e-nableitalia.it' },
+        iOS: { bundleId: "app.e-nableitalia.it" },
         android: {
-          packageName: 'app.e-nableitalia.it',
+          packageName: "app.e-nableitalia.it",
           installApp: true,
-          minimumVersion: '12'
+          minimumVersion: "12"
         },
-        linkDomain: 'app.e-nableitalia.it'
+        linkDomain: "app.e-nableitalia.it"
       };
 
       const link = await auth.generateSignInWithEmailLink(email, actionCodeSettings);
@@ -152,7 +152,7 @@ export const register = onCall(
       console.log(`[register] OK: pending registration for ${email} (${oobCode}) saved and email sent`);
       return { success: true };
     } catch (err) {
-      console.error(`[register] KO:`, err);
+      console.error("[register] KO:", err);
       await logSecurityEvent({
         type: "auth",
         action: "register",
@@ -231,7 +231,7 @@ export const checkRegistration = onCall(
       console.log(`[checkRegistration] OK: oobCode ${oobCode} validated for ${pending.email}`);
       return { success: true, email: pending.email };
     } catch (err) {
-      console.error(`[checkRegistration] KO:`, err);
+      console.error("[checkRegistration] KO:", err);
       await logSecurityEvent({
         type: "auth",
         action: "check_registration",
@@ -311,7 +311,7 @@ export const completeRegistration = onCall(
           await sendTelegramMessage(
             telegramApiUrl,
             telegramApiSecret,
-            `🚀 Nuovo volontario in arrivo!\nUn nuovo volontario si è registrato sul portale.`
+            "🚀 Nuovo volontario in arrivo!\nUn nuovo volontario si è registrato sul portale."
           );
           console.log("[completeRegistration] Telegram notification sent");
         } else {
@@ -324,7 +324,7 @@ export const completeRegistration = onCall(
       console.log(`[completeRegistration] OK: user ${uid} (${email}) created`);
       return { success: true };
     } catch (err) {
-      console.error(`[completeRegistration] KO:`, err);
+      console.error("[completeRegistration] KO:", err);
       await logSecurityEvent({
         type: "auth",
         action: "complete_registration",
@@ -413,7 +413,7 @@ export const registerWithIntegratedAuth = onCall(
           await sendTelegramMessage(
             telegramApiUrl,
             telegramApiSecret,
-            `🚀 Nuovo volontario in arrivo!\nUn nuovo volontario si è registrato sul portale.`
+            "🚀 Nuovo volontario in arrivo!\nUn nuovo volontario si è registrato sul portale."
           );
           console.log("[registerWithIntegratedAuth] Telegram notification sent");
         } else {
@@ -465,7 +465,7 @@ export const registerWithIntegratedAuth = onCall(
 
       return { success: true };
     } catch (err) {
-      console.error(`[registerWithIntegratedAuth] KO:`, err);
+      console.error("[registerWithIntegratedAuth] KO:", err);
       await logSecurityEvent({
         type: "auth",
         action: "register_integrated_auth",
@@ -520,7 +520,7 @@ export const doLogin = onCall(
 
       return { logged: true };
     } catch (err) {
-      console.error(`[doLogin] KO:`, err);
+      console.error("[doLogin] KO:", err);
       await logSecurityEvent({
         type: "auth",
         action: "login",

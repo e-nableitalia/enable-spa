@@ -13,13 +13,13 @@ export const assignVolunteer = onCall(
     console.log(`[assignVolunteer] Invoke ID: ${invokeId} - Function called`);
 
     if (!authUid) {
-      console.log(`[assignVolunteer] KO: Unauthenticated`);
+      console.log("[assignVolunteer] KO: Unauthenticated");
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
     await requireVolunteerConsents(authUid);
     if (!deviceId || userId === undefined || userId === null) {
-      console.log(`[assignVolunteer] KO: Missing parameters`);
+      console.log("[assignVolunteer] KO: Missing parameters");
       throw new HttpsError("invalid-argument", "Missing parameters");
     }
 

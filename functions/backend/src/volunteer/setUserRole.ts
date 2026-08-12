@@ -16,7 +16,7 @@ export const setUserRole = onCall(
 
     const { auth, data } = req;
     if (!auth) {
-      console.log(`[setUserRole] KO: Unauthenticated`);
+      console.log("[setUserRole] KO: Unauthenticated");
       throw new HttpsError("unauthenticated", "Authentication required");
     }
 
