@@ -35,6 +35,7 @@ export { getDeviceRequestChecklist } from "./device-requests/getDeviceRequestChe
 export { getDeviceRequestChecklistCompleteness } from "./device-requests/getDeviceRequestChecklistCompleteness";
 export { addDeviceRequestChecklistItem } from "./device-requests/addDeviceRequestChecklistItem";
 export { updateDeviceRequestChecklistItem } from "./device-requests/updateDeviceRequestChecklistItem";
+export { listAssignableChecklistUsers } from "./device-requests/listAssignableChecklistUsers";
 export { removeDeviceRequestChecklistItem } from "./device-requests/removeDeviceRequestChecklistItem";
 export { createChecklistShareLink } from "./device-requests/createChecklistShareLink";
 export { getChecklistShareStatus } from "./device-requests/getChecklistShareStatus";

@@ -19,8 +19,7 @@ async function selectDropdownOption(user: ReturnType<typeof userEvent.setup>, tr
   fireEvent.click(option);
 }
 
-const authState = vi.hoisted(() => ({ currentUser: null as { uid: string } | null }));
-vi.mock("../../firebase", () => ({ db: {}, functions: {}, auth: authState }));
+vi.mock("../../firebase", () => ({ db: {}, functions: {} }));
 
 const callable = vi.fn();
 vi.mock("firebase/functions", () => ({
@@ -36,21 +35,12 @@ vi.mock("firebase/firestore", () => ({
   },
 }));
 
-function setDeviceRequestDoc(requestId: string, data: Record<string, unknown>) {
-  firestoreDocs[`deviceRequests/${requestId}`] = data;
-}
-
 function setUserProfile(uid: string, data: Record<string, unknown>) {
   firestoreDocs[`users/${uid}/private/profile`] = data;
 }
 
-function setUserRole(uid: string, role: string) {
-  firestoreDocs[`users/${uid}`] = { role };
-}
-
 afterEach(() => {
   for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
-  authState.currentUser = null;
 });
 
 function mockChecklist(items: Array<Record<string, unknown>>) {
@@ -321,13 +311,16 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
     callable.mockReset();
   });
 
-  function mockChecklistWithItems(items: Array<Record<string, unknown>>) {
+  function mockChecklistWithItems(items: Array<Record<string, unknown>>, assignableUids: string[] = []) {
     callable.mockImplementation((name: string) => {
       if (name === "getDeviceRequestChecklist") {
         return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "cat", items } });
       }
       if (name === "getDeviceRequestChecklistCompleteness") {
         return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "listAssignableChecklistUsers") {
+        return Promise.resolve({ data: { uids: assignableUids } });
       }
       if (name === "updateDeviceRequestChecklistItem") {
         return Promise.resolve({ data: {} });
@@ -340,11 +333,11 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
   }
 
   it("il campo Assegnatario non è più un campo di testo libero", async () => {
-    setDeviceRequestDoc("r1", { assignedVolunteers: ["vol-1"] });
     setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
-    mockChecklistWithItems([
-      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
-    ]);
+    mockChecklistWithItems(
+      [{ id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false }],
+      ["vol-1"]
+    );
 
     render(<ChecklistPanel requestId="r1" checklistId="c1" />);
     const row = await rowFor("Verifica batteria");
@@ -356,11 +349,11 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
   });
 
   it("mostra tra le opzioni i volontari assegnati alla deviceRequest, risolti a nome reale", async () => {
-    setDeviceRequestDoc("r1", { assignedVolunteers: ["vol-1"] });
     setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
-    mockChecklistWithItems([
-      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
-    ]);
+    mockChecklistWithItems(
+      [{ id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false }],
+      ["vol-1"]
+    );
     const user = userEvent.setup();
 
     render(<ChecklistPanel requestId="r1" checklistId="c1" />);
@@ -377,14 +370,18 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
     );
   });
 
-  it("include l'utente corrente tra le opzioni se ha ruolo admin", async () => {
-    setDeviceRequestDoc("r1", { assignedVolunteers: [] });
-    setUserRole("admin-1", "admin");
-    setUserProfile("admin-1", { firstName: "Luca", lastName: "Verdi" });
-    authState.currentUser = { uid: "admin-1" };
-    mockChecklistWithItems([
-      { id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false },
-    ]);
+  // Regressione F-27: prima che listAssignableChecklistUsers risolvesse
+  // lato server l'intero roster admin, un volontario non vedeva mai un
+  // admin diverso da sé stesso tra le opzioni (limite delle regole
+  // Firestore lato client, non più applicabile ora che la risoluzione è
+  // server-side). Qui si verifica che un admin *diverso dal chiamante*
+  // compaia comunque tra le opzioni.
+  it("include tra le opzioni un admin diverso dal chiamante, risolto lato server da listAssignableChecklistUsers", async () => {
+    setUserProfile("admin-2", { firstName: "Luca", lastName: "Verdi" });
+    mockChecklistWithItems(
+      [{ id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false }],
+      ["admin-2"]
+    );
     const user = userEvent.setup();
 
     render(<ChecklistPanel requestId="r1" checklistId="c1" />);
@@ -395,14 +392,13 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
 
     expect(callable).toHaveBeenCalledWith(
       "updateDeviceRequestChecklistItem",
-      expect.objectContaining({ assignee: "admin-1" })
+      expect.objectContaining({ assignee: "admin-2" })
     );
   });
 
   it("il dialog 'Aggiungi item' usa la stessa selezione tra utenti reali per l'assegnatario", async () => {
-    setDeviceRequestDoc("r1", { assignedVolunteers: ["vol-1"] });
     setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
-    mockChecklistWithItems([]);
+    mockChecklistWithItems([], ["vol-1"]);
     const user = userEvent.setup();
 
     render(<ChecklistPanel requestId="r1" checklistId="c1" />);
