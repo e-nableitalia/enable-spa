@@ -116,7 +116,7 @@ export async function autoCreateProductionChecklistOnTransition(
   try {
     claimed = await db.runTransaction(async (tx) => {
       const snap = await tx.get(requestRef);
-      if (Boolean(snap.data()?.productionChecklistCreated)) {
+      if (snap.data()?.productionChecklistCreated) {
         return false;
       }
       tx.update(requestRef, {

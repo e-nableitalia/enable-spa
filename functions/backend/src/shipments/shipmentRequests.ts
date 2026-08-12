@@ -30,7 +30,7 @@ export const createShipmentRequest = onCall(
       } = request.data;
 
       if (!reason || !senderName || !senderAddress || !recipientName || !recipientAddress) {
-        console.log(`[createShipmentRequest] KO: Missing required fields`);
+        console.log("[createShipmentRequest] KO: Missing required fields");
         throw new HttpsError("invalid-argument", "Missing required fields");
       }
 
@@ -152,7 +152,7 @@ export const approveShipmentRequest = onCall(
         if (data.weight != null) emailData.weight = data.weight;
 
         const emailDoc = {
-          to: [ data.email, 'spedizione@e-nableitalia.it' ],
+          to: [ data.email, "spedizione@e-nableitalia.it" ],
           template: {
             name: "shipmentRequest",
             data: emailData,

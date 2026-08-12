@@ -6,10 +6,10 @@ export async function sendRegistrationEmail(
 ) {
   const db = getFirestore();
   try {
-    await db.collection('mail').add({
+    await db.collection("mail").add({
       to: [to],
       message: {
-        subject: 'Completa la registrazione come volontario - e-Nable Italia',
+        subject: "Completa la registrazione come volontario - e-Nable Italia",
         html: `
           <div style="font-family: Arial, sans-serif; max-width:600px; margin:auto;">
             <h2 style="color:#2c7be5;">Benvenuto in e-Nable Italia</h2>
@@ -46,14 +46,14 @@ export async function sendEmailToVolunteersAdmins(
 ) {
   const db = getFirestore();
   try {
-    await db.collection('mail').add({
-      to: ['volontari@e-nableitalia.it'],
+    await db.collection("mail").add({
+      to: ["volontari@e-nableitalia.it"],
       message: {
         subject,
         html,
       },
     });
-    console.log(`Email sent to volontari@e-nableitalia.it`);
+    console.log("Email sent to volontari@e-nableitalia.it");
     return true;
   } catch (error) {
     console.error("Error sending email to volunteers admins:", error);
@@ -67,14 +67,14 @@ export async function sendEmailToDeviceAdmins(
 ) {
   const db = getFirestore();
   try {
-    await db.collection('mail').add({
-      to: ['devices@e-nableitalia.it'],
+    await db.collection("mail").add({
+      to: ["devices@e-nableitalia.it"],
       message: {
         subject,
         html,
       },
     });
-    console.log(`Email sent to devices@e-nableitalia.it`);
+    console.log("Email sent to devices@e-nableitalia.it");
     return true;
   } catch (error) {
     console.error("Error sending email to device admins:", error);

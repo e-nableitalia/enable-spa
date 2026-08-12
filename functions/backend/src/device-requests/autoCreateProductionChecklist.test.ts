@@ -229,7 +229,7 @@ describe("autoCreateProductionChecklistOnTransition", () => {
   // invocazione avrebbe invece ancora visto lo stato stale e creato una
   // seconda checklist.
   it("claims the guard atomically: a transaction resumed after a concurrent winner sees the fresh flag and skips creation", async () => {
-    const gate: { release: () => void } = { release: () => {} };
+    const gate: { release: () => void } = { release: () => { /* reassigned below */ } };
     const firstGetGate = new Promise<void>((resolve) => {
       gate.release = resolve;
     });
