@@ -253,7 +253,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `enable-device/src/components/checklist/ChecklistPanel.tsx` — `loadAssignableUsers`: `candidateUids` include `assignedVolunteers` più `selfUid` solo se `role === "admin"`
   - `firestore.rules:90-96` — lettura di `users/{userId}` (documento radice, contiene `role`) permessa solo ad admin o al proprietario stesso (`request.auth.uid == userId`)
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-141, sessione 2026-08-06, progettando la risoluzione degli utenti assegnabili in `ChecklistPanel.tsx` nel perimetro di file dichiarato dalla Story.
-- **Stato**: da decidere. Proposta: se in futuro sarà necessario assegnare un item a un admin diverso da quello loggato, servirà una Cloud Function dedicata (es. `listAssignableChecklistUsers`) che risolva lato server l'elenco completo di `assignedVolunteers` + tutti gli admin (bypassando il limite delle regole Firestore lato client) — Task Jira da aprire nello stesso Epic di EA-141, riferimento F-27.
+- **Stato**: risolto (fix diretto, 2026-08-12, su richiesta esplicita dell'operatore). Nuova Cloud Function `listAssignableChecklistUsers.ts` risolve lato server `assignedVolunteers` della richiesta + tutti gli admin (query `where("role","==","admin")` su `users`, ammessa lato Admin SDK); `ChecklistPanel.tsx` la usa al posto della risoluzione client-side precedente.
 
 ## F-28: il commento di `handleValidate` in `RequestDetail.tsx` descrive un target di transizione (`"famiglia contattata"`) diverso da quello scritto realmente dal codice (`"validata"`)
 
