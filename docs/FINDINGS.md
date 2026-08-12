@@ -37,7 +37,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `enable-device/src/components/checklist/ChecklistPanel.tsx` — colonna "Stato", componente `Dropdown` privo di `disabled`
   - `git log -p --follow -- enable-device/src/components/checklist/ChecklistPanel.tsx | grep disabled` — le uniche occorrenze di `disabled` riguardano i pulsanti "Salva" (`disabled={!isDirty(item.id)}`) e "Aggiungi" (`disabled={!newItem.title.trim()}`), mai il Dropdown di stato
 - **Story/PR/sessione di provenienza**: rilevato durante il grounding dello studio di soluzione `ss-checklist-item-model`, sessione 2026-07-30.
-- **Stato**: da decidere. Non è chiaro se l'osservazione in staging si riferisse a una build diversa, a un altro componente (es. la vista di sola condivisione EA-113, che però non espone comunque un editor di stato), o a una percezione UX non riconducibile a un blocco effettivo del controllo. Da chiarire con chi ha validato lo staging prima di assumere che questo punto richieda un fix separato dall'evoluzione del modello item.
+- **Stato**: chiuso, falso positivo (confermato dall'operatore, 2026-08-12). L'osservazione in staging non corrisponde a un blocco effettivo del controllo nel codice attuale; nessuna azione necessaria.
 
 ## F-5: Il campo `quantity` viene scritto incondizionatamente da tutte le funzioni di creazione/clonazione item del core Organizer: il ramo "quantity irrilevante" del gate di completezza non è mai esercitato in produzione
 
@@ -244,7 +244,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `functions/backend/src/device-requests/addDeviceRequestChecklistItem.ts` — nessuna chiamata a `isResolvableChecklistAssignee`/`resolveDeviceRequestChecklistAccess` per validare `assignee`, a differenza di `updateDeviceRequestChecklistItem.ts` (questa Story)
   - Descrizione Story Jira EA-141, sezione "Cosa cambia": elenca esplicitamente solo `updateDeviceRequestChecklistItem.ts`, `deviceRequestChecklistAccess.ts`, `ChecklistPanel.tsx`
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-141, sessione 2026-08-06, mentre si delimitava lo scope della validazione lato backend agli scenari Gherkin (che menzionano solo `updateDeviceRequestChecklistItem`).
-- **Stato**: da decidere. Esplicitamente fuori dallo scope dichiarato di EA-141 (che elenca solo `updateDeviceRequestChecklistItem.ts` tra le Cloud Function da modificare), non corretto qui. Proposta: Task Jira nello stesso Epic di EA-141, per estendere la stessa validazione (`isResolvableChecklistAssignee`) anche ad `addDeviceRequestChecklistItem.ts`, riferimento F-26.
+- **Stato**: risolto (fix diretto, 2026-08-12, su richiesta esplicita dell'operatore). `addDeviceRequestChecklistItem.ts` valida ora `assignee` con lo stesso controllo di `updateDeviceRequestChecklistItem.ts` (`isResolvableChecklistAssignee`): deve risolvere a un `assignedVolunteers` della richiesta o a un admin, altrimenti `invalid-argument`. `assignee` omesso o `null` salta la validazione (item non assegnato).
 
 ## F-27: la selezione "admin" nel dropdown Assegnatario di `ChecklistPanel.tsx` è limitata all'utente correntemente autenticato, non all'intero roster admin
 
@@ -331,7 +331,7 @@ Elenco progressivo di bug preesistenti, comportamenti anomali o ambiguita' non d
   - `docs/FINDINGS.md`, stato al momento dell'implementazione: ultima voce `F-33` (nessuna `F-34` presente)
   - `docs/cognitive-workspace/domain-manifest.json`, dominio `volunteer-management`: `paths` include `enable-device/src/pages/volunteer/**`, coerente con la collocazione scelta indipendentemente dal rimando mancante
 - **Story/PR/sessione di provenienza**: rilevato durante l'implementazione della Story Jira EA-154, sessione 2026-08-09.
-- **Stato**: da decidere. Non bloccante per questa Story (la collocazione file è comunque verificabile da `domain-manifest.json` senza bisogno del rimando), ma segnala un possibile gap nel processo di pianificazione dell'Epic EA-153 (Story scritte con riferimenti a finding non ancora esistenti al momento in cui la Story viene poi eseguita). Proposta: se altre Story dell'Epic EA-153 contengono lo stesso tipo di rimando, verificare a livello di Epic se serve riallineare i riferimenti `F-N` citati nelle descrizioni delle Story residue prima della loro esecuzione.
+- **Stato**: chiuso (deciso dall'operatore, 2026-08-12). Non bloccante per la Story originale (la collocazione file era comunque verificabile da `domain-manifest.json`) e l'Epic EA-153 è ormai completa: nessuna azione residua.
 
 ## F-35: `enable-device/src/pages/admin/requests/RequestDetail.tsx` fallisce già `npm run lint` con 27 errori preesistenti (`react-hooks/set-state-in-effect`, `@typescript-eslint/no-explicit-any`), non introdotti da EA-158 ma estesi per coerenza di stile dal codice aggiunto da questa Story
 
