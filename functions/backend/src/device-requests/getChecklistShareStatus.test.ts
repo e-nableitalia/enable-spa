@@ -7,6 +7,7 @@ const TOKEN = "share-token-1";
 let shareLinksStore: Record<string, Record<string, unknown> | undefined>;
 let checklistsStore: Record<string, Record<string, unknown> | undefined>;
 let checklistItemsStore: Record<string, Record<string, unknown> | undefined>;
+let publicDeviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 
 function buildCollection(name: string) {
   if (name === "checklistShareLinks") {
@@ -16,6 +17,19 @@ function buildCollection(name: string) {
           Promise.resolve({
             exists: shareLinksStore[token] !== undefined,
             data: () => shareLinksStore[token],
+          })
+        ),
+      })),
+    };
+  }
+
+  if (name === "publicDeviceRequests") {
+    return {
+      doc: jest.fn((id: string) => ({
+        get: jest.fn(() =>
+          Promise.resolve({
+            exists: publicDeviceRequestsStore[id] !== undefined,
+            data: () => publicDeviceRequestsStore[id],
           })
         ),
       })),
@@ -91,6 +105,7 @@ describe("getChecklistShareStatus", () => {
       },
     };
     checklistItemsStore = {};
+    publicDeviceRequestsStore = {};
   });
 
   // Scenario: Chiunque acceda al link vede l'avanzamento macro e l'elenco
@@ -103,7 +118,7 @@ describe("getChecklistShareStatus", () => {
   // Regressione F-24 (mai corretta qui da EA-138): `checklists/{id}.items`
   // e' un array di soli `itemId` da EA-137, non piu' di oggetti item
   // embedded — il mock riflette la shape reale, risolta via checklistItems.
-  it("returns percentComplete and a simplified items list (title + completed only) for an anonymous request", async () => {
+  it("returns percentComplete, requestNumber, and a simplified items list (title + completed only) for an anonymous request", async () => {
     checklistsStore = {
       [CHECKLIST_ID]: { title: "Checklist di fabbricazione", items: ["item-1", "item-2"] },
     };
@@ -111,22 +126,56 @@ describe("getChecklistShareStatus", () => {
       "item-1": { title: "Stampa mano", assignee: "Mario Rossi", quantity: 2, notes: "Nota interna", status: "Completata" },
       "item-2": { title: "Verifica misure", assignee: null, quantity: null, status: "Assegnare" },
     };
+    publicDeviceRequestsStore = {
+      "req-1": { requestNumber: "REQ-000137", province: "TO", devicetype: "Kinetic Hand" },
+    };
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
     expect(result).toEqual({
       percentComplete: 50,
+      requestNumber: "REQ-000137",
       items: [
         { title: "Stampa mano", completed: true },
         { title: "Verifica misure", completed: false },
       ],
     });
     // Confine dc-private-data-separation: ogni item espone solo title e
-    // completed, mai assegnatario/note/quantita'/status grezzo.
-    expect(Object.keys(result as { items: object[] }).sort()).toEqual(["items", "percentComplete"]);
+    // completed, mai assegnatario/note/quantita'/status grezzo. requestNumber
+    // e' gia' un campo pubblico (letto da publicDeviceRequests), non
+    // un'estensione del confine.
+    expect(Object.keys(result as { items: object[] }).sort()).toEqual(
+      ["items", "percentComplete", "requestNumber"]
+    );
     (result as { items: object[] }).items.forEach((item) => {
       expect(Object.keys(item).sort()).toEqual(["completed", "title"]);
     });
+  });
+
+  // Regressione: requestNumber non deve mai essere letto dal documento
+  // principale deviceRequests (dati potenzialmente sensibili), solo dalla
+  // proiezione pubblica — il mock qui sotto non definisce affatto la
+  // collection "deviceRequests": un tentativo di leggerla farebbe fallire
+  // il test con "Unexpected collection deviceRequests".
+  it("resolves requestNumber only from publicDeviceRequests, never from the main deviceRequests document", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: [] } };
+    publicDeviceRequestsStore = { "req-1": { requestNumber: "REQ-000042" } };
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({ percentComplete: 100, requestNumber: "REQ-000042", items: [] });
+  });
+
+  // requestNumber non deve mai bloccare la risposta: un link il cui
+  // requestId non risolve piu' a una publicDeviceRequests reale mostra
+  // comunque l'avanzamento, solo senza numero richiesta.
+  it("returns requestNumber: null when the linked request is not resolvable in publicDeviceRequests, without failing", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: [] } };
+    // publicDeviceRequestsStore resta vuoto: nessun documento per "req-1".
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({ percentComplete: 100, requestNumber: null, items: [] });
   });
 
   // Scenario 6 (EA-127): il fix del gate di completezza si propaga
@@ -145,6 +194,7 @@ describe("getChecklistShareStatus", () => {
 
     expect(result).toEqual({
       percentComplete: 50,
+      requestNumber: null,
       items: [
         { title: "Item 1", completed: false },
         { title: "Item 2", completed: true },
@@ -157,7 +207,7 @@ describe("getChecklistShareStatus", () => {
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
-    expect(result).toEqual({ percentComplete: 100, items: [] });
+    expect(result).toEqual({ percentComplete: 100, requestNumber: null, items: [] });
   });
 
   // Scenario: Il link non scade e resta valido indefinitamente
@@ -179,6 +229,7 @@ describe("getChecklistShareStatus", () => {
 
     expect(result).toEqual({
       percentComplete: 100,
+      requestNumber: null,
       items: [
         { title: "Item 1", completed: true },
         { title: "Item 2", completed: true },
@@ -200,7 +251,11 @@ describe("getChecklistShareStatus", () => {
 
     const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
 
-    expect(result).toEqual({ percentComplete: 100, items: [{ title: "Item 1", completed: true }] });
+    expect(result).toEqual({
+      percentComplete: 100,
+      requestNumber: null,
+      items: [{ title: "Item 1", completed: true }],
+    });
   });
 
   // Rappresentazione omogenea richiesta dall'operatore: un item boolean
@@ -218,6 +273,7 @@ describe("getChecklistShareStatus", () => {
 
     expect(result).toEqual({
       percentComplete: 50,
+      requestNumber: null,
       items: [
         { title: "Verifica batteria", completed: true },
         { title: "Controllo cinghia", completed: false },

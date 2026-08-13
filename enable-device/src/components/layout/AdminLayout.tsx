@@ -246,11 +246,15 @@ useEffect(() => {
           icon: "pi pi-exclamation-triangle",
           command: () => navigate("/admin/requests/attention"),
         },
-        {
-          label: "Manutenzione (Import CSV)",
-          icon: "pi pi-wrench",
-          command: () => navigate("/admin/requests/maintenance"),
-        },
+        // Voce nascosta di nuovo (F-33 l'aveva riabilitata solo per eseguire
+        // la migrazione one-shot EA-152 su staging/prod, ora completata) —
+        // la rotta /admin/requests/maintenance resta comunque raggiungibile
+        // digitando l'URL, se servisse in futuro.
+        // {
+        //   label: "Manutenzione (Import CSV)",
+        //   icon: "pi pi-wrench",
+        //   command: () => navigate("/admin/requests/maintenance"),
+        // },
       ],
     },
     {

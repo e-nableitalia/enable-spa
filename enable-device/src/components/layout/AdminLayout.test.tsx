@@ -88,8 +88,8 @@ describe("AdminLayout - voce di menu 'To Do List' (riuso di MyChecklistItems gia
   });
 });
 
-describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' riabilitata (era commentata, F-33)", () => {
-  it("l'admin raggiunge lo strumento di migrazione stati/publicStatus (EA-152) dal menu 'Richieste', senza dover conoscere l'URL a memoria", async () => {
+describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuovo (F-33, migrazione EA-152 completata)", () => {
+  it("la voce non compare nel menu 'Richieste', ma la rotta resta comunque raggiungibile via URL diretto", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/dashboard"]}>
         <Routes>
@@ -106,8 +106,17 @@ describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' riabilitata (er
     if (!richiesteButton) throw new Error("Voce di menu 'Richieste' non trovata");
     await userEvent.click(richiesteButton);
 
-    const menuItem = await screen.findByRole("treeitem", { name: "Manutenzione (Import CSV)" });
-    await userEvent.click(within(menuItem).getByText("Manutenzione (Import CSV)"));
+    expect(screen.queryByRole("treeitem", { name: "Manutenzione (Import CSV)" })).not.toBeInTheDocument();
+  });
+
+  it("la rotta /admin/requests/maintenance resta funzionante via URL diretto", async () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/requests/maintenance"]}>
+        <Routes>
+          <Route path="/admin/*" element={<AdminLayout />} />
+        </Routes>
+      </MemoryRouter>
+    );
 
     expect(await screen.findByText("Manutenzione richieste - Import CSV")).toBeInTheDocument();
   });

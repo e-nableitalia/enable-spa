@@ -21,10 +21,16 @@ interface ShareChecklistItem {
  * — solo titolo e un flag di completamento omogeneo per ogni item, senza
  * distinzione tra i type (`boolean`/`numeric`/`generic`): nessun nome
  * assegnatario, nota, quantita' o altro dettaglio interno.
+ *
+ * Titolo generico "Stato di avanzamento della richiesta" (richiesto
+ * dall'operatore: rimosso il riferimento a "checklist di fabbricazione",
+ * troppo specifico/tecnico per una famiglia), con `requestNumber` se
+ * risolvibile dal backend.
  */
 export default function ChecklistShareStatus() {
   const { token } = useParams<{ token: string }>();
   const [percentComplete, setPercentComplete] = useState<number | null>(null);
+  const [requestNumber, setRequestNumber] = useState<string | null>(null);
   const [items, setItems] = useState<ShareChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +45,12 @@ export default function ChecklistShareStatus() {
       try {
         const fn = httpsCallable<
           { token: string },
-          { percentComplete: number; items: ShareChecklistItem[] }
+          { percentComplete: number; items: ShareChecklistItem[]; requestNumber: string | null }
         >(functions, "getChecklistShareStatus");
         const result = await fn({ token });
         setPercentComplete(result.data.percentComplete);
         setItems(result.data.items ?? []);
+        setRequestNumber(result.data.requestNumber ?? null);
       } catch (err) {
         console.error("[ChecklistShareStatus] Failed to load share status", err);
         setError(
@@ -63,15 +70,19 @@ export default function ChecklistShareStatus() {
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <img src={logo} alt="e-Nable Italia" style={{ height: 56 }} />
       </div>
-      <Card title="Avanzamento checklist di fabbricazione">
+      <Card
+        title={`Stato di avanzamento della richiesta${requestNumber ? ` - ${requestNumber}` : ""}`}
+      >
         {loading && <div>Caricamento...</div>}
         {!loading && error && <Message severity="error" text={error} />}
         {!loading && !error && percentComplete !== null && (
           <>
             <ProgressBar value={percentComplete} showValue style={{ height: 24 }} />
             <p style={{ marginTop: 16, color: "#4b5563" }}>
-              Questa pagina mostra solo l'avanzamento macro della checklist di fabbricazione, senza
-              dettagli interni sugli item o sugli assegnatari.
+              Qui puoi seguire lo stato di avanzamento della richiesta: la percentuale e l'elenco
+              qui sotto mostrano quali attività il team di volontari ha già completato. Per motivi
+              di riservatezza non sono mostrati dettagli interni come note o responsabili delle
+              singole attività — solo l'avanzamento complessivo, sempre aggiornato.
             </p>
             {items.length > 0 && (
               <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0 }}>

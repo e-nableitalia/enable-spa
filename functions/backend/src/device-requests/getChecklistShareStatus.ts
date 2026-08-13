@@ -39,6 +39,15 @@ interface ShareChecklistItemLike extends ChecklistItemLike {
  * presentare in modo omogeneo i tre type (`boolean`/`numeric`/`generic`)
  * su questa pagina pubblica, senza esporre la colonna Quantita' (rilevante
  * solo per `numeric`, fonte di confusione se mostrata per gli altri type).
+ *
+ * Include anche `requestNumber` (es. `REQ-000137`, richiesto dall'operatore
+ * per il titolo della pagina): letto da `publicDeviceRequests/{requestId}`
+ * (mai dal documento principale `deviceRequests`), coerente con il confine
+ * `dc-private-data-separation` — `requestNumber` e' gia' un campo
+ * esplicitamente pubblico (scritto li' da `createDeviceRequest.ts`), non
+ * un'estensione del confine di questa funzione. `null` se non risolvibile
+ * (link malformato/richiesta non piu' presente), senza bloccare la
+ * risposta: il progresso resta comunque mostrabile.
  */
 export const getChecklistShareStatus = onCall(
   { region: REGION },
@@ -59,9 +68,18 @@ export const getChecklistShareStatus = onCall(
         throw new HttpsError("not-found", "Share link not found");
       }
 
-      const checklistId = linkSnap.data()?.checklistId;
+      const linkData = linkSnap.data() ?? {};
+      const checklistId = linkData.checklistId;
       if (!checklistId || typeof checklistId !== "string") {
         throw new HttpsError("not-found", "Share link not found");
+      }
+
+      let requestNumber: string | null = null;
+      const requestId = linkData.requestId;
+      if (typeof requestId === "string" && requestId) {
+        const publicRequestSnap = await db.collection("publicDeviceRequests").doc(requestId).get();
+        const publicRequestNumber = publicRequestSnap.data()?.requestNumber;
+        requestNumber = typeof publicRequestNumber === "string" ? publicRequestNumber : null;
       }
 
       const checklistSnap = await db.collection("checklists").doc(checklistId).get();
@@ -90,7 +108,7 @@ export const getChecklistShareStatus = onCall(
       });
 
       console.log(`[getChecklistShareStatus] OK: token ${token} percentComplete=${percentComplete}`);
-      return { percentComplete, items: itemsSummary };
+      return { percentComplete, items: itemsSummary, requestNumber };
     } catch (error) {
       console.error("[getChecklistShareStatus] KO:", error);
       await logSecurityEvent({

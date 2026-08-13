@@ -23,6 +23,7 @@ describe("ChecklistShareStatus - pagina pubblica di avanzamento checklist condiv
     callable.mockResolvedValue({
       data: {
         percentComplete: 50,
+        requestNumber: "REQ-000137",
         items: [
           { title: "Stampa mano", completed: true },
           { title: "Verifica misure", completed: false },
@@ -44,6 +45,43 @@ describe("ChecklistShareStatus - pagina pubblica di avanzamento checklist condiv
     if (!item2) throw new Error("Item 'Verifica misure' non trovato");
     expect(item2.querySelector(".pi-circle")).toBeInTheDocument();
     expect(item2.querySelector(".pi-check-circle")).not.toBeInTheDocument();
+  });
+
+  // Regressione (bug segnalato dall'operatore): il titolo era generico
+  // "Avanzamento checklist di fabbricazione" — ora generico "Stato di
+  // avanzamento della richiesta" (nessun riferimento a "fabbricazione",
+  // troppo tecnico per una famiglia) con l'id richiesta se risolvibile.
+  it("il titolo include il requestNumber quando risolvibile", async () => {
+    callable.mockResolvedValue({
+      data: { percentComplete: 50, requestNumber: "REQ-000137", items: [] },
+    });
+
+    render(<ChecklistShareStatus />);
+
+    expect(await screen.findByText("Stato di avanzamento della richiesta - REQ-000137")).toBeInTheDocument();
+    expect(screen.queryByText(/fabbricazione/i)).not.toBeInTheDocument();
+  });
+
+  it("il titolo resta generico, senza id, quando requestNumber è null", async () => {
+    callable.mockResolvedValue({
+      data: { percentComplete: 50, requestNumber: null, items: [] },
+    });
+
+    render(<ChecklistShareStatus />);
+
+    expect(await screen.findByText("Stato di avanzamento della richiesta")).toBeInTheDocument();
+  });
+
+  it("il testo descrittivo è esaustivo per le famiglie, non generico", async () => {
+    callable.mockResolvedValue({
+      data: { percentComplete: 50, requestNumber: null, items: [] },
+    });
+
+    render(<ChecklistShareStatus />);
+
+    expect(
+      await screen.findByText(/quali attività il team di volontari ha già completato/)
+    ).toBeInTheDocument();
   });
 
   // Scenario: nessuna colonna Quantità o altro dettaglio di tipo, rappresentazione omogenea per i tre type
