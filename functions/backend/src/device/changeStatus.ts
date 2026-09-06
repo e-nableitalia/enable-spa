@@ -5,6 +5,7 @@ import {requireVolunteerConsents} from "../utils/consents";
 import {sendChangeStatusNotifications, NotificaOptions} from "./changeStatusNotifications";
 import {assertVolunteerTransitionAllowed} from "../utils/volunteerTransitions";
 import {autoCreateProductionChecklistOnTransition} from "../device-requests/autoCreateProductionChecklist";
+import {isValidRequestStatus} from "../utils/requestStatuses";
 
 /**
  * Stati verso cui la transizione richiede lo scarico di responsabilità
@@ -42,6 +43,10 @@ export const changeStatus = onCall(
 
     if (!requestId || !newStatus) {
       throw new HttpsError("invalid-argument", "Missing parameters");
+    }
+
+    if (!isValidRequestStatus(newStatus)) {
+      throw new HttpsError("invalid-argument", "Invalid newStatus");
     }
 
     const db = getFirestore();
