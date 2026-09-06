@@ -45,6 +45,14 @@ export interface AttachmentDocumentFields {
   size: number;
 }
 
+/** Documento completo così com'è persistito in `attachments/{attachmentId}`
+ * (campi di `AttachmentDocumentFields` più `id` e `createdAt`), la forma
+ * restituita da `listAttachmentsForEntity` (EA-164). */
+export interface AttachmentRecord extends AttachmentDocumentFields {
+  id: string;
+  createdAt: unknown;
+}
+
 /**
  * Deduce l'estensione dal nome file, senza il punto (es. "foto.jpg" -> "jpg").
  * Non è mai un campo fornito indipendentemente dal chiamante (Scenario 2).
@@ -148,4 +156,42 @@ export async function createAttachment(
   await batch.commit();
 
   return { attachmentId: attachmentRef.id };
+}
+
+/**
+ * Enumera gli allegati di un'entità (EA-164) leggendo prima l'indice
+ * subcollection `{entityCollectionPath}/{entityId}/attachments`
+ * (solo `attachmentId`/`createdAt`, scritto da `createAttachment`), poi
+ * risolvendo i metadati completi con un'unica lettura batch (`db.getAll`,
+ * stesso pattern di `listMyChecklistItems`) sui documenti
+ * `attachments/{attachmentId}` referenziati — mai una query `where` sulla
+ * collection di primo livello, coerente con lo scopo dell'indice.
+ *
+ * Ordinati per `createdAt` crescente (ordine di caricamento). Un'entità
+ * senza alcun allegato restituisce un array vuoto, senza errore.
+ */
+export async function listAttachmentsForEntity(
+  db: Firestore,
+  entityCollectionPath: string,
+  entityId: string
+): Promise<AttachmentRecord[]> {
+  const indexSnap = await db
+    .collection(entityCollectionPath)
+    .doc(entityId)
+    .collection(ATTACHMENT_INDEX_SUBCOLLECTION)
+    .orderBy("createdAt", "asc")
+    .get();
+
+  if (indexSnap.empty) {
+    return [];
+  }
+
+  const attachmentRefs = indexSnap.docs.map((doc) =>
+    db.collection(ATTACHMENTS_COLLECTION).doc(doc.id)
+  );
+  const attachmentSnaps = await db.getAll(...attachmentRefs);
+
+  return attachmentSnaps
+    .filter((snap) => snap.exists)
+    .map((snap) => snap.data() as AttachmentRecord);
 }
