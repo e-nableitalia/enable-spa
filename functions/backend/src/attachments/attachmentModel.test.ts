@@ -20,6 +20,7 @@ import {
   deduceFileExtension,
   buildAttachmentDocument,
   createAttachment,
+  getAttachmentById,
   listAttachmentsForEntity,
   ATTACHMENTS_COLLECTION,
   ATTACHMENT_INDEX_SUBCOLLECTION,
@@ -230,6 +231,41 @@ describe("createAttachment", () => {
     ).rejects.toThrow("description is required");
 
     expect(batchCommitMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("getAttachmentById", () => {
+  function buildDbMock(docSnap: { exists: boolean; data: () => unknown }) {
+    const getMock = jest.fn().mockResolvedValue(docSnap);
+    const collectionMock = jest.fn((name: string) => {
+      expect(name).toBe(ATTACHMENTS_COLLECTION);
+      return { doc: jest.fn(() => ({ get: getMock })) };
+    });
+
+    return {
+      db: { collection: collectionMock } as unknown as import("firebase-admin/firestore").Firestore,
+      getMock,
+    };
+  }
+
+  // Scenario 1 (downloadAttachment, EA-165): risolve i metadati completi dal catalogo di primo livello
+  it("resolves the full attachment document from the top-level catalog", async () => {
+    const { db } = buildDbMock({
+      exists: true,
+      data: () => ({ id: "att-1", description: "Fattura di acquisto" }),
+    });
+
+    const result = await getAttachmentById(db, "att-1");
+
+    expect(result).toEqual({ id: "att-1", description: "Fattura di acquisto" });
+  });
+
+  it("returns null when the attachment does not exist", async () => {
+    const { db } = buildDbMock({ exists: false, data: () => undefined });
+
+    const result = await getAttachmentById(db, "missing-id");
+
+    expect(result).toBeNull();
   });
 });
 
