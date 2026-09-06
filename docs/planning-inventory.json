@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T09:28:29.185Z",
+  "generated_at": "2026-09-06T10:15:33.889Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -199,6 +199,14 @@
         "device-requests",
         "special-projects"
       ]
+    },
+    {
+      "id": "ss-cross-entity-attachments",
+      "type": "solution_study",
+      "source_path": "docs/solution-studies/ss-cross-entity-attachments.json",
+      "created_at": "2026-09-06T09:46:54.242Z",
+      "updated_at": "2026-09-06T10:15:33.889Z",
+      "created_by": "cli:solution-study"
     }
   ]
 }
