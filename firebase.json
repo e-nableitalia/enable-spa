@@ -2,6 +2,10 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "storage": {
+    "target": "attachments",
+    "rules": "storage.rules"
+  },
   "functions": {
     "source": "functions/backend"
   },
