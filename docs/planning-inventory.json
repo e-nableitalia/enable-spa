@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T16:23:58.961Z",
+  "generated_at": "2026-09-06T16:25:35.659Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -205,8 +205,20 @@
       "type": "solution_study",
       "source_path": "docs/solution-studies/ss-cross-entity-attachments.json",
       "created_at": "2026-09-06T09:46:54.242Z",
-      "updated_at": "2026-09-06T16:23:58.961Z",
+      "updated_at": "2026-09-06T16:25:35.658Z",
       "created_by": "cli:solution-study"
+    },
+    {
+      "id": "ss-cross-entity-attachments-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/ss-cross-entity-attachments-epic-draft.md",
+      "created_at": "2026-09-06T16:25:35.659Z",
+      "updated_at": "2026-09-06T16:25:35.659Z",
+      "created_by": "cli:solution-decide",
+      "status": "draft",
+      "domains": [
+        "attachments"
+      ]
     }
   ]
 }
