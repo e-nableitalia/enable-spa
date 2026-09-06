@@ -83,6 +83,22 @@ implementare:
   possono caricare un allegato. In modifica ed eliminazione, admin può
   modificare/eliminare qualunque allegato; il volontario può
   modificare/eliminare solo quelli caricati da lui stesso.
+- **Eccezione di accesso diretto allo spazio Drive** (2026-09-06, in
+  risposta alla raccomandazione dello studio `ss-cross-entity-attachments`):
+  oltre all'accesso mediato da Cloud Function (Opt B, riservato ad
+  admin+volontario secondo l'RBAC sopra), lo spazio Drive dedicato prevede
+  anche un accesso diretto nativo — fuori dall'app — riservato a un numero
+  ristretto di **superadmin**. Non sostituisce l'RBAC applicativo per lo
+  staff normale, che resta interamente mediato dalla Cloud Function:
+  è un canale aggiuntivo di supervisione/backup diretto sullo spazio,
+  voluto esplicitamente nonostante comporti — per costruzione — la
+  possibilità per quei superadmin di vedere/agire su tutto senza il
+  filtro di ownership altrimenti applicato al volontario.
+  **Nuovo concetto**: "superadmin" non esiste oggi come ruolo nell'app
+  (verificato: solo `admin`/`volunteer`/`organizer` in uso) — collegato
+  all'idea di una futura pagina "super admin" già emersa nella
+  discussione su `ir-email-templates-versioned`, non ancora una decisione
+  strutturata su come autenticare/autorizzare questo livello.
 
 ## Domande aperte per lo studio
 
@@ -109,6 +125,14 @@ implementare:
   consumer (upload/list/update-description/delete) e con quale contratto,
   in modo che agganciare un nuovo dominio (es. progetti speciali) resti
   davvero un'integrazione leggera come da obiettivo della sequenza sopra.
+- **Meccanismo dell'eccezione superadmin**: come si concede in pratica
+  l'accesso diretto Drive a un superadmin — condivisione Drive nativa per
+  email Google (verosimilmente lo stesso account già usato per l'OAuth di
+  login, dominio `auth`) gestita a mano in Google Workspace, o via API
+  dallo stesso service account usato dal proxy? Chi decide/mantiene
+  l'elenco dei superadmin — un nuovo valore di `users/{uid}.role` in
+  Firestore, o una lista tenuta fuori dall'app? Da chiarire prima di
+  considerare completa la scelta di Option B con questa eccezione.
 
 ## Domini coinvolti
 
