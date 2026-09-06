@@ -80,7 +80,12 @@
           "question": "La Cloud Function riesce a generare una V4 signed URL usando esclusivamente il proprio service account di runtime di default (con self-grant di `roles/iam.serviceAccountTokenCreator`), senza dover esportare/gestire una chiave JSON separata?",
           "verification_approach": "Prototipo time-boxed (~1-2 ore): deploy di una Cloud Function di prova che concede al proprio service account il ruolo Service Account Token Creator e chiama `bucket.file(...).getSignedUrl({action, expires})`, verificando che la chiamata riesca senza errori di permesso e che l'URL risultante permetta davvero un upload/download diretto client→GCS.",
           "blocking": false,
-          "outcome": null
+          "outcome": {
+            "answer": "Si', confermato empiricamente su enableitalia-staging: una Cloud Function gen2 (region europe-west1), usando esclusivamente il proprio service account di runtime di default (86295063836-compute@developer.gserviceaccount.com) dopo un self-grant una tantum di roles/iam.serviceAccountTokenCreator, genera con successo una V4 signed URL via getSignedUrl() senza alcuna chiave JSON esportata. La URL risultante permette un download diretto reale del file (verificato: HTTP 200, contenuto corretto). Nessuna riserva: la funzionalita' e' pienamente disponibile con la sola identita' di runtime.",
+            "verified_by": "human:Alberto Navatta",
+            "verified_at": "2026-09-06T16:23:58.956Z",
+            "evidence_ref": "Verifica manuale in sessione: bucket e function di test (spikeSignedUrl) deployati su enableitalia-staging, invocati con successo (risposta {ok:true,url:...}), URL scaricata via curl con HTTP 200 e contenuto corretto, poi rimossi a fine test. Il self-grant IAM e' stato mantenuto (prerequisito reale per l'implementazione)."
+          }
         }
       ]
     },
