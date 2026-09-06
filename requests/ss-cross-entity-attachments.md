@@ -166,12 +166,21 @@ superadmin, l'operatore ha rimesso in discussione la logica di fondo:
   architetturale" sopra.
 - **Vincoli tecnici**: risolti sopra (dimensione massima ~20-50MB, TTL
   signed URL basso, tipo file libero, nessuna quota, nessun virus-scan).
-- **Modello dati Firestore**: subcollection dedicata su ciascuna entità
-  (es. `deviceRequests/{id}/attachments/{attachmentId}`) vs. collection di
-  primo livello con riferimento all'entità proprietaria (pattern già
-  scelto per `checklistItems`, EA-137) — il campo elenco sopra assume il
-  secondo pattern (coerente con "capability di base" riusabile), ma la
-  scelta tra i due resta da confermare esplicitamente in Story.
+- **Modello dati Firestore**: risolto (2026-09-06) — pattern ibrido, non
+  alternativo. I dati completi dell'allegato (elenco campi sopra) vivono
+  nella collection di primo livello `attachments/{attachmentId}`, che
+  resta quindi lo schema unico e agnostico rispetto al dominio (invariato
+  rispetto a quanto già deciso, coerente col precedente `checklistItems`).
+  In aggiunta, ogni entità proprietaria ha una **subcollection locale con
+  i soli id degli allegati** (es. `deviceRequests/{id}/attachments/{attachmentId}`
+  come indice, non come copia dei dati) — utile per enumerare velocemente
+  gli allegati di un'entità senza una query con `where` sulla collection
+  di primo livello. La capability di base resta agnostica (un nuovo
+  dominio consumer non richiede di insegnare nulla di nuovo alle Cloud
+  Function esistenti oltre a passare il proprio `entityType`); la forma
+  esatta della subcollection indice (documento vuoto/marker vs. un
+  piccolo sottoinsieme di campi duplicati per evitare un'ulteriore letta)
+  resta un dettaglio da fissare in Story.
 - **Sicurezza dei file**: qualunque sia il backend, l'accesso deve
   replicare lo stesso perimetro RBAC di Firestore (staff-only) — nessun
   link/path indovinabile, nessun accesso anonimo diretto ai file.
