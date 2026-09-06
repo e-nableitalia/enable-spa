@@ -105,6 +105,9 @@ describe("deleteAttachment", () => {
     expect(bucketMock).toHaveBeenCalledWith("enableitalia-staging-attachments");
     expect(fileMock).toHaveBeenCalledWith("attachments/deviceRequest/request-42/att-1/fattura.pdf");
     expect(fileDeleteMock).toHaveBeenCalledTimes(1);
+    // F-44: ignoreNotFound rende idempotente un retry dopo un fallimento
+    // parziale (file già cancellato, Firestore fallito in precedenza).
+    expect(fileDeleteMock).toHaveBeenCalledWith({ ignoreNotFound: true });
     expect(deleteAttachmentRecordMock).toHaveBeenCalledWith(
       expect.anything(),
       "deviceRequests",

@@ -118,7 +118,15 @@ export const deleteAttachment = onCall({ region: REGION }, async (request) => {
       throw new HttpsError("internal", "Project ID is required");
     }
     const bucket = getStorage().bucket(`${projectId}-attachments`);
-    await bucket.file(attachment.storagePath).delete();
+    // F-44 (panel review): idempotenza su retry dopo un fallimento parziale.
+    // Se questa chiamata riesce ma la successiva deleteAttachmentRecord
+    // fallisce (es. errore di rete transitorio), un retry rifarebbe questa
+    // stessa delete su un file ormai già assente dal bucket — senza
+    // `ignoreNotFound`, il client GCS rigetta con "not found", impedendo per
+    // sempre di raggiungere deleteAttachmentRecord e lasciando l'allegato
+    // permanentemente non eliminabile. Con `ignoreNotFound: true` il retry
+    // no-op su questo passo e procede alla pulizia Firestore.
+    await bucket.file(attachment.storagePath).delete({ ignoreNotFound: true });
 
     await deleteAttachmentRecord(db, attachment.entityCollectionPath, attachmentId, attachment.entityId);
 
