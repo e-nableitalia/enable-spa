@@ -21,6 +21,7 @@ import {
   buildAttachmentDocument,
   createAttachment,
   getAttachmentById,
+  updateAttachmentFields,
   listAttachmentsForEntity,
   ATTACHMENTS_COLLECTION,
   ATTACHMENT_INDEX_SUBCOLLECTION,
@@ -266,6 +267,71 @@ describe("getAttachmentById", () => {
     const result = await getAttachmentById(db, "missing-id");
 
     expect(result).toBeNull();
+  });
+});
+
+describe("updateAttachmentFields", () => {
+  const updateMock = jest.fn().mockResolvedValue(undefined);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    updateMock.mockResolvedValue(undefined);
+  });
+
+  function buildDbMock() {
+    const collectionMock = jest.fn((name: string) => {
+      expect(name).toBe(ATTACHMENTS_COLLECTION);
+      return { doc: jest.fn((id: string) => ({ id, update: updateMock })) };
+    });
+
+    return { collection: collectionMock } as unknown as import("firebase-admin/firestore").Firestore;
+  }
+
+  // Scenario 1/2: la modifica è persistita sul documento attachments/{attachmentId}
+  it("updates the description field on the attachments/{attachmentId} document", async () => {
+    const db = buildDbMock();
+
+    await updateAttachmentFields(db, "att-1", { description: "Nuova descrizione" });
+
+    expect(updateMock).toHaveBeenCalledWith({ description: "Nuova descrizione" });
+  });
+
+  it("also updates notes when explicitly provided", async () => {
+    const db = buildDbMock();
+
+    await updateAttachmentFields(db, "att-1", { description: "Nuova descrizione", notes: "Nuova nota" });
+
+    expect(updateMock).toHaveBeenCalledWith({ description: "Nuova descrizione", notes: "Nuova nota" });
+  });
+
+  it("leaves notes untouched when not provided", async () => {
+    const db = buildDbMock();
+
+    await updateAttachmentFields(db, "att-1", { description: "Nuova descrizione" });
+
+    const [fields] = updateMock.mock.calls[0];
+    expect(fields).not.toHaveProperty("notes");
+  });
+
+  // Scenario 4: la descrizione resta il campo obbligatorio del modello dati
+  it("throws when description is missing, without writing anything", async () => {
+    const db = buildDbMock();
+
+    await expect(
+      updateAttachmentFields(db, "att-1", { description: "" })
+    ).rejects.toThrow("description is required");
+
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("throws when description is blank, without writing anything", async () => {
+    const db = buildDbMock();
+
+    await expect(
+      updateAttachmentFields(db, "att-1", { description: "   " })
+    ).rejects.toThrow("description is required");
+
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
 
