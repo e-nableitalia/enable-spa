@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-28T00:00:00Z",
+  "generated_at": "2026-09-06T16:25:35.655Z",
   "repo_url": "https://github.com/e-nableitalia/enable-spa",
   "domains": [
     {
@@ -89,6 +89,15 @@
       "status": "approved",
       "depth": "standard",
       "origin": "discovered"
+    },
+    {
+      "id": "attachments",
+      "name": "Allegati",
+      "paths": [],
+      "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership.",
+      "status": "draft",
+      "depth": null,
+      "origin": "planned"
     }
   ]
 }
