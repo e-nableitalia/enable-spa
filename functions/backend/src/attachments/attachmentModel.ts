@@ -86,6 +86,17 @@ export function buildAttachmentDocument(input: AttachmentInput): AttachmentDocum
 }
 
 /**
+ * Genera un id di allegato prima ancora di scrivere alcun documento —
+ * serve a `uploadAttachment` (EA-163) per costruire `storagePath` (che
+ * incorpora l'id nel path GCS) prima di chiamare `createAttachment`, così
+ * che l'id del path di storage e l'id del documento Firestore coincidano
+ * sempre, invece di essere due identificatori indipendenti.
+ */
+export function newAttachmentId(db: Firestore): string {
+  return db.collection(ATTACHMENTS_COLLECTION).doc().id;
+}
+
+/**
  * Crea l'allegato: un documento in `attachments/{attachmentId}` (catalogo
  * metadati di primo livello, Scenario 2) e, nella stessa scrittura atomica,
  * un documento indice in `{entityCollectionPath}/{entityId}/attachments/{attachmentId}`
@@ -100,15 +111,23 @@ export function buildAttachmentDocument(input: AttachmentInput): AttachmentDocum
  * dominio consumer nomina la propria collection, senza inventare una
  * convenzione di pluralizzazione che potrebbe non valere per un futuro
  * `entityType`.
+ *
+ * `attachmentId`, se fornito (tipicamente da `newAttachmentId`), viene
+ * riusato come id del documento invece di generarne uno nuovo — necessario
+ * a `uploadAttachment` per allineare id del documento e id già incorporato
+ * in `input.storagePath`.
  */
 export async function createAttachment(
   db: Firestore,
   entityCollectionPath: string,
-  input: AttachmentInput
+  input: AttachmentInput,
+  attachmentId?: string
 ): Promise<{ attachmentId: string }> {
   const fields = buildAttachmentDocument(input);
 
-  const attachmentRef = db.collection(ATTACHMENTS_COLLECTION).doc();
+  const attachmentRef = attachmentId
+    ? db.collection(ATTACHMENTS_COLLECTION).doc(attachmentId)
+    : db.collection(ATTACHMENTS_COLLECTION).doc();
   const indexRef = db
     .collection(entityCollectionPath)
     .doc(input.entityId)
