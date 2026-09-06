@@ -179,6 +179,18 @@ describe("changeStatus", () => {
     expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "spedita" });
   });
 
+  // F-29 (residuo): un admin che chiami la function direttamente (non via
+  // dropdown UI) con un valore fuori dal dominio a 11 stati viene respinto,
+  // incluso uno dei 10 valori legacy rimossi da EA-148.
+  it("rejects a newStatus outside the 11-value domain, even for admin", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "scelta device e dimensionamento" }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Invalid newStatus"));
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "in produzione" });
+  });
+
   // Scenario 2 (EA-103, ridotto a 2 coppie da EA-148): volontario assegnato
   // può eseguire una delle 2 transizioni consentite
   it("allows an assigned volunteer to perform one of the 2 allowed transitions", async () => {
