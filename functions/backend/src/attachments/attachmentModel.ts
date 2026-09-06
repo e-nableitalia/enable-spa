@@ -180,6 +180,45 @@ export async function getAttachmentById(
   return snap.data() as AttachmentRecord;
 }
 
+/** Campi modificabili di un allegato già esistente (EA-166): solo
+ * descrizione e note, mai gli altri campi (entità proprietaria, file,
+ * dimensione, ecc.), che restano fissati al momento dell'upload. */
+export interface AttachmentUpdateInput {
+  description: string;
+  notes?: string;
+}
+
+/**
+ * Aggiorna descrizione (e, se fornita, le note) di un allegato già
+ * esistente in `attachments/{attachmentId}` (EA-166). La descrizione resta
+ * il campo obbligatorio del modello dati (Scenario 4): non può essere
+ * impostata a vuoto, stessa regola di `buildAttachmentDocument` in fase di
+ * creazione. `notes` è aggiornato solo se esplicitamente fornito, altrimenti
+ * resta invariato (a differenza della creazione, qui non c'è un default
+ * "stringa vuota" da applicare).
+ *
+ * L'RBAC (admin su qualunque allegato, volontario solo sui propri) è
+ * responsabilità del chiamante (`updateAttachmentDescription`), non di
+ * questa funzione: qui si assume che il diritto di modifica sia già stato
+ * verificato.
+ */
+export async function updateAttachmentFields(
+  db: Firestore,
+  attachmentId: string,
+  input: AttachmentUpdateInput
+): Promise<void> {
+  if (!input.description || !input.description.trim()) {
+    throw new Error("description is required");
+  }
+
+  const fields: Record<string, unknown> = { description: input.description };
+  if (input.notes !== undefined) {
+    fields.notes = input.notes;
+  }
+
+  await db.collection(ATTACHMENTS_COLLECTION).doc(attachmentId).update(fields);
+}
+
 /**
  * Enumera gli allegati di un'entità (EA-164) leggendo prima l'indice
  * subcollection `{entityCollectionPath}/{entityId}/attachments`
