@@ -279,6 +279,22 @@ describe("uploadAttachment", () => {
     );
   });
 
+  // Regressione (panel review EA-163): un errore infrastrutturale imprevisto
+  // (es. bucket non ancora provisionato, F-40) durante la generazione della
+  // signed URL non deve sfuggire al logging di sicurezza.
+  it("logs a failure event and throws internal when getSignedUrl throws unexpectedly", async () => {
+    getSignedUrlMock.mockRejectedValueOnce(new Error("bucket does not exist"));
+
+    await expect(uploadAttachment.run(buildRequest(baseData(), "admin-1"))).rejects.toMatchObject(
+      new HttpsError("internal", "Internal Server Error")
+    );
+
+    expect(logSecurityEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "uploadAttachment", outcome: "failure" })
+    );
+    expect(batchCommitMock).not.toHaveBeenCalled();
+  });
+
   // Test di regressione: contratto di validazione argomenti di base.
   it("throws invalid-argument when entityType is missing", async () => {
     await expect(

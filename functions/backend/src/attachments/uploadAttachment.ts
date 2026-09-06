@@ -28,7 +28,7 @@ const UPLOAD_URL_TTL_MS = 5 * 60 * 1000;
  * a monte, non rinegoziabile in questa Story). */
 const STAFF_ROLES = new Set(["admin", "volunteer"]);
 
-type LogOutcome = "success" | "blocked";
+type LogOutcome = "success" | "blocked" | "failure";
 
 /**
  * Cloud Function callable della capability di base "Allegati" (EA-161):
@@ -62,7 +62,7 @@ export const uploadAttachment = onCall({ region: REGION }, async (request) => {
       type: "security",
       action: "uploadAttachment",
       outcome,
-      severity: outcome === "success" ? "low" : "medium",
+      severity: outcome === "success" ? "low" : outcome === "failure" ? "high" : "medium",
       actor: { uid, email: email ?? undefined },
       context: { function: "uploadAttachment", invokeId, metadata },
     });
@@ -160,37 +160,59 @@ export const uploadAttachment = onCall({ region: REGION }, async (request) => {
   const attachmentId = newAttachmentId(db);
   const storagePath = `attachments/${entityType}/${entityId}/${attachmentId}/${fileName}`;
 
-  const projectId = getApp().options.projectId;
-  if (!projectId) {
-    throw new HttpsError("internal", "Project ID is required");
-  }
-  const bucket = getStorage().bucket(`${projectId}-attachments`);
+  try {
+    const projectId = getApp().options.projectId;
+    if (!projectId) {
+      throw new HttpsError("internal", "Project ID is required");
+    }
+    const bucket = getStorage().bucket(`${projectId}-attachments`);
 
-  const [uploadUrl] = await bucket.file(storagePath).getSignedUrl({
-    version: "v4",
-    action: "write",
-    expires: Date.now() + UPLOAD_URL_TTL_MS,
-  });
+    const [uploadUrl] = await bucket.file(storagePath).getSignedUrl({
+      version: "v4",
+      action: "write",
+      expires: Date.now() + UPLOAD_URL_TTL_MS,
+    });
 
-  await createAttachment(
-    db,
-    entityCollectionPath,
-    {
+    await createAttachment(
+      db,
+      entityCollectionPath,
+      {
+        entityType,
+        entityId,
+        uploadedBy: uid,
+        description,
+        notes,
+        category,
+        fileName,
+        storagePath,
+        size,
+      },
+      attachmentId
+    );
+
+    console.log(`[uploadAttachment] OK: attachment ${attachmentId} created for ${entityType}/${entityId}`);
+    await logOutcome("success", { entityType, entityId, attachmentId });
+
+    return { attachmentId, uploadUrl, storagePath };
+  } catch (error) {
+    // Copre errori infrastrutturali imprevisti (bucket non ancora
+    // provisionato — F-40 — permessi IAM insufficienti, errore di rete
+    // Firestore/Storage): a differenza dei rami di validazione sopra
+    // (rifiuti anticipati, già loggati come "blocked" prima del throw),
+    // qui l'eccezione non è anticipata e altrimenti sfuggirebbe del tutto
+    // al logging di sicurezza, in violazione della convenzione
+    // security_logging (F-2/EA-120: "inizio, fine ed errori").
+    console.error("[uploadAttachment] KO:", error);
+    await logOutcome("failure", {
       entityType,
       entityId,
-      uploadedBy: uid,
-      description,
-      notes,
-      category,
-      fileName,
-      storagePath,
-      size,
-    },
-    attachmentId
-  );
+      attachmentId,
+      reason: "unexpected-error",
+    });
 
-  console.log(`[uploadAttachment] OK: attachment ${attachmentId} created for ${entityType}/${entityId}`);
-  await logOutcome("success", { entityType, entityId, attachmentId });
-
-  return { attachmentId, uploadUrl, storagePath };
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError("internal", "Internal Server Error");
+  }
 });
