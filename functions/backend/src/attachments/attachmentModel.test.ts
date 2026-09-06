@@ -20,6 +20,7 @@ import {
   deduceFileExtension,
   buildAttachmentDocument,
   createAttachment,
+  listAttachmentsForEntity,
   ATTACHMENTS_COLLECTION,
   ATTACHMENT_INDEX_SUBCOLLECTION,
   AttachmentInput,
@@ -229,5 +230,87 @@ describe("createAttachment", () => {
     ).rejects.toThrow("description is required");
 
     expect(batchCommitMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("listAttachmentsForEntity", () => {
+  const orderByMock = jest.fn();
+  const indexGetMock = jest.fn();
+  const getAllMock = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    orderByMock.mockReturnValue({ get: indexGetMock });
+  });
+
+  function buildDbMock() {
+    const collectionMock = jest.fn((name: string) => {
+      if (name === ATTACHMENTS_COLLECTION) {
+        return { doc: jest.fn((id: string) => ({ __ref: id })) };
+      }
+      // collection dell'entità proprietaria (es. "deviceRequests"), opaca
+      return {
+        doc: jest.fn((entityId: string) => ({
+          collection: jest.fn((subName: string) => {
+            expect(subName).toBe(ATTACHMENT_INDEX_SUBCOLLECTION);
+            expect(entityId).toBe("request-42");
+            return { orderBy: orderByMock };
+          }),
+        })),
+      };
+    });
+
+    return {
+      collection: collectionMock,
+      getAll: getAllMock,
+    } as unknown as import("firebase-admin/firestore").Firestore;
+  }
+
+  function indexDoc(id: string) {
+    return { id };
+  }
+
+  function attachmentSnap(id: string, exists = true) {
+    return {
+      exists,
+      data: () => ({ id, description: `desc-${id}` }),
+    };
+  }
+
+  // Scenario 1/2: elenco completo con metadati risolti dall'indice
+  it("resolves the full attachment documents referenced by the entity's index subcollection", async () => {
+    const db = buildDbMock();
+    indexGetMock.mockResolvedValue({ empty: false, docs: [indexDoc("att-1"), indexDoc("att-2")] });
+    getAllMock.mockResolvedValue([attachmentSnap("att-1"), attachmentSnap("att-2")]);
+
+    const result = await listAttachmentsForEntity(db, "deviceRequests", "request-42");
+
+    expect(orderByMock).toHaveBeenCalledWith("createdAt", "asc");
+    expect(getAllMock).toHaveBeenCalledWith({ __ref: "att-1" }, { __ref: "att-2" });
+    expect(result).toEqual([
+      { id: "att-1", description: "desc-att-1" },
+      { id: "att-2", description: "desc-att-2" },
+    ]);
+  });
+
+  // Scenario 4: entità senza allegati -> elenco vuoto, senza errore, nessuna lettura batch
+  it("returns an empty array without calling db.getAll when the index subcollection is empty", async () => {
+    const db = buildDbMock();
+    indexGetMock.mockResolvedValue({ empty: true, docs: [] });
+
+    const result = await listAttachmentsForEntity(db, "deviceRequests", "request-42");
+
+    expect(result).toEqual([]);
+    expect(getAllMock).not.toHaveBeenCalled();
+  });
+
+  it("filters out an index entry whose attachment document no longer exists", async () => {
+    const db = buildDbMock();
+    indexGetMock.mockResolvedValue({ empty: false, docs: [indexDoc("att-1"), indexDoc("att-missing")] });
+    getAllMock.mockResolvedValue([attachmentSnap("att-1"), attachmentSnap("att-missing", false)]);
+
+    const result = await listAttachmentsForEntity(db, "deviceRequests", "request-42");
+
+    expect(result).toEqual([{ id: "att-1", description: "desc-att-1" }]);
   });
 });
