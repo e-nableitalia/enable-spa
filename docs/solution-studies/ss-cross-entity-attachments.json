@@ -22,7 +22,13 @@
       "summary": "I file fisici vivono nel bucket Firebase Storage del progetto, a un path del tipo `attachments/{entityType}/{entityId}/{attachmentId}/{filename}`. Le Storage Security Rules usano `firestore.get()`/`firestore.exists()` per replicare lo stesso controllo RBAC gia' applicato lato Firestore (letto da `users/{uid}.role` e dal documento allegato per l'ownership), senza introdurre un layer proxy per ogni singolo accesso. I metadati (descrizione, `uploadedBy`, `entityType`/`entityId`, `storagePath`) vivono in una collection Firestore di primo livello `attachments/{attachmentId}`, coerente col precedente `checklistItems`. Upload/list/update-description/delete restano comunque esposte come Cloud Function callable (per validazione, logging centralizzato e coerenza con il resto del backend), mentre il download puo' avvenire via signed URL o direttamente via SDK client con le Storage Rules a fare da secondo perimetro.",
       "domain_impact": {
         "existing_domains_touched": [],
-        "new_domains_proposed": ["attachments"],
+        "new_domains_proposed": [
+          {
+            "id": "attachments",
+            "name": "Allegati",
+            "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership."
+          }
+        ],
         "new_capabilities_sketch": [
           "Provisioning storage.rules + sezione storage in firebase.json (infrastruttura da zero)",
           "Cloud Function callable uploadAttachment/listAttachments/updateAttachmentDescription/deleteAttachment con RBAC in codice",
@@ -74,7 +80,13 @@
       "summary": "I file fisici vivono in uno spazio Drive dedicato (Shared Drive o cartella), a cui accede solo un service account con delega (domain-wide delegation) o account dedicato, mai esposto al client. Ogni operazione (upload/list/download/update-description/delete) passa esclusivamente da una Cloud Function callable che applica lo stesso RBAC gia' in uso altrove (lettura `users/{uid}.role` + ownership) prima di chiamare la Drive API v3 server-side; il client non riceve mai un link Drive diretto, solo il contenuto/byte stream mediato dalla function o uno stream temporaneo generato dalla function stessa. I metadati (descrizione, `uploadedBy`, `entityType`/`entityId`, `driveFileId`) vivono nella stessa collection Firestore di primo livello `attachments/{attachmentId}` di Option A.",
       "domain_impact": {
         "existing_domains_touched": [],
-        "new_domains_proposed": ["attachments"],
+        "new_domains_proposed": [
+          {
+            "id": "attachments",
+            "name": "Allegati",
+            "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership."
+          }
+        ],
         "new_capabilities_sketch": [
           "Integrazione Drive API v3 server-side (nuova dipendenza, nuove credenziali service account)",
           "Cloud Function callable uploadAttachment/listAttachments/downloadAttachment/updateAttachmentDescription/deleteAttachment, ognuna proxy verso Drive con RBAC applicato prima della chiamata esterna",
@@ -125,7 +137,13 @@
       "summary": "Stesso spazio Drive dedicato di Option B, ma il controllo di accesso e' delegato ai permessi di condivisione Drive stessi (gestiti via API con service account, es. condivisione per-email ai singoli admin/volontari) invece di una Cloud Function proxy per ogni accesso. Il client riceve link Drive diretti (`webViewLink`/`webContentLink`) da mostrare/aprire; Firestore mantiene solo i metadati (descrizione, `uploadedBy`, `entityType`/`entityId`, `driveFileId`/link) nella stessa collection `attachments/{attachmentId}`.",
       "domain_impact": {
         "existing_domains_touched": [],
-        "new_domains_proposed": ["attachments"],
+        "new_domains_proposed": [
+          {
+            "id": "attachments",
+            "name": "Allegati",
+            "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership."
+          }
+        ],
         "new_capabilities_sketch": [
           "Integrazione Drive API v3 server-side per gestione permessi di condivisione per-utente (stessa nuova dipendenza di Option B)",
           "Sincronizzazione permessi Drive ↔ ruolo/stato utente Firestore (nuova capability non richiesta dalle altre opzioni)",
