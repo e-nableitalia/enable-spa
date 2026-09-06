@@ -143,6 +143,20 @@ superadmin, l'operatore ha rimesso in discussione la logica di fondo:
   gestire pause/resume né una signed URL con una lease lunga. Un limite
   esplicito in questo ordine di grandezza va imposto lato Cloud Function
   al momento dell'emissione della URL di upload.
+- **Tipo file, quota, virus-scan** (2026-09-06): qualunque tipo di file è
+  ammesso, nessuna quota per entità/totale per ora, nessuna scansione
+  antivirus prevista.
+- **Modello dati dell'entità Attachment** (2026-09-06): oltre a
+  `entityType`/`entityId` (riferimento all'entità proprietaria, già
+  previsto dallo studio) e `uploadedBy` (owner, già deciso per l'RBAC di
+  modifica/eliminazione), l'entità include: nome file, descrizione
+  (**obbligatoria**), note (libere, distinte dalla descrizione),
+  categoria (per presentare gli allegati raggruppati in UI — da chiarire
+  se riusa il `category` opaco già esistente sul core Organizer o è un
+  campo a sé, stesso punto di attenzione già sollevato per
+  `ir-special-projects-initiatives`), url/path sul bucket, dimensione
+  (per la presentazione a schermo) ed estensione (dedotta
+  automaticamente dal nome file, non un campo inserito dall'utente).
 
 ## Domande aperte per lo studio
 
@@ -150,18 +164,14 @@ superadmin, l'operatore ha rimesso in discussione la logica di fondo:
   ridisegnata: Cloud Function per RBAC + signed URL, trasferimento byte
   diretto client↔GCS), non più Google Drive. Vedi "Ripensamento
   architetturale" sopra.
-- **Vincoli tecnici**: dimensione massima (~20-50MB) e TTL della signed
-  URL (basso) risolti sopra. Restano aperti: tipo file ammesso (se
-  limitato o libero), quota totale per entità, eventuale virus-scan.
-- **Modello dati Firestore**: la capability di base ha comunque bisogno di
-  un riferimento Firestore per ogni allegato (metadati: descrizione,
-  `uploadedBy`, entità proprietaria, e riferimento al file reale su
-  Drive/Storage) — subcollection dedicata su ciascuna entità (es.
-  `deviceRequests/{id}/attachments/{attachmentId}`) vs. collection di
+- **Vincoli tecnici**: risolti sopra (dimensione massima ~20-50MB, TTL
+  signed URL basso, tipo file libero, nessuna quota, nessun virus-scan).
+- **Modello dati Firestore**: subcollection dedicata su ciascuna entità
+  (es. `deviceRequests/{id}/attachments/{attachmentId}`) vs. collection di
   primo livello con riferimento all'entità proprietaria (pattern già
-  scelto per `checklistItems`, EA-137). Il secondo pattern è quello che
-  meglio si presta a essere "capability di base" riusabile da più domini
-  senza ripetere lo schema per ognuno.
+  scelto per `checklistItems`, EA-137) — il campo elenco sopra assume il
+  secondo pattern (coerente con "capability di base" riusabile), ma la
+  scelta tra i due resta da confermare esplicitamente in Story.
 - **Sicurezza dei file**: qualunque sia il backend, l'accesso deve
   replicare lo stesso perimetro RBAC di Firestore (staff-only) — nessun
   link/path indovinabile, nessun accesso anonimo diretto ai file.
@@ -169,14 +179,14 @@ superadmin, l'operatore ha rimesso in discussione la logica di fondo:
   consumer (upload/list/update-description/delete) e con quale contratto,
   in modo che agganciare un nuovo dominio (es. progetti speciali) resti
   davvero un'integrazione leggera come da obiettivo della sequenza sopra.
-- **Meccanismo dell'eccezione superadmin**: come si concede in pratica
-  l'accesso diretto Drive a un superadmin — condivisione Drive nativa per
-  email Google (verosimilmente lo stesso account già usato per l'OAuth di
-  login, dominio `auth`) gestita a mano in Google Workspace, o via API
-  dallo stesso service account usato dal proxy? Chi decide/mantiene
-  l'elenco dei superadmin — un nuovo valore di `users/{uid}.role` in
-  Firestore, o una lista tenuta fuori dall'app? Da chiarire prima di
-  considerare completa la scelta di Option B con questa eccezione.
+- **Meccanismo dell'eccezione superadmin**: risolto (2026-09-06).
+  `superadmin` è un ruolo che si affianca ad `admin` (non lo sostituisce),
+  **non concedibile da UI/GUI**: l'assegnazione IAM su GCS avviene a mano
+  direttamente in console Firebase/GCP da parte dell'operatore stesso
+  (oggi l'unico superadmin è l'operatore in prima persona) — nessun
+  meccanismo applicativo di gestione dell'elenco da costruire, è
+  amministrazione manuale fuori dall'app, coerente con l'idea di
+  eccezione riservata a pochissime persone.
 
 ## Domini coinvolti
 
