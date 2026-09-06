@@ -68,6 +68,32 @@ implementare:
   in conversazione), includendo il costo di un'eventuale migrazione futura
   se la scelta iniziale si rivelasse sbagliata.
 
+## Ripensamento architetturale (2026-09-06, dopo il refine con eccezione superadmin)
+
+Dopo che il primo refine dello studio ha spostato la raccomandazione su
+Option B (Drive) proprio per soddisfare l'eccezione di accesso diretto
+superadmin, l'operatore ha rimesso in discussione la logica di fondo:
+
+- I costi di storage/trasferimento su Cloud Storage nativo sono minimi —
+  cade quindi l'argomento "costo prevedibile" che aveva pesato a favore
+  di Drive.
+- Nuova proposta per Option A: il backend fa da **frontend verso Cloud
+  Storage** — le Cloud Function si limitano a RBAC e generazione di
+  **signed URL** per upload/download; il trasferimento byte reale avviene
+  client↔GCS direttamente tramite la signed URL, non proxato attraverso
+  la Cloud Function (risolve esplicitamente il sotto-punto lasciato aperto
+  in Option A su "signed URL vs accesso diretto SDK+Rules").
+- L'eccezione superadmin si risolverebbe con un **ruolo IAM nativo di
+  Google Cloud Storage** (es. Storage Admin) concesso ai pochi superadmin,
+  scoped al bucket/prefix degli allegati — non un secondo sistema esterno
+  come Drive.
+- Da verificare esplicitamente nello studio: l'affermazione del refine
+  precedente ("Option A richiederebbe IAM a livello di intero progetto
+  GCP, non della sola cartella allegati") è accurata, o GCS supporta IAM
+  Conditions scoped a bucket/prefix che renderebbero l'eccezione superadmin
+  ugualmente scoped anche con Option A? Se sì, la raccomandazione andrebbe
+  rivalutata.
+
 ## Decisioni confermate dall'operatore (2026-09-06)
 
 - **Perimetro delle entità**: solo entità di alto livello (`deviceRequest`,
