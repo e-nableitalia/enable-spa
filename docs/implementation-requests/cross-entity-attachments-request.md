@@ -125,16 +125,34 @@ superadmin, l'operatore ha rimesso in discussione la logica di fondo:
   all'idea di una futura pagina "super admin" già emersa nella
   discussione su `ir-email-templates-versioned`, non ancora una decisione
   strutturata su come autenticare/autorizzare questo livello.
+  **Aggiornamento (2026-09-06, dopo il ripensamento architetturale)**:
+  l'eccezione si realizza con un ruolo IAM nativo di Google Cloud Storage
+  scoped al bucket/prefix degli allegati, non più con permessi di
+  condivisione Drive — vedi sezione "Ripensamento architetturale" sopra.
+- **Logging e ciclo di vita del download** (2026-09-06): si traccia solo
+  l'evento di **emissione della signed URL** (via `logSecurityEvent`,
+  convenzione già esistente nel repo) — non l'inizio né il completamento
+  del download effettivo. Una volta emessa l'URL, se e quando l'utente
+  scarica davvero il file non è tracciato né rilevante: nessun trigger
+  GCS per "download completato" da collegare.
+- **TTL della signed URL**: tenuto volutamente basso — il flusso atteso è
+  "click sull'allegato → URL generata al momento → download immediato",
+  non un link da conservare o riutilizzare più tardi.
+- **Dimensione file e resumable upload/download**: nessun supporto
+  previsto per allegati oltre i 20-50MB — di conseguenza non serve
+  gestire pause/resume né una signed URL con una lease lunga. Un limite
+  esplicito in questo ordine di grandezza va imposto lato Cloud Function
+  al momento dell'emissione della URL di upload.
 
 ## Domande aperte per lo studio
 
-- **Storage backend**: Google Drive (spazio dedicato) vs Firebase Storage
-  — vedi sezione dedicata sopra, decisione esplicita richiesta con
-  trade-off, non assunta.
-- **Vincoli tecnici**: limiti di dimensione/tipo file, quota per
-  entità/totale, virus-scan o altra validazione — nessuno ancora deciso,
-  e dipendono in parte dal backend scelto (Drive ha propri limiti/quota
-  diversi da Storage).
+- **Storage backend**: risolto — Cloud Storage nativo (Option A
+  ridisegnata: Cloud Function per RBAC + signed URL, trasferimento byte
+  diretto client↔GCS), non più Google Drive. Vedi "Ripensamento
+  architetturale" sopra.
+- **Vincoli tecnici**: dimensione massima (~20-50MB) e TTL della signed
+  URL (basso) risolti sopra. Restano aperti: tipo file ammesso (se
+  limitato o libero), quota totale per entità, eventuale virus-scan.
 - **Modello dati Firestore**: la capability di base ha comunque bisogno di
   un riferimento Firestore per ogni allegato (metadati: descrizione,
   `uploadedBy`, entità proprietaria, e riferimento al file reale su
