@@ -220,6 +220,40 @@ export async function updateAttachmentFields(
 }
 
 /**
+ * Elimina l'allegato dai suoi due artefatti Firestore (EA-167): il documento
+ * `attachments/{attachmentId}` nel catalogo di primo livello e l'entry
+ * indice in `{entityCollectionPath}/{entityId}/attachments/{attachmentId}`,
+ * nella stessa scrittura atomica (`batch.delete`, simmetrico a
+ * `createAttachment`). `entityId` ed `entityCollectionPath` sono forniti dal
+ * chiamante (rispettivamente letti dal documento risolto via
+ * `getAttachmentById`, e opaco come per `createAttachment`/
+ * `listAttachmentsForEntity`, non derivabile da `entityType`): il documento
+ * `attachments/{attachmentId}` non persiste `entityCollectionPath`.
+ *
+ * Non tocca il file fisico nel bucket: eliminazione a carico del chiamante
+ * (`deleteAttachment`), prima di questa chiamata — nessuna eliminazione
+ * reale è reversibile su nessuno dei tre artefatti (Story EA-167).
+ */
+export async function deleteAttachmentRecord(
+  db: Firestore,
+  entityCollectionPath: string,
+  attachmentId: string,
+  entityId: string
+): Promise<void> {
+  const attachmentRef = db.collection(ATTACHMENTS_COLLECTION).doc(attachmentId);
+  const indexRef = db
+    .collection(entityCollectionPath)
+    .doc(entityId)
+    .collection(ATTACHMENT_INDEX_SUBCOLLECTION)
+    .doc(attachmentId);
+
+  const batch = db.batch();
+  batch.delete(attachmentRef);
+  batch.delete(indexRef);
+  await batch.commit();
+}
+
+/**
  * Enumera gli allegati di un'entità (EA-164) leggendo prima l'indice
  * subcollection `{entityCollectionPath}/{entityId}/attachments`
  * (solo `attachmentId`/`createdAt`, scritto da `createAttachment`), poi
