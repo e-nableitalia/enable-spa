@@ -159,6 +159,28 @@ export async function createAttachment(
 }
 
 /**
+ * Risolve un singolo allegato dal catalogo di primo livello
+ * `attachments/{attachmentId}` (EA-165, `downloadAttachment`): a differenza
+ * di `listAttachmentsForEntity`, qui il chiamante conosce già
+ * l'`attachmentId` (es. click su un allegato già elencato) e non serve
+ * passare dall'indice subcollection dell'entità proprietaria.
+ *
+ * Restituisce `null` se l'allegato non esiste (id non valido o già
+ * eliminato), senza errore: la decisione su come reagire spetta al
+ * chiamante.
+ */
+export async function getAttachmentById(
+  db: Firestore,
+  attachmentId: string
+): Promise<AttachmentRecord | null> {
+  const snap = await db.collection(ATTACHMENTS_COLLECTION).doc(attachmentId).get();
+  if (!snap.exists) {
+    return null;
+  }
+  return snap.data() as AttachmentRecord;
+}
+
+/**
  * Enumera gli allegati di un'entità (EA-164) leggendo prima l'indice
  * subcollection `{entityCollectionPath}/{entityId}/attachments`
  * (solo `attachmentId`/`createdAt`, scritto da `createAttachment`), poi
