@@ -41,5 +41,6 @@ export { createChecklistShareLink } from "./device-requests/createChecklistShare
 export { getChecklistShareStatus } from "./device-requests/getChecklistShareStatus";
 export { sendDocumentsEmail } from "./device-requests/sendDocumentsEmail";
 export { uploadAttachment } from "./attachments/uploadAttachment";
+export { listAttachments } from "./attachments/listAttachments";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
