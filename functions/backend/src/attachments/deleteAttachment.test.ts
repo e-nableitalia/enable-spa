@@ -234,6 +234,29 @@ describe("deleteAttachment", () => {
     expect(deleteAttachmentRecordMock).not.toHaveBeenCalled();
   });
 
+  // F-43 (panel review): un allegato creato da uploadAttachment prima del
+  // fix F-42 non ha entityCollectionPath persistito — deve essere rifiutato
+  // prima di toccare bucket o Firestore, non cancellato a metà.
+  it("rejects with failed-precondition and deletes nothing for an attachment predating entityCollectionPath tracking", async () => {
+    getAttachmentByIdMock.mockResolvedValue({
+      ...SAMPLE_ATTACHMENT,
+      entityCollectionPath: undefined,
+    });
+
+    await expect(deleteAttachment.run(buildRequest(baseData(), "admin-1"))).rejects.toMatchObject(
+      new HttpsError(
+        "failed-precondition",
+        "Attachment predates entityCollectionPath tracking and cannot be deleted safely"
+      )
+    );
+
+    expect(fileDeleteMock).not.toHaveBeenCalled();
+    expect(deleteAttachmentRecordMock).not.toHaveBeenCalled();
+    expect(logSecurityEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "deleteAttachment", outcome: "blocked" })
+    );
+  });
+
   it("denies deletion to an authenticated volunteer's own attachment when uploaded by a different volunteer, without touching the bucket", async () => {
     await expect(
       deleteAttachment.run(buildRequest(baseData(), "other-volunteer-1"))

@@ -93,6 +93,25 @@ export const deleteAttachment = onCall({ region: REGION }, async (request) => {
     throw new HttpsError("permission-denied", "Cannot delete another user's attachment");
   }
 
+  // F-43 (panel review): un allegato creato da uploadAttachment prima di
+  // F-42 non ha `entityCollectionPath` persistito sul documento. Senza
+  // questo controllo, il file verrebbe comunque cancellato dal bucket (sotto)
+  // e solo dopo fallirebbe su `db.collection(undefined)`, lasciando
+  // documento e indice orfani in modo permanente — esattamente il difetto
+  // opposto a quello già corretto in F-42. Rifiutato qui, prima di toccare
+  // bucket o Firestore: nessun dato reale su questo campo esiste oggi
+  // (verificato: collection `attachments` vuota su enableitalia-staging),
+  // ma il controllo resta necessario per qualunque record futuro scritto
+  // da un consumer che non passi mai da `createAttachment` con questo campo.
+  if (!attachment.entityCollectionPath) {
+    console.log(`[deleteAttachment] KO: Attachment ${attachmentId} has no entityCollectionPath (predates F-42)`);
+    await logOutcome("blocked", { reason: "missing-entity-collection-path", attachmentId });
+    throw new HttpsError(
+      "failed-precondition",
+      "Attachment predates entityCollectionPath tracking and cannot be deleted safely"
+    );
+  }
+
   try {
     const projectId = getApp().options.projectId;
     if (!projectId) {
