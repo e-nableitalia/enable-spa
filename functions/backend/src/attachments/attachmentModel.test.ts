@@ -181,6 +181,7 @@ describe("createAttachment", () => {
       id: attachmentId,
       entityType: "deviceRequest",
       entityId: "request-42",
+      entityCollectionPath: "deviceRequests",
       uploadedBy: "user-1",
       description: "Fattura di acquisto",
       notes: "",
@@ -191,6 +192,18 @@ describe("createAttachment", () => {
       size: 1024,
       createdAt: SERVER_TIMESTAMP_SENTINEL,
     });
+  });
+
+  // F-42: entityCollectionPath persistito, necessario a deleteAttachmentRecord
+  // per non dover ri-accettare lo stesso valore da un parametro indipendente
+  // del chiamante in un'operazione distruttiva.
+  it("persists entityCollectionPath on the attachment document, as passed to createAttachment", async () => {
+    const db = buildDbMock();
+
+    const { attachmentId } = await createAttachment(db, "shipmentRequests", baseInput());
+
+    const [, attachmentDocument] = attachmentDocSetCall(attachmentId);
+    expect(attachmentDocument).toMatchObject({ entityCollectionPath: "shipmentRequests" });
   });
 
   // Scenario 3: esiste un documento nella subcollection dell'entità proprietaria

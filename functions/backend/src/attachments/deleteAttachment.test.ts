@@ -64,7 +64,6 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "admin
 function baseData(overrides: Record<string, unknown> = {}) {
   return {
     attachmentId: "att-1",
-    entityCollectionPath: "deviceRequests",
     ...overrides,
   };
 }
@@ -73,6 +72,7 @@ const SAMPLE_ATTACHMENT = {
   id: "att-1",
   entityType: "deviceRequest",
   entityId: "request-42",
+  entityCollectionPath: "deviceRequests",
   uploadedBy: "volunteer-1",
   description: "Fattura di acquisto",
   notes: "",
@@ -204,16 +204,22 @@ describe("deleteAttachment", () => {
     expect(getAttachmentByIdMock).not.toHaveBeenCalled();
   });
 
-  it("throws invalid-argument when entityCollectionPath is missing", async () => {
-    await expect(
-      deleteAttachment.run(
-        buildRequest(baseData({ entityCollectionPath: undefined }), "admin-1")
-      )
-    ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Missing or invalid parameter: entityCollectionPath")
+  // F-42 (panel review): entityCollectionPath non è più un parametro del
+  // chiamante — un valore inviato comunque nel payload deve essere ignorato,
+  // usando sempre il valore persistito sul record risolto. Prima del fix,
+  // un valore sbagliato qui avrebbe reso l'eliminazione dell'entry indice un
+  // no-op silenzioso.
+  it("ignores any client-supplied entityCollectionPath and uses the value persisted on the resolved attachment", async () => {
+    await deleteAttachment.run(
+      buildRequest(baseData({ entityCollectionPath: "wrong-collection" }), "admin-1")
     );
 
-    expect(getAttachmentByIdMock).not.toHaveBeenCalled();
+    expect(deleteAttachmentRecordMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "deviceRequests",
+      "att-1",
+      "request-42"
+    );
   });
 
   // Regressione: attachmentId che non referenzia alcun allegato esistente

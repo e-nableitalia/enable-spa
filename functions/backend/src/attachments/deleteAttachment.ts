@@ -27,10 +27,13 @@ type LogOutcome = "success" | "blocked" | "failure";
  * un'eventuale entry di metadati orfana (nessun file scaricabile), mai un
  * file scaricabile senza più metadati.
  *
- * `entityCollectionPath` è fornito dal chiamante, opaco come in
- * `uploadAttachment`/`listAttachments`: il documento `attachments/{id}` non
- * persiste il nome della collection dell'entità proprietaria, necessario per
- * risolvere il path dell'entry indice da eliminare.
+ * `entityCollectionPath` non è (più) un parametro del chiamante: a
+ * differenza di `uploadAttachment`/`listAttachments`, qui viene letto dal
+ * documento `attachments/{id}` già risolto (persistito lì da
+ * `createAttachment`, F-42), non ri-accettato indipendentemente da
+ * `request.data`. Un valore indipendente e potenzialmente disallineato
+ * renderebbe l'eliminazione dell'entry indice un no-op silenzioso — trovato
+ * dal panel review di questa stessa Story.
  */
 export const deleteAttachment = onCall({ region: REGION }, async (request) => {
   const invokeId = getInvokeId(request);
@@ -60,22 +63,11 @@ export const deleteAttachment = onCall({ region: REGION }, async (request) => {
   }
 
   const data = request.data ?? {};
-  const { attachmentId, entityCollectionPath } = data;
+  const { attachmentId } = data;
 
   if (!attachmentId || typeof attachmentId !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "attachmentId" });
     throw new HttpsError("invalid-argument", "Missing or invalid parameter: attachmentId");
-  }
-  if (!entityCollectionPath || typeof entityCollectionPath !== "string") {
-    await logOutcome("blocked", {
-      reason: "invalid-argument",
-      field: "entityCollectionPath",
-      attachmentId,
-    });
-    throw new HttpsError(
-      "invalid-argument",
-      "Missing or invalid parameter: entityCollectionPath"
-    );
   }
 
   const db = getFirestore();
@@ -109,7 +101,7 @@ export const deleteAttachment = onCall({ region: REGION }, async (request) => {
     const bucket = getStorage().bucket(`${projectId}-attachments`);
     await bucket.file(attachment.storagePath).delete();
 
-    await deleteAttachmentRecord(db, entityCollectionPath, attachmentId, attachment.entityId);
+    await deleteAttachmentRecord(db, attachment.entityCollectionPath, attachmentId, attachment.entityId);
 
     console.log(`[deleteAttachment] OK: attachment ${attachmentId} deleted by ${uid}`);
     await logOutcome("success", { attachmentId });
