@@ -3,6 +3,21 @@
     "default": "enableitalia",
     "staging": "enableitalia-staging"
   },
-  "targets": {},
+  "targets": {
+    "enableitalia": {
+      "storage": {
+        "attachments": [
+          "enableitalia-attachments"
+        ]
+      }
+    },
+    "enableitalia-staging": {
+      "storage": {
+        "attachments": [
+          "enableitalia-staging-attachments"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

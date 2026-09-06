@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Bucket dedicato esclusivamente al path attachments/{entityType}/{entityId}/{attachmentId}/{filename}
+// (EA-162, decisione ss-cross-entity-attachments opt-a-firebase-storage-native).
+//
+// Deny-by-default intenzionale: nessun accesso diretto via SDK client Firebase,
+// né in lettura né in scrittura. Il perimetro di sicurezza reale non è qui, ma
+// nella Cloud Function che genera signed URL V4 post-RBAC (Story successive di
+// EA-161): le signed URL bypassano queste regole per costruzione, chiamando
+// direttamente l'API GCS con l'identità di runtime della function. Queste
+// regole restano quindi marginali per design, non un buco da colmare.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
