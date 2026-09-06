@@ -22,6 +22,7 @@ import {
   createAttachment,
   getAttachmentById,
   updateAttachmentFields,
+  deleteAttachmentRecord,
   listAttachmentsForEntity,
   ATTACHMENTS_COLLECTION,
   ATTACHMENT_INDEX_SUBCOLLECTION,
@@ -180,6 +181,7 @@ describe("createAttachment", () => {
       id: attachmentId,
       entityType: "deviceRequest",
       entityId: "request-42",
+      entityCollectionPath: "deviceRequests",
       uploadedBy: "user-1",
       description: "Fattura di acquisto",
       notes: "",
@@ -190,6 +192,18 @@ describe("createAttachment", () => {
       size: 1024,
       createdAt: SERVER_TIMESTAMP_SENTINEL,
     });
+  });
+
+  // F-42: entityCollectionPath persistito, necessario a deleteAttachmentRecord
+  // per non dover ri-accettare lo stesso valore da un parametro indipendente
+  // del chiamante in un'operazione distruttiva.
+  it("persists entityCollectionPath on the attachment document, as passed to createAttachment", async () => {
+    const db = buildDbMock();
+
+    const { attachmentId } = await createAttachment(db, "shipmentRequests", baseInput());
+
+    const [, attachmentDocument] = attachmentDocSetCall(attachmentId);
+    expect(attachmentDocument).toMatchObject({ entityCollectionPath: "shipmentRequests" });
   });
 
   // Scenario 3: esiste un documento nella subcollection dell'entità proprietaria
@@ -332,6 +346,69 @@ describe("updateAttachmentFields", () => {
     ).rejects.toThrow("description is required");
 
     expect(updateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteAttachmentRecord", () => {
+  const batchDeleteMock = jest.fn();
+  const batchCommitMock = jest.fn().mockResolvedValue(undefined);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    batchCommitMock.mockResolvedValue(undefined);
+  });
+
+  function buildDbMock() {
+    const collectionMock = jest.fn((name: string) => {
+      if (name === ATTACHMENTS_COLLECTION) {
+        return { doc: jest.fn((id: string) => ({ id })) };
+      }
+      // entity collection: db.collection(entityCollectionPath).doc(entityId).collection(...).doc(attachmentId)
+      return {
+        doc: jest.fn((entityId: string) => ({
+          collection: jest.fn((subName: string) => {
+            expect(subName).toBe(ATTACHMENT_INDEX_SUBCOLLECTION);
+            return {
+              doc: jest.fn((attachmentId: string) => ({ id: attachmentId, entityId })),
+            };
+          }),
+        })),
+      };
+    });
+
+    const batchMock = jest.fn(() => ({
+      delete: batchDeleteMock,
+      commit: batchCommitMock,
+    }));
+
+    return { collection: collectionMock, batch: batchMock } as unknown as import("firebase-admin/firestore").Firestore;
+  }
+
+  // Scenario 1/2: il documento attachments/{attachmentId} viene rimosso
+  it("deletes the attachment document from the top-level collection", async () => {
+    const db = buildDbMock();
+
+    await deleteAttachmentRecord(db, "deviceRequests", "att-1", "request-42");
+
+    expect(batchDeleteMock).toHaveBeenCalledWith({ id: "att-1" });
+  });
+
+  // Scenario 1/2: l'entry indice sull'entità proprietaria viene rimossa
+  it("deletes the index entry under the owning entity's subcollection", async () => {
+    const db = buildDbMock();
+
+    await deleteAttachmentRecord(db, "deviceRequests", "att-1", "request-42");
+
+    expect(batchDeleteMock).toHaveBeenCalledWith({ id: "att-1", entityId: "request-42" });
+  });
+
+  it("deletes both documents in the same atomic batch", async () => {
+    const db = buildDbMock();
+
+    await deleteAttachmentRecord(db, "deviceRequests", "att-1", "request-42");
+
+    expect(batchDeleteMock).toHaveBeenCalledTimes(2);
+    expect(batchCommitMock).toHaveBeenCalledTimes(1);
   });
 });
 

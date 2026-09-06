@@ -46,11 +46,21 @@ export interface AttachmentDocumentFields {
 }
 
 /** Documento completo così com'è persistito in `attachments/{attachmentId}`
- * (campi di `AttachmentDocumentFields` più `id` e `createdAt`), la forma
- * restituita da `listAttachmentsForEntity` (EA-164). */
+ * (campi di `AttachmentDocumentFields` più `id`, `createdAt` e
+ * `entityCollectionPath`), la forma restituita da `listAttachmentsForEntity`
+ * (EA-164) e `getAttachmentById` (EA-165). */
 export interface AttachmentRecord extends AttachmentDocumentFields {
   id: string;
   createdAt: unknown;
+  /** Nome della collection di primo livello dell'entità proprietaria (es.
+   * "deviceRequests"), persistito al momento della creazione da
+   * `createAttachment` (F-42): a differenza degli altri parametri opachi di
+   * questo modulo, questo campo DEVE essere letto dal documento già risolto
+   * invece che ri-accettato dal chiamante per un'operazione distruttiva come
+   * `deleteAttachmentRecord` — altrimenti un valore sbagliato produce un
+   * batch.delete silenzioso su un path indice inesistente, senza errore,
+   * lasciando l'entry reale orfana. */
+  entityCollectionPath: string;
 }
 
 /**
@@ -124,6 +134,11 @@ export function newAttachmentId(db: Firestore): string {
  * riusato come id del documento invece di generarne uno nuovo — necessario
  * a `uploadAttachment` per allineare id del documento e id già incorporato
  * in `input.storagePath`.
+ *
+ * `entityCollectionPath` viene anche persistito sul documento
+ * `attachments/{attachmentId}` stesso (F-42): necessario a
+ * `deleteAttachmentRecord` per non dover ri-accettare lo stesso valore da un
+ * parametro indipendente del chiamante in un'operazione distruttiva.
  */
 export async function createAttachment(
   db: Firestore,
@@ -146,6 +161,7 @@ export async function createAttachment(
   batch.set(attachmentRef, {
     id: attachmentRef.id,
     ...fields,
+    entityCollectionPath,
     createdAt: FieldValue.serverTimestamp(),
   });
   batch.set(indexRef, {
@@ -217,6 +233,46 @@ export async function updateAttachmentFields(
   }
 
   await db.collection(ATTACHMENTS_COLLECTION).doc(attachmentId).update(fields);
+}
+
+/**
+ * Elimina l'allegato dai suoi due artefatti Firestore (EA-167): il documento
+ * `attachments/{attachmentId}` nel catalogo di primo livello e l'entry
+ * indice in `{entityCollectionPath}/{entityId}/attachments/{attachmentId}`,
+ * nella stessa scrittura atomica (`batch.delete`, simmetrico a
+ * `createAttachment`).
+ *
+ * A differenza di `createAttachment`/`listAttachmentsForEntity`,
+ * `entityCollectionPath` NON va fornito da un parametro indipendente del
+ * chiamante: il chiamante (`deleteAttachment`) deve passare il valore letto
+ * dal documento già risolto via `getAttachmentById` (persistito lì da
+ * `createAttachment`, F-42). Un `entityCollectionPath` indipendente e
+ * potenzialmente disallineato renderebbe `batch.delete()` sull'entry indice
+ * un no-op silenzioso (Firestore non segnala errore eliminando un path
+ * inesistente), lasciando l'entry reale orfana in modo permanente senza che
+ * la chiamata segnali alcun problema — trovato dal panel review di EA-167.
+ *
+ * Non tocca il file fisico nel bucket: eliminazione a carico del chiamante
+ * (`deleteAttachment`), prima di questa chiamata — nessuna eliminazione
+ * reale è reversibile su nessuno dei tre artefatti (Story EA-167).
+ */
+export async function deleteAttachmentRecord(
+  db: Firestore,
+  entityCollectionPath: string,
+  attachmentId: string,
+  entityId: string
+): Promise<void> {
+  const attachmentRef = db.collection(ATTACHMENTS_COLLECTION).doc(attachmentId);
+  const indexRef = db
+    .collection(entityCollectionPath)
+    .doc(entityId)
+    .collection(ATTACHMENT_INDEX_SUBCOLLECTION)
+    .doc(attachmentId);
+
+  const batch = db.batch();
+  batch.delete(attachmentRef);
+  batch.delete(indexRef);
+  await batch.commit();
 }
 
 /**
