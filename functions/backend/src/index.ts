@@ -44,5 +44,6 @@ export { uploadAttachment } from "./attachments/uploadAttachment";
 export { listAttachments } from "./attachments/listAttachments";
 export { downloadAttachment } from "./attachments/downloadAttachment";
 export { updateAttachmentDescription } from "./attachments/updateAttachmentDescription";
+export { deleteAttachment } from "./attachments/deleteAttachment";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
