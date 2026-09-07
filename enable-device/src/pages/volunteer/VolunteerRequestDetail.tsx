@@ -11,8 +11,10 @@ import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
+import { TabView, TabPanel } from "primereact/tabview";
 import RequestTimeline from "../../components/timeline/RequestTimeline";
 import DeviceRequestChecklists from "../../components/checklist/DeviceRequestChecklists";
+import DeviceRequestAttachments from "../../components/attachments/DeviceRequestAttachments";
 import { REQUEST_STATUSES, getPublicStatusGroup } from "../../helpers/requestStatus";
 
 export default function VolunteerRequestDetail() {
@@ -123,6 +125,13 @@ export default function VolunteerRequestDetail() {
         style={{ marginBottom: 16 }}
       />
       <h2>Dettaglio Richiesta</h2>
+
+      {/* EA-168: refactor a tab, stesso principio di RequestDetail (admin):
+          renderActiveOnly={false} necessario perché il contenuto di tutte
+          le tab sia presente nel DOM da subito (stesso motivo già
+          documentato per DeviceRequestChecklists/RequestDetail). */}
+      <TabView renderActiveOnly={false}>
+        <TabPanel header="Dati generali">
 
       {/* Dettagli principali */}
       <div className="p-panel p-component" style={{ marginBottom: 24 }}>
@@ -235,19 +244,6 @@ export default function VolunteerRequestDetail() {
         </div>
       )}
 
-      {/* Checklist di fabbricazione (Organizer) */}
-      <div className="p-panel p-component" style={{ marginBottom: 24 }}>
-        <div className="p-panel-header"><span>Checklist di fabbricazione</span></div>
-        <div className="p-panel-content">
-          <DeviceRequestChecklists
-            requestId={id as string}
-            checklistIds={Array.isArray(request.checklistIds) ? request.checklistIds : []}
-            deviceType={request.deviceType}
-            onChecklistsChanged={loadData}
-          />
-        </div>
-      </div>
-
       {/* Ultimo evento */}
       <Panel
         header={
@@ -268,6 +264,38 @@ export default function VolunteerRequestDetail() {
           <div>Nessun evento disponibile.</div>
         )}
       </Panel>
+
+      {/* Timeline */}
+      <Panel
+        header="Cronologia richiesta"
+        toggleable
+        collapsed={!timelineOpen}
+        onToggle={() => setTimelineOpen(!timelineOpen)}
+      >
+        <RequestTimeline events={events} />
+      </Panel>
+
+        </TabPanel>
+        <TabPanel header="Fabbricazione">
+
+      {/* Checklist di fabbricazione (Organizer) */}
+      <div className="p-panel p-component" style={{ marginBottom: 24 }}>
+        <div className="p-panel-header"><span>Checklist di fabbricazione</span></div>
+        <div className="p-panel-content">
+          <DeviceRequestChecklists
+            requestId={id as string}
+            checklistIds={Array.isArray(request.checklistIds) ? request.checklistIds : []}
+            deviceType={request.deviceType}
+            onChecklistsChanged={loadData}
+          />
+        </div>
+      </div>
+
+        </TabPanel>
+        <TabPanel header="Allegati">
+          <DeviceRequestAttachments requestId={id as string} />
+        </TabPanel>
+      </TabView>
 
       {/* Dialog cambio stato */}
       <Dialog
@@ -326,15 +354,6 @@ export default function VolunteerRequestDetail() {
         </div>
       </Dialog>
 
-      {/* Timeline */}
-      <Panel
-        header="Cronologia richiesta"
-        toggleable
-        collapsed={!timelineOpen}
-        onToggle={() => setTimelineOpen(!timelineOpen)}
-      >
-        <RequestTimeline events={events} />
-      </Panel>
     </div>
   );
 }

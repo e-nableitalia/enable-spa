@@ -45,5 +45,10 @@ export { listAttachments } from "./attachments/listAttachments";
 export { downloadAttachment } from "./attachments/downloadAttachment";
 export { updateAttachmentDescription } from "./attachments/updateAttachmentDescription";
 export { deleteAttachment } from "./attachments/deleteAttachment";
+export { uploadDeviceRequestAttachment } from "./device-requests/uploadDeviceRequestAttachment";
+export { listDeviceRequestAttachments } from "./device-requests/listDeviceRequestAttachments";
+export { downloadDeviceRequestAttachment } from "./device-requests/downloadDeviceRequestAttachment";
+export { updateDeviceRequestAttachmentDescription } from "./device-requests/updateDeviceRequestAttachmentDescription";
+export { deleteDeviceRequestAttachment } from "./device-requests/deleteDeviceRequestAttachment";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());

@@ -191,7 +191,18 @@ describe("createAttachment", () => {
       storagePath: "attachments/deviceRequest/request-42/att-1/fattura.pdf",
       size: 1024,
       createdAt: SERVER_TIMESTAMP_SENTINEL,
+      updatedAt: SERVER_TIMESTAMP_SENTINEL,
     });
+  });
+
+  // EA-168: updatedAt valorizzato anche alla creazione (uguale a createdAt)
+  it("initializes updatedAt equal to createdAt on the attachment document", async () => {
+    const db = buildDbMock();
+
+    const { attachmentId } = await createAttachment(db, "deviceRequests", baseInput());
+
+    const [, attachmentDocument] = attachmentDocSetCall(attachmentId);
+    expect(attachmentDocument).toMatchObject({ updatedAt: SERVER_TIMESTAMP_SENTINEL });
   });
 
   // F-42: entityCollectionPath persistito, necessario a deleteAttachmentRecord
@@ -307,7 +318,10 @@ describe("updateAttachmentFields", () => {
 
     await updateAttachmentFields(db, "att-1", { description: "Nuova descrizione" });
 
-    expect(updateMock).toHaveBeenCalledWith({ description: "Nuova descrizione" });
+    expect(updateMock).toHaveBeenCalledWith({
+      description: "Nuova descrizione",
+      updatedAt: SERVER_TIMESTAMP_SENTINEL,
+    });
   });
 
   it("also updates notes when explicitly provided", async () => {
@@ -315,7 +329,21 @@ describe("updateAttachmentFields", () => {
 
     await updateAttachmentFields(db, "att-1", { description: "Nuova descrizione", notes: "Nuova nota" });
 
-    expect(updateMock).toHaveBeenCalledWith({ description: "Nuova descrizione", notes: "Nuova nota" });
+    expect(updateMock).toHaveBeenCalledWith({
+      description: "Nuova descrizione",
+      notes: "Nuova nota",
+      updatedAt: SERVER_TIMESTAMP_SENTINEL,
+    });
+  });
+
+  // EA-168: updatedAt aggiornato ad ogni modifica di descrizione/note
+  it("refreshes updatedAt on every update", async () => {
+    const db = buildDbMock();
+
+    await updateAttachmentFields(db, "att-1", { description: "Nuova descrizione" });
+
+    const [fields] = updateMock.mock.calls[0];
+    expect(fields.updatedAt).toEqual(SERVER_TIMESTAMP_SENTINEL);
   });
 
   it("leaves notes untouched when not provided", async () => {
