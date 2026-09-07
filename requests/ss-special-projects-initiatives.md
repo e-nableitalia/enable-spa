@@ -121,9 +121,10 @@ il dominio "projects"), non progettarlo da zero.
   se non eventuale generalizzazione già prevista dal design)
 - `attachments` (consumer, secondo dominio a integrare la capability di
   base dopo `device-requests`, stesso pattern EA-168)
-- Nuovo dominio candidato: **`projects`** (non ancora nel
-  domain-manifest) — entità progetto/iniziativa/evento, stato,
-  RBAC di creazione, cronologia/note, viste filtrate.
+- Nuovo dominio candidato: **`special-projects-initiatives`** (registrato
+  nel domain-manifest da `solution-decide`) — entità progetto/iniziativa/
+  evento (nome interno "project", collection `projects/{projectId}`),
+  stato, RBAC di creazione, cronologia/note, viste filtrate.
 
 ## Origine
 

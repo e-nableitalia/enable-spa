@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T16:25:35.655Z",
+  "generated_at": "2026-09-07T09:56:47.420Z",
   "repo_url": "https://github.com/e-nableitalia/enable-spa",
   "domains": [
     {
@@ -95,6 +95,15 @@
       "name": "Allegati",
       "paths": [],
       "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership.",
+      "status": "draft",
+      "depth": null,
+      "origin": "planned"
+    },
+    {
+      "id": "special-projects-initiatives",
+      "name": "Progetti Speciali e Iniziative",
+      "paths": [],
+      "summary": "Entita' (nome interno \"project\", collection projects/{projectId}) per tracciare progetti tecnici ed eventi (projectType: progetto/iniziativa/evento, estensibile; stato a 5 valori new/active/standby/archived/closed con restrizioni di modifica in standby/archived/closed; creazione admin-only, assegnazione item aperta anche ai volontari) con una o piu' todo-list etichettate collegate tramite il core Organizer gia' esistente, integrazione con la capability di base Allegati prevista dal design.",
       "status": "draft",
       "depth": null,
       "origin": "planned"
