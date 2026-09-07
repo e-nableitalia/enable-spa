@@ -1,0 +1,153 @@
+{
+  "id": "ss-special-projects-initiatives",
+  "status": "draft",
+  "request_ref": "requests/ss-special-projects-initiatives.md",
+  "problem_statement": "Oggi non esiste alcun concetto di 'progetto speciale' o 'iniziativa' nel codice ne' in docs/ (verificato: nessun file menziona un'entita' simile). Esistono pero' lavori reali dell'associazione — progetti tecnici (es. 'device multifunzione': cicli di sviluppo/integrazione/test) ed eventi (es. Maker Faire: preparazione, allestimento, svolgimento) — che non sono una `deviceRequest` ma richiedono comunque liste di attivita' assegnabili e tracciabili nel tempo, esattamente il tipo di capability che `process-organizer-core` (Epic EA-3, Done) gia' offre in modo generico e dichiara esplicitamente di voler servire ('pensato per essere riusato oltre il caso device, es. organizzazione eventi/workshop in futuro'). Il problema non e' quindi 'quale motore di checklist usare' (gia' risolto e riusabile cosi' com'e', nessun cambiamento al core previsto) ma: come rappresentare l'entita' 'iniziativa' che possiede quelle checklist, dato che l'operatore ha gia' escluso (decisione 2026-09-06) che basti taggare una checklist esistente — serve un documento/entita' a se stante. L'operatore ha gia' confermato diversi vincoli di modellazione (entita' propria; progetti tecnici ed eventi sono lo stesso concetto di fondo ma con tipi distinti per viste filtrate separate; macro-stato almeno attivo/chiuso; creazione riservata all'admin), quindi questo studio non li ridiscute. Cio' che resta effettivamente aperto, e che la richiesta stessa pone come domanda esplicita, e' la cardinalita'/struttura del legame fra un'iniziativa e le sue checklist operative: un progetto tecnico con cicli di sviluppo/integrazione/test suggerisce piu' checklist nel tempo, ma non e' confermato se serva davvero un modello 1:N o se un'unica checklist con item raggruppati per fase sia sufficiente. Questo studio esplora le architetture alternative per questo legame (e le conseguenze RBAC/naming che ne derivano), senza deciderlo.",
+  "constraints": [
+    "Nessuna entita' 'progetto speciale/iniziativa' esiste oggi in `docs/` ne' nel codice (verificato via ricerca full-repo): qualunque opzione la introduce da zero come nuovo dominio candidato, non ancora nel domain-manifest.",
+    "`process-organizer-core` (functions/backend/src/organizer/**) e' un motore di checklist generico e stabile (Epic EA-3, Done): nessuna opzione di questo studio richiede o propone modifiche al core. Il core espone gia' `createChecklist`, `createChecklistFromTemplate`, `cloneChecklist`, `addChecklistItem`/`updateChecklistItem`/`removeChecklistItem`, `getChecklistCompleteness`, e un catalogo template filtrabile per `category` (stringa opaca per il core).",
+    "Precedente diretto e recentissimo nello stesso repo per lo stesso tipo di decisione: lo studio 'decided' `ss-multi-checklist-per-device` ha gia' risolto la stessa domanda di cardinalita' (1 vs N checklist per entita' proprietaria) per il dominio `device-requests`, scegliendo un campo array `checklistIds: string[]` sul documento proprietario (Option A la', estensione diretta del pattern gia' esistente `assignedVolunteers`) invece di una sottocollezione con metadati per-checklist (Option B la', scartata li' non per difetto ma per non introdurre un'indirezione aggiuntiva senza necessita' confermata), segnalando pero' esplicitamente come con residuo l'assenza di un posto per un'etichetta per-checklist, risolvibile in futuro passando a un array di oggetti `{checklistId, label}`. Questo studio tratta questo precedente come vincolo di coerenza da confrontare esplicitamente, non da copiare automaticamente: il caso iniziative e' diverso perche' la richiesta anticipa fin da subito (non come ipotesi futura) il bisogno di etichettare fasi diverse (sviluppo/integrazione/test, o preparazione/allestimento/svolgimento).",
+    "Il campo `category` su checklist/template e' gia' oggi un identificatore opaco che il core non interpreta mai, usato dal solo consumer attuale (`device-requests`, valore = devicetype) e anche come filtro di scope da `listMyChecklistItems` (todo-list personale del volontario, Epic EA-134/EA-142, gia' Done): qualunque opzione che istanzia checklist per un'iniziativa valorizza necessariamente questo campo, e quel valore decide anche — come effetto collaterale gia' esistente nel comportamento del sistema, non una scelta di questo studio — se e come gli item di un'iniziativa compaiono nella todo-list personale dei volontari assegnati.",
+    "Punto di attenzione gia' sollevato dalla richiesta stessa: il 'tipo di iniziativa' (progetto vs evento) richiesto qui rischia di sovrapporsi nel nome, ma non nel significato, al `category` gia' esistente sul core. Le opzioni di questo studio devono quindi usare un nome di campo distinto da `category` per il tipo di iniziativa (es. non chiamarlo `category`), per non generare confusione fra un identificatore opaco al core (checklist/template) e un enum applicativo dell'entita' iniziativa.",
+    "Decisioni gia' confermate dall'operatore (2026-09-06), non rinegoziabili in questo studio: (1) l'iniziativa e' un'entita'/documento a se stante, non solo una checklist taggata; (2) progetti tecnici ed eventi sono lo stesso concetto di fondo ma vanno trattati con tipi distinti per abilitare viste filtrate separate (lista eventi, lista progetti); (3) ogni iniziativa ha un macro-stato, almeno 'attivo'/'chiuso'; (4) solo un admin puo' creare un'iniziativa.",
+    "La capability di allegati di base e' ora realmente live e mergiata (Epic EA-161, Story EA-162->167: Cloud Storage nativo + signed URL, RBAC staff-only con ownership), e il dominio `attachments` nel manifest gia' dichiara esplicitamente 'progetti speciali/iniziative' come consumer futuro. Il primo pattern di integrazione in un dominio consumer esiste gia' come esempio concreto (Story EA-168, layer `device-requests`: modulo RBAC dedicato + wrapper Cloud Function che delegano via `.run()` alle funzioni generiche di `attachments`). Qualunque opzione di questo studio deve restare compatibile con la futura replica di questo stesso pattern per il dominio iniziative, senza gia' impegnarsi sulla sua implementazione: l'integrazione allegati resta un passo successivo separato, fuori dallo scope di questo studio.",
+    "Convenzioni di progetto trasversali applicabili a qualunque opzione: ogni nuova Cloud Function deve loggare inizio/fine/errori in `securityLogs` via `logSecurityEvent`; RBAC in codice TypeScript nella Cloud Function (pattern gia' usato ovunque nel backend), non in regole dichiarative.",
+    "Precedente RBAC 'admin su tutto, volontario solo su proprie risorse' gia' esistente e replicato piu' volte nel repo (`shipments/deleteShipmentRequest`, `device/changeStatus`, il layer `device-requests` checklist): rilevante come riferimento se/quando si decidera' l'RBAC di partecipazione/assegnazione item sull'iniziativa, ma quella decisione specifica (chi puo' essere assegnatario di un item — solo admin o anche volontari) resta esplicitamente fuori scope qui, perche' la richiesta la pone come domanda aperta non ancora confermata dall'operatore, distinta dall'RBAC di creazione (quello si', gia' confermato admin-only)."
+  ],
+  "options": [
+    {
+      "id": "opt-a-single-checklist",
+      "name": "Iniziativa con un'unica checklist collegata (1:1), fasi rappresentate come raggruppamento di item nella stessa checklist",
+      "summary": "Nuova collection Firestore di primo livello `initiatives/{initiativeId}` con campi `initiativeType` ('progetto'|'evento'), `status` ('attivo'|'chiuso'), `title`, `description`, `createdBy`, `createdAt`. Al momento della creazione (solo admin) si istanzia una singola checklist tramite il core Organizer (`createChecklist` o `createChecklistFromTemplate`, con `category` valorizzata a un valore dedicato alle iniziative, distinto per `initiativeType`) e si salva il suo id in un campo singolare `checklistId`, esattamente come il pattern originario — poi superato per i device — di un solo checklistId per entita' proprietaria. Fasi diverse di un progetto tecnico (sviluppo/integrazione/test) o di un evento (preparazione/allestimento/durante) si rappresentano come item della stessa checklist, distinti per titolo/prefisso convenzionale (es. '[Sviluppo] ...') o per note, senza alcun supporto strutturale dedicato a raggruppare per fase.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core"],
+        "new_domains_proposed": [
+          {
+            "id": "special-projects-initiatives",
+            "name": "Progetti Speciali e Iniziative",
+            "summary": "Entita' per tracciare progetti tecnici ed eventi (macro-stato attivo/chiuso, tipo progetto/evento, creazione admin-only) con todo-list collegate tramite il core Organizer gia' esistente."
+          }
+        ],
+        "new_capabilities_sketch": [
+          "Cloud Function createInitiative (admin-only) — crea il documento e la checklist collegata",
+          "Cloud Function updateInitiativeStatus / getInitiative / listInitiatives (con filtro per initiativeType per le viste separate progetti/eventi)",
+          "Riuso diretto delle Cloud Function esistenti del core Organizer per item/checklist, senza layer di risoluzione requestId->checklistId aggiuntivo oltre alla lettura del singolo campo checklistId"
+        ]
+      },
+      "pros": [
+        "Modello dati piu' semplice possibile: un solo campo di collegamento, nessuna struttura aggiuntiva da progettare/testare oltre a quanto il core Organizer offre gia'.",
+        "Effort minimo: e' l'estensione piu' diretta e gia' vista nel repo (stesso pattern originario, pre-refactor, usato per `device-requests` prima che emergesse il bisogno di N checklist).",
+        "Nessuna nuova capability di RBAC/CRUD da inventare oltre a quella dell'iniziativa stessa: niente da costruire per gestire un elenco di checklist collegate."
+      ],
+      "cons": [
+        "Rischia di riprodurre in un dominio nuovo lo stesso limite che questo stesso repo ha gia' identificato come insufficiente per un caso analogo: lo studio 'decided' `ss-multi-checklist-per-device` esiste proprio perche' il modello 1:1 checklistId si e' rivelato incapace di rappresentare checklist parallele con owner/scopo diversi per `device-requests`. La richiesta descrive esplicitamente 'cicli di sviluppo, integrazione e test' per i progetti tecnici — lo stesso tipo di caso d'uso.",
+        "Raggruppare le fasi per convenzione di titolo/nota dentro un'unica checklist non da' alcuna garanzia strutturale (nessun filtro/vista per fase, nessuna possibilita' di assegnare owner o scadenze diverse per fase) e sposta l'onere di disciplina sull'utente finale, senza alcun controllo applicativo.",
+        "Se in seguito si confermasse il bisogno di checklist multiple realmente indipendenti, la migrazione da campo singolare a struttura multi-checklist tocca sia lo schema dati sia ogni Cloud Function/vista che oggi assumerebbe `checklistId` singolare — stesso tipo di refactor breaking gia' documentato per il caso device."
+      ],
+      "risks": [
+        "L'uso reale (soprattutto per progetti tecnici con fasi indipendenti) potrebbe rivelare rapidamente il limite gia' visto altrove nello stesso repo, rendendo questa opzione una soluzione temporanea che richiede comunque il lavoro di migrazione poco dopo il rilascio."
+      ],
+      "effort_class": "S",
+      "reversibility": "high",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Il caso d'uso 'progetto tecnico' descritto dalla richiesta (cicli di sviluppo/integrazione/test) e' lo stesso tipo di scenario per cui questo repo ha gia' verificato, in un dominio analogo, che il modello 1:1 e' insufficiente — non un'ipotesi, un precedente concreto e documentato (`ss-multi-checklist-per-device`).",
+          "mitigation": "Adottare esplicitamente questa opzione solo come scelta consapevole 'MVP a effort minimo, con intento dichiarato di migrare' se il time-to-value prevale sul rischio di rework, non come soluzione definitiva presentata senza questo avvertimento."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-b-checklist-ids-array",
+      "name": "Iniziativa con piu' checklist collegate tramite array di riferimenti etichettati (coerente con il precedente gia' deciso per device-requests, esteso con label)",
+      "summary": "Stessa entita' `initiatives/{initiativeId}` di Option A (`initiativeType`, `status`, `title`, `description`, `createdBy`, `createdAt`), ma il collegamento alle checklist e' un array `checklists: {checklistId: string, label: string}[]` invece di un campo singolare. Ogni voce dell'array rappresenta una checklist indipendente del core Organizer (creata con `createChecklist`/`createChecklistFromTemplate`, `category` dedicata alle iniziative) con una propria etichetta libera scelta dall'admin al momento della creazione (es. 'Sviluppo', 'Integrazione', 'Test', o per un evento 'Allestimento', 'Durante evento'). E' l'estensione diretta del pattern `checklistIds: string[]` gia' scelto e deciso per `device-requests` nello studio `ss-multi-checklist-per-device`, con la differenza — gia' individuata come miglioria futura in quello stesso studio ma mai necessaria per il caso device — di usare oggetti con label fin dal giorno 1, dato che qui il bisogno di etichettare le fasi e' confermato dalla richiesta stessa, non solo ipotetico.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core"],
+        "new_domains_proposed": [
+          {
+            "id": "special-projects-initiatives",
+            "name": "Progetti Speciali e Iniziative",
+            "summary": "Entita' per tracciare progetti tecnici ed eventi (macro-stato attivo/chiuso, tipo progetto/evento, creazione admin-only) con una o piu' todo-list etichettate collegate tramite il core Organizer gia' esistente."
+          }
+        ],
+        "new_capabilities_sketch": [
+          "Cloud Function createInitiative (admin-only) — crea il documento, opzionalmente con la prima checklist collegata",
+          "Cloud Function addInitiativeChecklist/removeInitiativeChecklist (admin-only) — aggiunge/rimuove una voce {checklistId, label} dall'array, riusando createChecklist/createChecklistFromTemplate del core",
+          "Cloud Function updateInitiativeStatus / getInitiative / listInitiatives (filtro per initiativeType)",
+          "Layer di risoluzione initiativeId + checklistId -> RBAC, sul modello di deviceRequestChecklistAccess.ts, per ogni operazione sugli item di una specifica checklist collegata"
+        ]
+      },
+      "pros": [
+        "Coerente con una decisione architetturale gia' presa e verificata in questo stesso repo per un caso praticamente identico (device-requests): stesso pattern, stesso motivo (checklist multiple indipendenti sotto la stessa entita' proprietaria), minor rischio di dover re-imparare la stessa lezione una seconda volta.",
+        "Risolve fin da subito, senza costo aggiuntivo di migrazione, il con che lo studio `ss-multi-checklist-per-device` aveva lasciato aperto per il caso device (assenza di un posto per un'etichetta per-checklist): qui non e' un miglioramento rimandabile, e' parte della forma dati fin dall'origine.",
+        "Nessun vincolo di retrocompatibilita' da rispettare (a differenza del caso device, dove il cambio di forma del campo era un refactor breaking su 5 Cloud Function e dati gia' in produzione): essendo un dominio nuovo, questa forma dati puo' essere scelta subito senza costo di migrazione."
+      ],
+      "cons": [
+        "Piu' superficie di Cloud Function da costruire rispetto a Option A: serve gestire l'aggiunta/rimozione di voci dall'array, non solo la creazione della singola checklist al momento della creazione dell'iniziativa.",
+        "Ogni operazione sugli item richiede comunque di risolvere quale specifica checklist dell'array si intende modificare (initiativeId + checklistId), un livello di indirezione in piu' rispetto al campo singolare di Option A, anche se lo stesso pattern di risoluzione esiste gia' come precedente collaudato (deviceRequestChecklistAccess.ts)."
+      ],
+      "risks": [
+        "Se in pratica la maggior parte delle iniziative finisce per avere una sola checklist, parte della capacita' costruita (gestione array multi-voce) resta inutilizzata — costo di complessita' anticipata rispetto a un bisogno che la richiesta descrive come plausibile ma non ancora misurato su casi reali."
+      ],
+      "effort_class": "M",
+      "reversibility": "medium",
+      "critical_concerns": [
+        {
+          "severity": "low",
+          "description": "Nessun limite dichiarato alla cardinalita' dell'array `checklists`: nulla impedisce che un'iniziativa accumuli un numero elevato di checklist nel tempo senza un meccanismo di archiviazione delle fasi concluse.",
+          "mitigation": "Non serve un limite tecnico rigido in questa fase; sufficiente prevedere in UI un modo per distinguere/nascondere le checklist di fasi gia' completate (es. tramite lo stato di completezza gia' esposto da getChecklistCompleteness), senza bloccare la scrittura lato backend."
+        }
+      ],
+      "spikes": []
+    },
+    {
+      "id": "opt-c-phase-subcollection",
+      "name": "Iniziativa con sottocollezione di fasi strutturate, ciascuna con la propria checklist",
+      "summary": "Stessa entita' `initiatives/{initiativeId}` di base, ma le checklist collegate non vivono in un array embedded: ogni fase e' un documento a se' in una sottocollezione `initiatives/{initiativeId}/phases/{phaseId}` con campi propri (`label`, `checklistId`, `order`, `createdAt`, eventualmente `status` di fase indipendente dal macro-stato dell'iniziativa). Le Cloud Function CRUD (createInitiativePhase/updateInitiativePhase/deleteInitiativePhase/listInitiativePhases) gestiscono queste fasi come entita' di prima classe, ciascuna che referenzia la propria checklist del core Organizer.",
+      "domain_impact": {
+        "existing_domains_touched": ["process-organizer-core"],
+        "new_domains_proposed": [
+          {
+            "id": "special-projects-initiatives",
+            "name": "Progetti Speciali e Iniziative",
+            "summary": "Entita' per tracciare progetti tecnici ed eventi, organizzati in fasi strutturate (sottocollezione), ciascuna con una propria todo-list collegata tramite il core Organizer gia' esistente."
+          }
+        ],
+        "new_capabilities_sketch": [
+          "Cloud Function createInitiative (admin-only)",
+          "Cloud Function createInitiativePhase/updateInitiativePhase/deleteInitiativePhase/listInitiativePhases (admin-only) — CRUD della sottocollezione fasi, ciascuna che crea/referenzia una checklist del core Organizer",
+          "Cloud Function updateInitiativeStatus / getInitiative / listInitiatives (filtro per initiativeType)",
+          "Layer di risoluzione initiativeId + phaseId -> checklistId -> RBAC per ogni operazione sugli item"
+        ]
+      },
+      "pros": [
+        "Metadati per-fase pienamente strutturati (label, ordine, eventuale stato/date di fase) senza dover riusare campi impropri di un array embedded — il posto piu' ricco per rappresentare esplicitamente 'fasi' come richiesto dal caso d'uso progetto tecnico.",
+        "Sottocollezione dedicata scala meglio se in futuro servissero altri campi per fase (responsabile di fase, scadenza) senza dover riscrivere l'intero documento iniziativa ad ogni modifica (a differenza di un array embedded, dove ogni aggiunta/rimozione riscrive l'intero campo)."
+      ],
+      "cons": [
+        "Effort piu' alto delle altre due opzioni: richiede una CRUD completa e propria RBAC per le fasi, oltre a quella dell'iniziativa e a quella (invariata) del core Organizer per gli item — un livello di modellazione in piu' rispetto a Option B, per un bisogno (metadati ricchi di fase) che la richiesta non ha ancora confermato oltre alla semplice etichetta.",
+          "Ogni vista che elenca le checklist di un'iniziativa richiede ora una query aggiuntiva sulla sottocollezione invece di leggere un campo gia' embedded nel documento principale, un costo di lettura in piu' ad ogni apertura della UI.",
+        "Introduce un secondo livello di entita' (fase) in un dominio che non esiste ancora nemmeno al primo livello: rischio concreto di sovra-ingegnerizzare prima che l'uso reale confermi che una singola label per checklist (gia' coperta da Option B) sia insufficiente."
+      ],
+      "risks": [
+        "Se il bisogno reale si rivela essere solo 'un'etichetta per checklist' (coperto gia' da Option B a costo minore), l'investimento aggiuntivo in CRUD/RBAC di fase resta complessita' non ripagata."
+      ],
+      "effort_class": "L",
+      "reversibility": "medium",
+      "critical_concerns": [
+        {
+          "severity": "medium",
+          "description": "Nessun elemento della richiesta conferma il bisogno di metadati di fase oltre a un'etichetta testuale (la richiesta parla di 'fasi' solo descrittivamente, mai di scadenze/responsabili per fase): questa opzione costruisce una capability piu' ricca di quanto oggi verificabile come necessario.",
+          "mitigation": "Da adottare solo se l'operatore conferma esplicitamente, prima dell'implementazione, un bisogno concreto di metadati di fase oltre alla label (es. scadenze o responsabili distinti per fase) che giustifichi il costo aggiuntivo rispetto a Option B."
+        }
+      ],
+      "spikes": []
+    }
+  ],
+  "recommendation": {
+    "option_id": "opt-b-checklist-ids-array",
+    "rationale": "Scarto Option A nonostante il suo effort minimo perche' il repo contiene gia' un precedente diretto e concreto (non ipotetico) dello stesso errore: lo studio deciso `ss-multi-checklist-per-device` documenta come il modello 1:1 checklistId si sia rivelato insufficiente per lo stesso tipo di caso d'uso (checklist multiple indipendenti sotto la stessa entita') che la richiesta descrive qui esplicitamente per i progetti tecnici ('cicli di sviluppo, integrazione e test'). Adottare di nuovo quel modello per un dominio nuovo, sapendo gia' che verra' probabilmente superato, sposterebbe solo nel tempo lo stesso costo di migrazione gia' pagato una volta per device-requests, senza un motivo di urgenza dichiarato (nessuna scadenza segnalata dalla richiesta che giustifichi il rischio). Tra Option B e Option C la differenza e' concreta ma il bisogno che giustificherebbe Option C — metadati di fase oltre a una semplice etichetta (scadenze, responsabili distinti per fase) — non e' confermato da nessun elemento della richiesta, che parla di fasi solo descrittivamente. Option B copre gia' il bisogno di etichettatura per-checklist che la richiesta rende esplicito fin da subito (a differenza del caso device, dove restava un miglioramento futuro non ancora necessario), a un effort minore e senza introdurre un secondo livello di entita' (fase) in un dominio che non esiste ancora nemmeno al primo livello (iniziativa). Raccomando quindi Option B, con la forma dati `checklists: {checklistId, label}[]` fin dal giorno 1 (non un array di stringhe nude), proprio perche' qui — a differenza del caso device — il bisogno di etichetta e' gia' noto e non costa nulla di piu' includerlo fin dall'inizio, essendo un dominio senza dati o consumer preesistenti da migrare. Punti aperti da decidere esplicitamente al gate, non coperti dalla scelta fra le tre opzioni: (1) il nome esatto del campo tipo iniziativa (proposto qui `initiativeType` per evitare la collisione di significato con il `category` opaco del core Organizer segnalata dalla richiesta stessa) e i suoi valori ammessi oltre a 'progetto'/'evento'; (2) RBAC di partecipazione/assegnazione item — solo admin o anche volontari possono essere assegnatari, distinta dall'RBAC di creazione (gia' confermata admin-only) — non affrontata da questo studio perche' la richiesta la pone come domanda esplicitamente aperta; (3) se il comportamento 'gratuito' per cui un volontario assegnato a un item di iniziativa comparirebbe gia' oggi nella sua todo-list personale (listMyChecklistItems, se lo scope/category e' valorizzato in modo coerente) e' desiderato cosi' com'e' o va escluso esplicitamente; (4) collocazione UI delle viste filtrate (pagine admin nuove dedicate vs integrazione in viste esistenti); (5) se tracciare owner/creatore dell'iniziativa oltre a `createdBy` gia' incluso nella forma dati proposta qui."
+  },
+  "decision": null
+}
