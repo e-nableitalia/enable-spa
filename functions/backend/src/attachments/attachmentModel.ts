@@ -52,6 +52,11 @@ export interface AttachmentDocumentFields {
 export interface AttachmentRecord extends AttachmentDocumentFields {
   id: string;
   createdAt: unknown;
+  /** Data dell'ultima modifica (EA-168): uguale a `createdAt` al momento
+   * della creazione, aggiornata da `updateAttachmentFields` ad ogni
+   * modifica di descrizione/note. Campo generico della capability di
+   * base, non specifico di alcun dominio consumer. */
+  updatedAt: unknown;
   /** Nome della collection di primo livello dell'entità proprietaria (es.
    * "deviceRequests"), persistito al momento della creazione da
    * `createAttachment` (F-42): a differenza degli altri parametri opachi di
@@ -163,6 +168,7 @@ export async function createAttachment(
     ...fields,
     entityCollectionPath,
     createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
   batch.set(indexRef, {
     attachmentId: attachmentRef.id,
@@ -227,7 +233,10 @@ export async function updateAttachmentFields(
     throw new Error("description is required");
   }
 
-  const fields: Record<string, unknown> = { description: input.description };
+  const fields: Record<string, unknown> = {
+    description: input.description,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
   if (input.notes !== undefined) {
     fields.notes = input.notes;
   }
