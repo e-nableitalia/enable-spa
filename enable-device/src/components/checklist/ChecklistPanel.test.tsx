@@ -255,7 +255,11 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
     const titleInput = within(row).getByDisplayValue("Verifica batteria");
     await user.clear(titleInput);
     await user.type(titleInput, "Verifica batteria (aggiornato)");
-    expect(within(row).getByDisplayValue("Verifica batteria (aggiornato)")).toBeInTheDocument();
+    // findBy invece di getBy: sotto carico (worktree di merge-preview del
+    // gate close-story) il re-render del controlled input può ritardare
+    // di qualche istante rispetto alla risoluzione di user.type — un
+    // assert sincrono può quindi correre più veloce del render effettivo.
+    expect(await within(row).findByDisplayValue("Verifica batteria (aggiornato)")).toBeInTheDocument();
 
     // Nessuna chiamata immediata: il salvataggio è debounced.
     expect(callable).not.toHaveBeenCalledWith("updateDeviceRequestChecklistItem", expect.anything());

@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { initializeApp } from "firebase-admin/app";
 import { logSecurityEvent } from "../security/securityLog";
+import { EMAIL_TEMPLATE_IDS } from "../emailTemplates/registry";
 
 initializeApp();
 
@@ -68,7 +69,7 @@ export const activateVolunteers = onCall(
         try {
           const emailDoc = {
             to: email,
-            template: { name: "attivazioneVolontario", data: {} },
+            template: { name: EMAIL_TEMPLATE_IDS.volunteerActivation, data: {} },
             createdAt: Timestamp.now()
           };
           await db.collection("mail").add(emailDoc);

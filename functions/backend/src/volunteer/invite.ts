@@ -6,6 +6,7 @@ import { initializeApp } from "firebase-admin/app";
 // import { sendEmail } from "../utils/email";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
+import { EMAIL_TEMPLATE_IDS } from "../emailTemplates/registry";
 
 initializeApp();
 
@@ -75,7 +76,7 @@ export const inviteVolunteer = onCall({ region: REGION }, async (req) => {
         await db.collection("mail").add({
           to: [contact.email],
           template: {
-            name: "inviteVolunteer",
+            name: EMAIL_TEMPLATE_IDS.volunteerInvite,
             data: {
               firstName: contact.firstName || "",
               lastName: contact.lastName || "",

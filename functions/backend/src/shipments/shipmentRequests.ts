@@ -2,6 +2,7 @@ import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {getFirestore, FieldValue} from "firebase-admin/firestore";
 import {logSecurityEvent} from "../security/securityLog";
 import {getInvokeId} from "../utils/invoke";
+import {EMAIL_TEMPLATE_IDS} from "../emailTemplates/registry";
 
 export const createShipmentRequest = onCall(
   {region: "europe-west1"},
@@ -154,7 +155,7 @@ export const approveShipmentRequest = onCall(
         const emailDoc = {
           to: [ data.email, "spedizione@e-nableitalia.it" ],
           template: {
-            name: "shipmentRequest",
+            name: EMAIL_TEMPLATE_IDS.shipmentRequest,
             data: emailData,
           },
           createdAt: FieldValue.serverTimestamp(),
