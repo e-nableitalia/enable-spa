@@ -6,6 +6,7 @@ import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import { sendEmailToDeviceAdmins } from "../utils/email";
 import { sendTelegramMessage } from "../utils/telegram";
+import { EMAIL_TEMPLATE_IDS } from "../emailTemplates/registry";
 
 const REGION = "europe-west1";
 
@@ -198,7 +199,7 @@ export const createDeviceRequest = onCall(
         const emailDoc = {
           to: data.email,
           template: {
-            name: "confermaRicezione",
+            name: EMAIL_TEMPLATE_IDS.deviceRequestConfirmation,
             data: {
               firstName: data.firstName,
               lastName: data.lastName
