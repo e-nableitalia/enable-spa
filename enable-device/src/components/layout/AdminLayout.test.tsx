@@ -88,7 +88,7 @@ describe("AdminLayout - voce di menu 'To Do List' (riuso di MyChecklistItems gia
   });
 });
 
-describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuovo (F-33, migrazione EA-152 completata)", () => {
+describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuovo (F-33, migrazione EA-152 completata); pagina svuotata in vista di 'Super Admin'", () => {
   it("la voce non compare nel menu 'Richieste', ma la rotta resta comunque raggiungibile via URL diretto", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/dashboard"]}>
@@ -109,7 +109,7 @@ describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuo
     expect(screen.queryByRole("treeitem", { name: "Manutenzione (Import CSV)" })).not.toBeInTheDocument();
   });
 
-  it("la rotta /admin/requests/maintenance resta funzionante via URL diretto", async () => {
+  it("la rotta /admin/requests/maintenance resta funzionante via URL diretto (ora pagina 'Super Admin' svuotata)", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/requests/maintenance"]}>
         <Routes>
@@ -118,7 +118,7 @@ describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuo
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Manutenzione richieste - Import CSV")).toBeInTheDocument();
+    expect(await screen.findByText("Super Admin")).toBeInTheDocument();
   });
 });
 

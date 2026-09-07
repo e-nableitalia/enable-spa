@@ -62,5 +62,7 @@ export { removeProjectChecklistItem } from "./projects/removeProjectChecklistIte
 export { getProjectChecklist } from "./projects/getProjectChecklist";
 export { getProjectChecklistCompleteness } from "./projects/getProjectChecklistCompleteness";
 export { listAssignableProjectUsers } from "./projects/listAssignableProjectUsers";
+export { deployEmailTemplates } from "./emailTemplates/deployEmailTemplates";
+export { triggerFirestoreBackup } from "./backup/triggerFirestoreBackup";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());

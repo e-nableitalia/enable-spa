@@ -2,24 +2,9 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { logSecurityEvent } from "../security/securityLog";
+import { EMAIL_TEMPLATE_IDS } from "../emailTemplates/registry";
 
 const REGION = "europe-west1";
-
-/**
- * Id del documento in `emailTemplates` referenziato da `template.name` sul
- * documento scritto in `mail` (meccanismo nativo a template dell'estensione
- * Trigger Email `firestore-send-email`). Il documento stesso NON è creato
- * da questo codice: `emailTemplates` vive solo sul progetto Firebase live e
- * non ha infrastruttura di seed/migrazione in questo repo — va creato
- * manualmente con questo id esatto (vedi docs/FINDINGS.md F-36), con
- * placeholder per le variabili elencate sotto in `data`.
- *
- * Variabili attese in `data`:
- * - `recipientName`: destinatario del device (`deviceRequests.recipient`,
- *   stringa vuota se non ancora valorizzato).
- * - `requestNumber`: numero pratica (`deviceRequests.requestNumber`).
- */
-const DOCUMENTS_EMAIL_TEMPLATE_ID = "device-request-documents-transmission";
 
 /**
  * Cloud Function callable del layer device-requests: invia alla famiglia,
@@ -105,7 +90,7 @@ export const sendDocumentsEmail = onCall(
         tx.set(mailRef, {
           to: [email],
           template: {
-            name: DOCUMENTS_EMAIL_TEMPLATE_ID,
+            name: EMAIL_TEMPLATE_IDS.deviceRequestDocumentsTransmission,
             data: {
               recipientName: requestData.recipient ?? "",
               requestNumber: requestData.requestNumber ?? "",
