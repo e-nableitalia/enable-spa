@@ -93,20 +93,28 @@
     {
       "id": "attachments",
       "name": "Allegati",
-      "paths": [],
-      "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership.",
-      "status": "draft",
-      "depth": null,
-      "origin": "planned"
+      "paths": [
+        "functions/backend/src/attachments/**",
+        "enable-device/src/components/attachments/**"
+      ],
+      "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello, con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership. Cloud Storage nativo con signed URL (Epic EA-161, Done). Integrata nel dominio device-requests (Story EA-168: wrapper dedicati in functions/backend/src/device-requests/*Attachment*.ts, gia' coperti dal path esistente di quel dominio) e nel dominio special-projects-initiatives.",
+      "status": "approved",
+      "depth": "standard",
+      "origin": "discovered"
     },
     {
       "id": "special-projects-initiatives",
       "name": "Progetti Speciali e Iniziative",
-      "paths": [],
-      "summary": "Entita' (nome interno \"project\", collection projects/{projectId}) per tracciare progetti tecnici ed eventi (projectType: progetto/iniziativa/evento, estensibile; stato a 5 valori new/active/standby/archived/closed con restrizioni di modifica in standby/archived/closed; creazione admin-only, assegnazione item aperta anche ai volontari) con una o piu' todo-list etichettate collegate tramite il core Organizer gia' esistente, integrazione con la capability di base Allegati prevista dal design.",
-      "status": "draft",
-      "depth": null,
-      "origin": "planned"
+      "paths": [
+        "functions/backend/src/projects/**",
+        "enable-device/src/pages/admin/projects/**",
+        "enable-device/src/components/checklist/ProjectChecklists.tsx",
+        "enable-device/src/components/checklist/ProjectChecklistPanel.tsx"
+      ],
+      "summary": "Entita' (nome interno \"project\", collection projects/{projectId}) per tracciare progetti tecnici ed eventi (projectType: progetto/iniziativa/evento, estensibile; stato a 5 valori new/active/standby/archived/closed con restrizioni di modifica in standby/archived/closed; creazione admin-only, assegnazione item aperta anche ai volontari) con una o piu' todo-list etichettate collegate tramite il core Organizer gia' esistente (Epic EA-169, Story EA-170, Done).",
+      "status": "approved",
+      "depth": "standard",
+      "origin": "discovered"
     }
   ]
 }
