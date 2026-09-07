@@ -27,5 +27,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/setupTests.ts'],
+    // Il default di 5000ms produce timeout intermittenti sotto carico (CI,
+    // worktree di merge-preview, esecuzioni parallele della suite intera) su
+    // test che sotto esecuzione isolata passano in una frazione di quel
+    // tempo: non sono test lenti per natura, e' l'ambiente jsdom+userEvent
+    // che diventa piu' lento quando gira insieme a molti altri file.
+    testTimeout: 15000,
   },
 })

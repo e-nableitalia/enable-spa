@@ -36,6 +36,8 @@ import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
 import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
 import AdminChecklistTemplatesPage from "../../pages/admin/AdminChecklistTemplatesPage";
 import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
+import ProjectsListPage from "../../pages/admin/projects/ProjectsListPage";
+import ProjectDetail from "../../pages/admin/projects/ProjectDetail";
 import { version } from "../../../package.json";
 
 // Documenti Firestore arricchiti con sotto-dati privati/pubblici a forma
@@ -294,6 +296,11 @@ useEffect(() => {
       command: () => navigate("/admin/shipments"),
     },
     {
+      label: "Progetti speciali e iniziative",
+      icon: "pi pi-sitemap",
+      command: () => navigate("/admin/projects"),
+    },
+    {
       label: "Comunicazioni",
       icon: "pi pi-comments",
       command: () => navigate("/admin/messages"),
@@ -466,6 +473,8 @@ useEffect(() => {
             <Route path="security-logs" element={<AdminSecurityLogsPage />} />
             <Route path="stats" element={<AdminStats />} />
             <Route path="request/:id" element={<RequestDetail />} />
+            <Route path="projects" element={<ProjectsListPage />} />
+            <Route path="project/:id" element={<ProjectDetail />} />
             <Route path="dashboard" element={<AdminDashboard requests={requests}/>} />
             <Route path="*" element={<Navigate to="/admin/requests" replace />} />
           </Routes>
