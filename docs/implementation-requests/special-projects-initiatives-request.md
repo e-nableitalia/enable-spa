@@ -54,9 +54,16 @@ tempo. Due esempi concreti portati dall'operatore:
 essere costruita come capability di base della piattaforma *prima* di
 essere integrata nei domini consumer, proprio per evitare che
 l'implementazione di questa richiesta debba prevedere un proprio step
-separato per gli allegati: quando si arriverà a questa richiesta,
-l'aggancio agli allegati dovrebbe essere una semplice integrazione a una
-capability già pronta, non un lavoro da progettare da zero qui.
+separato per gli allegati. **Aggiornamento (2026-09-07)**: la capability
+di base è ora realmente implementata e mergiata (Epic EA-161, Story
+EA-162→167 — Cloud Storage nativo + signed URL, RBAC staff-only con
+ownership), e il primo pattern di integrazione in un dominio consumer
+esiste già come esempio concreto da riusare (Story EA-168, layer
+`device-requests`: modulo RBAC dedicato + wrapper Cloud Function che
+delegano via `.run()` alle funzioni generiche). Quando questa richiesta
+verrà implementata, l'aggancio agli allegati per le iniziative dovrebbe
+replicare lo stesso pattern (nuovo modulo RBAC + wrapper equivalenti per
+il dominio "iniziative"), non progettarlo da zero.
 
 ## Domande aperte per lo studio
 
