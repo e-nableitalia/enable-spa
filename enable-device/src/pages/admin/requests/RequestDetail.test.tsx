@@ -63,6 +63,18 @@ vi.mock("../../../components/checklist/DeviceRequestChecklists", () => ({
   ),
 }));
 
+// EA-168: senza questo mock, il vero DeviceRequestAttachments (montato
+// subito nella tab "Allegati" perché TabView usa renderActiveOnly={false})
+// chiamerebbe "listDeviceRequestAttachments" tramite lo stesso mock
+// `callable` condiviso da questo file — consumando silenziosamente un
+// eventuale `mockImplementationOnce` pensato per un'altra callable (es.
+// "sendDocumentsEmail"), con effetti collaterali reali sui test esistenti.
+vi.mock("../../../components/attachments/DeviceRequestAttachments", () => ({
+  default: (props: { requestId: string }) => (
+    <div data-testid="attachments" data-request-id={props.requestId} />
+  ),
+}));
+
 function setRequestDoc(data: Record<string, unknown>) {
   firestoreDocs["deviceRequests/req1"] = data;
   firestoreDocs["deviceRequests/req1/private/data"] = undefined;

@@ -34,6 +34,16 @@ vi.mock("../../components/checklist/DeviceRequestChecklists", () => ({
   ),
 }));
 
+// EA-168: stesso principio di RequestDetail.test.tsx (F-45) — evita che il
+// vero DeviceRequestAttachments (montato subito nella tab "Allegati" per
+// via di renderActiveOnly={false}) esegua chiamate reali/side-effect
+// durante test che non riguardano gli allegati.
+vi.mock("../../components/attachments/DeviceRequestAttachments", () => ({
+  default: (props: { requestId: string }) => (
+    <div data-testid="attachments" data-request-id={props.requestId} />
+  ),
+}));
+
 function setRequestDoc(data: Record<string, unknown>) {
   firestoreDocs["deviceRequests/req1"] = data;
   firestoreDocs["deviceRequests/req1/private/data"] = undefined;
