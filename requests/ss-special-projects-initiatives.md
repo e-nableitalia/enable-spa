@@ -36,17 +36,49 @@ tempo. Due esempi concreti portati dall'operatore:
 - **Evento** (es. Maker Faire, o altri eventi): attività di preparazione,
   allestimento, e durante lo svolgimento.
 
-## Decisioni confermate dall'operatore (2026-09-06)
+## Decisioni confermate dall'operatore (2026-09-06/07)
 
 - **Entità propria**: un'iniziativa non è solo "una checklist taggata" —
   serve un documento/entità a sé stante (oltre alla/e checklist
   collegate).
-- **Progetti tecnici ed eventi sono lo stesso concetto di fondo**, ma da
-  trattare con categorie/tipi distinti, per poter presentare viste
-  filtrate separate (es. lista eventi, lista progetti) invece di un
-  elenco unico indifferenziato.
-- **Stato**: ogni iniziativa ha un macro-stato, almeno "attivo"/"chiuso".
-- **RBAC di creazione**: solo admin può creare un'iniziativa.
+- **Naming interno**: l'entità si chiama internamente **"project"**
+  (`projects/{projectId}`, non "initiative") — progetti tecnici ed eventi
+  sono lo stesso concetto di fondo, distinti da un campo di
+  classificazione **`projectType`** (non `initiativeType`, per coerenza
+  col nome dell'entità). Valori iniziali: `progetto`, `iniziativa`,
+  `evento` — elenco pensato per essere esteso in futuro, non un enum
+  chiuso a 3 valori per sempre. Permette viste filtrate separate (es.
+  lista eventi, lista progetti) invece di un elenco unico
+  indifferenziato. **Nota naming**: `projectType` è un campo distinto dal
+  `category` opaco già esistente sul core Organizer (usato come scope
+  per `listMyChecklistItems`) — nessuna collisione, sono due concetti
+  diversi nonostante il rischio di confusione terminologica segnalato
+  sopra.
+- **Stato**: enum a 5 valori — `new` (appena creata), `active`,
+  `standby`, `archived`, `closed`. Restrizioni di modifica legate allo
+  stato: in `archived`/`closed` nessuna modifica è più permessa
+  (entità/checklist/allegati bloccati in sola lettura); in `standby` è
+  permessa solo l'aggiunta di note, nessun'altra modifica.
+- **RBAC di creazione**: solo admin può creare un progetto/iniziativa.
+- **RBAC di assegnazione item**: sia admin sia volontari possono essere
+  assegnatari di un item di checklist collegata (coerente con l'RBAC già
+  esistente su `device-requests`, non solo admin).
+- **Owner/creatore**: tracciato esplicitamente `createdBy` (uid) e
+  `createdAt`, oltre allo stato.
+- **Descrizione**: campo descrizione libera sull'entità.
+- **Note/cronologia**: stesso pattern di `deviceRequests` — una
+  sottocollezione eventi con possibilità di aggiungere una nota in
+  qualunque momento (anche in `standby`, l'unica modifica ammessa in
+  quello stato), non solo un campo testo statico.
+- **Checklist collegate**: elenco (array), non una singola checklist —
+  vedi decisione dello studio `ss-special-projects-initiatives` sotto.
+- **Allegati**: previsto fin da subito l'aggancio alla capability di base
+  "Allegati" (EA-161/168), stesso pattern di integrazione già usato per
+  device-requests (nuovo modulo RBAC + wrapper dedicati per il dominio
+  progetti), non una funzionalità rimandata.
+- **Todo-list volontario**: il "leak" verso `listMyChecklistItems` quando
+  `category`/scope è valorizzato in modo coerente è **comportamento
+  voluto**, non un effetto collaterale da correggere.
 
 ## Nota di sequenza: allegati
 
@@ -61,38 +93,37 @@ ownership), e il primo pattern di integrazione in un dominio consumer
 esiste già come esempio concreto da riusare (Story EA-168, layer
 `device-requests`: modulo RBAC dedicato + wrapper Cloud Function che
 delegano via `.run()` alle funzioni generiche). Quando questa richiesta
-verrà implementata, l'aggancio agli allegati per le iniziative dovrebbe
+verrà implementata, l'aggancio agli allegati per i progetti dovrebbe
 replicare lo stesso pattern (nuovo modulo RBAC + wrapper equivalenti per
-il dominio "iniziative"), non progettarlo da zero.
+il dominio "projects"), non progettarlo da zero.
 
 ## Domande aperte per lo studio
 
-- **Checklist collegate**: una sola per iniziativa, o multiple nel tempo
-  (come già avviene per `deviceRequest` via `checklistIds[]`, EA-130/
-  EA-133)? Un progetto tecnico con cicli di sviluppo/integrazione/test
-  suggerisce più checklist successive (una per ciclo) — da confermare se
-  è così o se un'unica checklist con item raggruppati per fase basta.
-- **Assegnazione item**: solo admin può essere assegnatario di un item su
-  un'iniziativa, o anche volontari (coerente con l'RBAC già esistente su
-  `device-requests`)?
-- **Owner/creatore**: serve tracciare chi ha creato l'iniziativa oltre al
-  suo stato (pattern già esistente `createdBy` su `checklists`, F-1)?
+- **Checklist collegate**: risolto dallo studio `ss-special-projects-initiatives`
+  (opt-b raccomandata, in linea con la decisione confermata sopra) — array
+  `checklists: {checklistId, label}[]` sull'entità, non una singola
+  checklist. Stesso pattern già deciso per `deviceRequest` via
+  `checklistIds[]` (EA-130/EA-133), qui con `label` fin dal giorno 1.
 - **Collocazione UI**: le viste filtrate (lista eventi, lista progetti)
-  sono pagine admin nuove dedicate, o si integrano in viste esistenti?
-- **Interazione con la todo-list volontario**: un volontario assegnato a
-  un item di un'iniziativa comparirebbe già oggi nella sua todo-list
-  personale (`listMyChecklistItems`) se lo scope/`category` è valorizzato
-  in modo coerente — da confermare se questo comportamento "gratuito" è
-  desiderato così com'è.
-- **Naming**: vedi punto di attenzione sopra su `category`/tipo iniziativa.
+  sono pagine admin nuove dedicate, o si integrano in viste esistenti? Non
+  ancora deciso.
+- **Restrizioni di modifica per stato**: risolto sopra (`archived`/`closed`
+  bloccati, `standby` solo note) — resta da definire in Story il dettaglio
+  implementativo esatto (validazione lato Cloud Function su ogni mutazione,
+  incluse quelle su checklist/allegati collegati, non solo sull'entità
+  progetto stessa).
+- **Naming**: risolto sopra — `projectType` (non `category`, non
+  `initiativeType`), nessuna collisione col `category` opaco del core.
 
 ## Domini coinvolti
 
 - `process-organizer-core` (consumer, nessun cambiamento al core atteso
   se non eventuale generalizzazione già prevista dal design)
-- Nuovo dominio candidato (non ancora nel domain-manifest): gestione delle
-  iniziative stesse (entità, stato, RBAC di creazione, viste filtrate) —
-  da nominare in fase di studio.
+- `attachments` (consumer, secondo dominio a integrare la capability di
+  base dopo `device-requests`, stesso pattern EA-168)
+- Nuovo dominio candidato: **`projects`** (non ancora nel
+  domain-manifest) — entità progetto/iniziativa/evento, stato,
+  RBAC di creazione, cronologia/note, viste filtrate.
 
 ## Origine
 
