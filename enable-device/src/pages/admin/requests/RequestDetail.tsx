@@ -9,8 +9,10 @@ import { Dropdown } from "primereact/dropdown";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
 import { ListBox } from "primereact/listbox";
+import { TabView, TabPanel } from "primereact/tabview";
 import RequestTimeline from "../../../components/timeline/RequestTimeline";
 import DeviceRequestChecklists from "../../../components/checklist/DeviceRequestChecklists";
+import DeviceRequestAttachments from "../../../components/attachments/DeviceRequestAttachments";
 import { Toast } from "primereact/toast";
 import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
@@ -728,6 +730,14 @@ export default function RequestDetail() {
       <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />
       <h2>Request Detail</h2>
 
+      {/* ── EA-168: refactor a tab. Ordine sezioni invariato all'interno di ogni
+          tab rispetto alla versione a pannelli lineari precedente; le sole
+          eccezioni sono lo spostamento della Cronologia accanto a "Ultimo
+          evento" (prima era all'ultimo posto, dopo tutti i Dialog) e dei
+          Dialog stessi (prima interposti tra i pannelli, ora tutti dopo la
+          TabView: la loro posizione nell'albero JSX non ha mai influenza
+          sulla resa, essendo tutti modali). ── */}
+
       {/* ── Pannello validazione (visibile solo se status === "inviata") ── */}
       {request?.status === "inviata" && (
         <Panel
@@ -959,6 +969,14 @@ export default function RequestDetail() {
           />
         </Panel>
       )}
+
+      {/* renderActiveOnly={false}: senza, PrimeReact monta solo il contenuto
+          della tab attiva — i contenuti delle altre tab (es. dati e azioni
+          della tab "Fabbricazione/Liberatorie") resterebbero assenti dal DOM
+          finché non si clicca sopra la tab, stesso motivo già documentato
+          per DeviceRequestChecklists. */}
+      <TabView renderActiveOnly={false}>
+        <TabPanel header="Dati generali">
 
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>
         <div className="p-panel-header">
@@ -1235,6 +1253,55 @@ export default function RequestDetail() {
         </div>
       </div>
 
+      {/* Ultimo stato come panel con bottone e dialog */}
+      <Panel
+        header={
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>Ultimo evento</span>
+            <Button
+              label="Aggiungi nota"
+              icon="pi pi-plus"
+              className="p-button-text"
+              onClick={() => setShowAddNoteDialog(true)}
+            />
+          </div>
+        }
+        style={{ marginBottom: 30 }}
+      >
+        {events.length > 0 ? (
+          <div>
+            <strong>{events[0].status}</strong>
+            <div>
+              <span>
+                {events[0].timestamp?.toDate
+                  ? events[0].timestamp.toDate().toLocaleString()
+                  : "-"}
+              </span>
+            </div>
+            {events[0].note && (
+              <div>
+                <strong>Nota:</strong> {events[0].note}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>Nessun evento disponibile.</div>
+        )}
+      </Panel>
+
+      {/* Timeline collapsable */}
+      <Panel
+        header="Cronologia gestione richiesta"
+        toggleable
+        collapsed={!timelineOpen}
+        onToggle={() => setTimelineOpen(!timelineOpen)}
+        style={{ marginBottom: 30 }}
+      >
+        <RequestTimeline events={events} />
+      </Panel>
+        </TabPanel>
+        <TabPanel header="Fabbricazione/Liberatorie">
+
       {/* Liberatorie familiari (EA-158) */}
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>
         <div className="p-panel-header">
@@ -1314,41 +1381,11 @@ export default function RequestDetail() {
         </div>
       </div>
 
-      {/* Ultimo stato come panel con bottone e dialog */}
-      <Panel
-        header={
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span>Ultimo evento</span>
-            <Button
-              label="Aggiungi nota"
-              icon="pi pi-plus"
-              className="p-button-text"
-              onClick={() => setShowAddNoteDialog(true)}
-            />
-          </div>
-        }
-        style={{ marginBottom: 30 }}
-      >
-        {events.length > 0 ? (
-          <div>
-            <strong>{events[0].status}</strong>
-            <div>
-              <span>
-                {events[0].timestamp?.toDate
-                  ? events[0].timestamp.toDate().toLocaleString()
-                  : "-"}
-              </span>
-            </div>
-            {events[0].note && (
-              <div>
-                <strong>Nota:</strong> {events[0].note}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div>Nessun evento disponibile.</div>
-        )}
-      </Panel>
+        </TabPanel>
+        <TabPanel header="Allegati">
+          <DeviceRequestAttachments requestId={id as string} />
+        </TabPanel>
+      </TabView>
 
       {/* Dialog indirizzo di spedizione */}
       <Dialog
@@ -1766,16 +1803,6 @@ export default function RequestDetail() {
         </div>
       </Dialog>
 
-      {/* Timeline collapsable */}
-      <Panel
-        header="Cronologia gestione richiesta"
-        toggleable
-        collapsed={!timelineOpen}
-        onToggle={() => setTimelineOpen(!timelineOpen)}
-        style={{ marginBottom: 30 }}
-      >
-        <RequestTimeline events={events} />
-      </Panel>
     </div>
   );
 }
