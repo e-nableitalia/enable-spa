@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "npm run test --prefix functions/backend && npm run test --prefix enable-device"
+    "test": "npm --prefix functions/backend ci && npm --prefix enable-device ci && npm run test --prefix functions/backend && npm run test --prefix enable-device"
   },
   "dependencies": {
     "@firebase/auth": "^1.12.0"
