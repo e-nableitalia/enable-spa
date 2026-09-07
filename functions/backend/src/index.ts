@@ -50,5 +50,17 @@ export { listDeviceRequestAttachments } from "./device-requests/listDeviceReques
 export { downloadDeviceRequestAttachment } from "./device-requests/downloadDeviceRequestAttachment";
 export { updateDeviceRequestAttachmentDescription } from "./device-requests/updateDeviceRequestAttachmentDescription";
 export { deleteDeviceRequestAttachment } from "./device-requests/deleteDeviceRequestAttachment";
+export { createProject } from "./projects/createProject";
+export { listProjects } from "./projects/listProjects";
+export { updateProject } from "./projects/updateProject";
+export { changeProjectStatus } from "./projects/changeProjectStatus";
+export { createProjectChecklist } from "./projects/createProjectChecklist";
+export { deleteProjectChecklist } from "./projects/deleteProjectChecklist";
+export { addProjectChecklistItem } from "./projects/addProjectChecklistItem";
+export { updateProjectChecklistItem } from "./projects/updateProjectChecklistItem";
+export { removeProjectChecklistItem } from "./projects/removeProjectChecklistItem";
+export { getProjectChecklist } from "./projects/getProjectChecklist";
+export { getProjectChecklistCompleteness } from "./projects/getProjectChecklistCompleteness";
+export { listAssignableProjectUsers } from "./projects/listAssignableProjectUsers";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());
