@@ -21,7 +21,7 @@ import AdminVolunteers from "../../pages/admin/volunteers/AdminVolunteers";
 import PendingVolunteers from "../../pages/admin/volunteers/PendingVolunteers";
 import AdminStats from "../../pages/admin/AdminStats";
 import RequestDetail from "../../pages/admin/requests/RequestDetail";
-import AdminMaintenanceRequests from "../../pages/admin/requests/AdminMaintenanceRequests";
+import SuperAdminPage from "../../pages/admin/superadmin/SuperAdminPage";
 import AdminValidate from "../../pages/admin/requests/AdminValidate";
 import AdminAttention from "../../pages/admin/requests/AdminAttention";
 
@@ -248,15 +248,6 @@ useEffect(() => {
           icon: "pi pi-exclamation-triangle",
           command: () => navigate("/admin/requests/attention"),
         },
-        // Voce nascosta di nuovo (F-33 l'aveva riabilitata solo per eseguire
-        // la migrazione one-shot EA-152 su staging/prod, ora completata) —
-        // la rotta /admin/requests/maintenance resta comunque raggiungibile
-        // digitando l'URL, se servisse in futuro.
-        // {
-        //   label: "Manutenzione (Import CSV)",
-        //   icon: "pi pi-wrench",
-        //   command: () => navigate("/admin/requests/maintenance"),
-        // },
       ],
     },
     {
@@ -460,7 +451,7 @@ useEffect(() => {
             <Route path="requests/completed" element={<AdminCompleted requests={completedRequests} />} />
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
             <Route path="requests/attention" element={<AdminAttention requests={attentionRequests} />} />
-            <Route path="requests/maintenance" element={<AdminMaintenanceRequests />} />
+            <Route path="superadmin" element={<SuperAdminPage />} />
             <Route path="my-checklist-items" element={<MyChecklistItems originBasePath="/admin/request" />} />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />

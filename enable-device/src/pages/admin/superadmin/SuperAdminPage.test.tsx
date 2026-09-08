@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import AdminMaintenanceRequests from "./AdminMaintenanceRequests";
+import SuperAdminPage from "./SuperAdminPage";
 
 vi.mock("../../../firebase", () => ({ functions: {} }));
 
@@ -10,13 +10,13 @@ vi.mock("firebase/functions", () => ({
   httpsCallable: (_functions: unknown, name: string) => (data: unknown) => callable(name, data),
 }));
 
-describe("AdminMaintenanceRequests (pagina 'Super Admin') - deploy template email", () => {
+describe("SuperAdminPage (pagina 'Super Admin') - deploy template email", () => {
   beforeEach(() => {
     callable.mockReset();
   });
 
   it("mostra il pannello e i pulsanti 'Deploy template email'/'Backup Firestore'", () => {
-    render(<AdminMaintenanceRequests />);
+    render(<SuperAdminPage />);
 
     expect(screen.getByText("Super Admin")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Deploy template email" })).toBeInTheDocument();
@@ -26,7 +26,7 @@ describe("AdminMaintenanceRequests (pagina 'Super Admin') - deploy template emai
   it("chiede conferma e, dopo accettazione, invoca deployEmailTemplates e mostra il riepilogo", async () => {
     callable.mockResolvedValue({ data: { templateIds: ["attivazioneVolontario", "confermaRicezione"] } });
     const user = userEvent.setup();
-    render(<AdminMaintenanceRequests />);
+    render(<SuperAdminPage />);
 
     await user.click(screen.getByRole("button", { name: "Deploy template email" }));
     await user.click(await screen.findByRole("button", { name: "Deploy" }));
@@ -37,7 +37,7 @@ describe("AdminMaintenanceRequests (pagina 'Super Admin') - deploy template emai
 
   it("annullando la conferma non invoca la Cloud Function", async () => {
     const user = userEvent.setup();
-    render(<AdminMaintenanceRequests />);
+    render(<SuperAdminPage />);
 
     await user.click(screen.getByRole("button", { name: "Deploy template email" }));
     await user.click(await screen.findByRole("button", { name: "Annulla" }));
@@ -48,7 +48,7 @@ describe("AdminMaintenanceRequests (pagina 'Super Admin') - deploy template emai
   it("mostra un errore se la Cloud Function fallisce (es. permission-denied)", async () => {
     callable.mockRejectedValue(new Error("Only a super admin can perform this action"));
     const user = userEvent.setup();
-    render(<AdminMaintenanceRequests />);
+    render(<SuperAdminPage />);
 
     await user.click(screen.getByRole("button", { name: "Deploy template email" }));
     await user.click(await screen.findByRole("button", { name: "Deploy" }));
@@ -57,7 +57,7 @@ describe("AdminMaintenanceRequests (pagina 'Super Admin') - deploy template emai
   });
 });
 
-describe("AdminMaintenanceRequests (pagina 'Super Admin') - backup Firestore", () => {
+describe("SuperAdminPage (pagina 'Super Admin') - backup Firestore", () => {
   beforeEach(() => {
     callable.mockReset();
   });
@@ -67,7 +67,7 @@ describe("AdminMaintenanceRequests (pagina 'Super Admin') - backup Firestore", (
       data: { outputUriPrefix: "gs://enableitalia-staging-firestore-backups/2026-09-08T00-00-00", operationName: "op-1" },
     });
     const user = userEvent.setup();
-    render(<AdminMaintenanceRequests />);
+    render(<SuperAdminPage />);
 
     await user.click(screen.getByRole("button", { name: "Backup Firestore" }));
     await user.click(await screen.findByRole("button", { name: "Avvia backup" }));
@@ -80,7 +80,7 @@ describe("AdminMaintenanceRequests (pagina 'Super Admin') - backup Firestore", (
 
   it("annullando la conferma non invoca la Cloud Function", async () => {
     const user = userEvent.setup();
-    render(<AdminMaintenanceRequests />);
+    render(<SuperAdminPage />);
 
     await user.click(screen.getByRole("button", { name: "Backup Firestore" }));
     await user.click(await screen.findByRole("button", { name: "Annulla" }));
@@ -91,7 +91,7 @@ describe("AdminMaintenanceRequests (pagina 'Super Admin') - backup Firestore", (
   it("mostra un errore se la Cloud Function fallisce", async () => {
     callable.mockRejectedValue(new Error("Only a super admin can perform this action"));
     const user = userEvent.setup();
-    render(<AdminMaintenanceRequests />);
+    render(<SuperAdminPage />);
 
     await user.click(screen.getByRole("button", { name: "Backup Firestore" }));
     await user.click(await screen.findByRole("button", { name: "Avvia backup" }));

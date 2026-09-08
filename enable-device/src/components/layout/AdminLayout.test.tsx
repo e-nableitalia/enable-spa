@@ -109,9 +109,9 @@ describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuo
     expect(screen.queryByRole("treeitem", { name: "Manutenzione (Import CSV)" })).not.toBeInTheDocument();
   });
 
-  it("la rotta /admin/requests/maintenance resta funzionante via URL diretto (ora pagina 'Super Admin' svuotata)", async () => {
+  it("la pagina 'Super Admin' e' raggiungibile su /admin/superadmin (F-46: rinominata/spostata da admin/requests/maintenance)", async () => {
     render(
-      <MemoryRouter initialEntries={["/admin/requests/maintenance"]}>
+      <MemoryRouter initialEntries={["/admin/superadmin"]}>
         <Routes>
           <Route path="/admin/*" element={<AdminLayout />} />
         </Routes>

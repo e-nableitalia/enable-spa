@@ -13,8 +13,13 @@ import { Toast } from "primereact/toast";
  * dal menu admin/URL diretto). Ospita azioni che superano il perimetro di
  * un admin qualunque: deploy dei template email versionati e trigger di
  * backup Firestore.
+ *
+ * F-46: file/route rinominati e spostati fuori da `admin/requests/`
+ * (era `AdminMaintenanceRequests.tsx`, retaggio del vecchio import CSV
+ * ora rimosso) per non essere più catturati dal glob del dominio
+ * device-requests nel domain-manifest.
  */
-export default function AdminMaintenanceRequests() {
+export default function SuperAdminPage() {
   const toast = useRef<Toast>(null);
   const [deploying, setDeploying] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
