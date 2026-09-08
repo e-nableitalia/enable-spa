@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-07T23:59:58.326Z",
+  "generated_at": "2026-09-08T00:19:40.282Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -94,9 +94,9 @@
       "type": "implementation_request",
       "source_path": "requests/ss-user-todo-list-epic-draft.md",
       "created_at": "2026-08-04T23:28:35.645Z",
-      "updated_at": "2026-08-04T23:28:35.645Z",
+      "updated_at": "2026-09-08T00:19:40.107Z",
       "created_by": "cli:solution-decide",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "process-organizer-core",
         "device-requests"
@@ -128,9 +128,9 @@
       "type": "implementation_request",
       "source_path": "requests/ss-device-request-macro-status-epic-draft.md",
       "created_at": "2026-08-06T14:22:24.318Z",
-      "updated_at": "2026-08-06T14:22:24.318Z",
+      "updated_at": "2026-09-08T00:19:40.282Z",
       "created_by": "cli:solution-decide",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "device-requests"
       ]
@@ -179,9 +179,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/special-projects-initiatives-request.md",
       "created_at": "2026-09-06T09:21:39.554Z",
-      "updated_at": "2026-09-07T09:54:11.171Z",
+      "updated_at": "2026-09-08T00:19:37.938Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "process-organizer-core",
         "special-projects"
@@ -192,9 +192,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/cross-entity-attachments-request.md",
       "created_at": "2026-09-06T09:22:29.772Z",
-      "updated_at": "2026-09-06T11:41:28.001Z",
+      "updated_at": "2026-09-08T00:19:39.055Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "device-requests",
         "special-projects"
@@ -213,9 +213,9 @@
       "type": "implementation_request",
       "source_path": "requests/ss-cross-entity-attachments-epic-draft.md",
       "created_at": "2026-09-06T16:25:35.659Z",
-      "updated_at": "2026-09-06T16:25:35.659Z",
+      "updated_at": "2026-09-08T00:19:39.588Z",
       "created_by": "cli:solution-decide",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "attachments"
       ]
@@ -233,9 +233,9 @@
       "type": "implementation_request",
       "source_path": "requests/ss-special-projects-initiatives-epic-draft.md",
       "created_at": "2026-09-07T09:56:47.426Z",
-      "updated_at": "2026-09-07T09:56:47.426Z",
+      "updated_at": "2026-09-08T00:19:38.465Z",
       "created_by": "cli:solution-decide",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "process-organizer-core",
         "special-projects-initiatives"
