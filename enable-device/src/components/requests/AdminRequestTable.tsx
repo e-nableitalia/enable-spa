@@ -588,6 +588,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
                 { label: "Sì", value: true },
                 { label: "No", value: false },
               ]}
+              optionValue="value"
               onChange={(e) => {
                 setFilters((prev) => ({ ...prev, requiresAttention: { value: e.value, matchMode: FilterMatchMode.EQUALS } }));
                 options.filterCallback(e.value, options.index);

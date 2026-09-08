@@ -42,11 +42,12 @@ export default function ProjectsListPage() {
   const toast = useRef<Toast>(null);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  // "" = "Tutti": PrimeReact Dropdown tratta `null`/`undefined` sempre come
-  // "nessuna selezione" (mostra il placeholder anche se un'opzione ha
-  // esplicitamente value: null), quindi l'opzione "Tutti" non potrebbe mai
-  // apparire selezionata con quel valore — usa una stringa vuota, che invece
-  // viene trattata come un valore normale.
+  // "" = "Tutti". Il Dropdown sotto imposta sempre optionValue="value"
+  // esplicito: senza, PrimeReact (Dropdown.getOptionValue) ricade
+  // sull'intera opzione (invece del solo campo `value`) ogni volta che
+  // quel campo è "vuoto" per ObjectUtils.isNotEmpty (null, "", ecc.) — con
+  // "Tutti" selezionato il filtro confronterebbe un oggetto con una
+  // stringa categoria, non trovando mai corrispondenza (tabella vuota).
   const [typeFilter, setTypeFilter] = useState<string>("");
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -132,6 +133,7 @@ export default function ProjectsListPage() {
           id="projectTypeFilter"
           value={typeFilter}
           options={[{ label: "Tutti", value: "" }, ...availableTypes.map((t) => ({ label: t, value: t }))]}
+          optionValue="value"
           onChange={(e) => setTypeFilter(e.value)}
           style={{ minWidth: 200 }}
         />

@@ -283,6 +283,7 @@ export default function ProjectChecklists({
               { label: "Nessun template (checklist vuota)", value: null },
               ...availableTemplates.map((t) => ({ label: t.title, value: t.id })),
             ]}
+            optionValue="value"
             loading={loadingTemplates}
             placeholder="Seleziona un template"
             style={{ width: "100%" }}

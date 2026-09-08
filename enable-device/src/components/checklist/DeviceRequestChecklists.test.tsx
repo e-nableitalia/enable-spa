@@ -294,6 +294,42 @@ describe("DeviceRequestChecklists - dialog di creazione: scelta esplicita di tem
     });
   });
 
+  it("tornare su 'Nessun template' dopo averne scelto uno reale invia templateId null, non l'oggetto opzione", async () => {
+    // Regressione: senza optionValue="value" esplicito, PrimeReact Dropdown
+    // risolve l'opzione "Nessun template (checklist vuota)" (value:null)
+    // all'intero oggetto opzione invece che a null (ObjectUtils.isNotEmpty(null)
+    // e' false): createTemplateId diventava quell'oggetto, inviato al backend
+    // come templateId invece del null atteso per "nessun template".
+    const user = userEvent.setup();
+    render(
+      <DeviceRequestChecklists
+        requestId="req1"
+        checklistIds={[]}
+        deviceType="Kinetic Hand"
+        onChecklistsChanged={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Crea checklist di fabbricazione" }));
+
+    const dialog = screen.getByRole("dialog");
+    const trigger = () => dialog.querySelector(".p-dropdown-trigger") as HTMLElement;
+
+    await user.click(trigger());
+    await user.click(await screen.findByText("Template B"));
+
+    await user.click(trigger());
+    await user.click(await screen.findByText("Nessun template (checklist vuota)"));
+
+    await user.click(screen.getByRole("button", { name: "Crea" }));
+
+    expect(callable).toHaveBeenCalledWith("createDeviceRequestChecklist", {
+      requestId: "req1",
+      title: undefined,
+      templateId: null,
+    });
+  });
+
   it("un titolo digitato dall'operatore viene passato esattamente al backend, non sovrascritto", async () => {
     const user = userEvent.setup();
     render(
@@ -320,12 +356,15 @@ describe("DeviceRequestChecklists - dialog di creazione: scelta esplicita di tem
     await user.click(screen.getByRole("button", { name: "Crea checklist di fabbricazione" }));
 
     expect(callable).not.toHaveBeenCalledWith("listTemplates", expect.anything());
-    // Il testo compare due volte nel markup del Dropdown (span visibile +
-    // option nascosta per l'accessibilità nativa del <select>): basta che
-    // sia presente almeno una volta.
-    expect(
-      screen.getAllByText("Nessun devicetype su questa richiesta: solo checklist vuota").length
-    ).toBeGreaterThan(0);
+    // Con optionValue="value" (fix del bug PrimeReact Dropdown.getOptionValue
+    // su opzioni con value:null), l'opzione "Nessun template (checklist
+    // vuota)" è ora correttamente riconosciuta come selezionata di default
+    // (createTemplateId inizia a null, che ora combacia davvero con
+    // l'opzione invece che con l'intero oggetto opzione): il suo label
+    // sostituisce il placeholder "Nessun devicetype..." invece di
+    // affiancarlo, comportamento più corretto (un'opzione realmente
+    // selezionata prevale sul placeholder).
+    expect(screen.getAllByText("Nessun template (checklist vuota)").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Crea" }));
 
