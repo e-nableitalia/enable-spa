@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-07T09:56:47.426Z",
+  "generated_at": "2026-09-07T23:59:58.326Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -165,9 +165,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/email-templates-versioned-request.md",
       "created_at": "2026-08-12T16:33:48.249Z",
-      "updated_at": "2026-09-06T09:18:08.062Z",
+      "updated_at": "2026-09-07T23:59:58.325Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "device-requests",
         "volunteer-management",
