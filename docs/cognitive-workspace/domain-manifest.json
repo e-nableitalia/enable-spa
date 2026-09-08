@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-07T09:56:47.420Z",
+  "generated_at": "2026-09-08T00:00:00.000Z",
   "repo_url": "https://github.com/e-nableitalia/enable-spa",
   "domains": [
     {
@@ -114,6 +114,19 @@
       "summary": "Entita' (nome interno \"project\", collection projects/{projectId}) per tracciare progetti tecnici ed eventi (projectType: progetto/iniziativa/evento, estensibile; stato a 5 valori new/active/standby/archived/closed con restrizioni di modifica in standby/archived/closed; creazione admin-only, assegnazione item aperta anche ai volontari) con una o piu' todo-list etichettate collegate tramite il core Organizer gia' esistente (Epic EA-169, Story EA-170, Done).",
       "status": "approved",
       "depth": "standard",
+      "origin": "discovered"
+    },
+    {
+      "id": "super-admin",
+      "name": "Super Admin — Operazioni di Piattaforma",
+      "paths": [
+        "functions/backend/src/backup/**",
+        "functions/backend/src/emailTemplates/**",
+        "enable-device/src/pages/admin/requests/AdminMaintenanceRequests.tsx"
+      ],
+      "summary": "Azioni operative gated su users/{uid}.superAdmin===true (flag additivo a role:admin, bootstrap manuale in console): deploy forward-only del registro versionato dei template email (registry in codice -> collection Firestore emailTemplates) e trigger dell'export/backup nativo Firestore verso bucket GCS dedicato con lifecycle 30gg. Il gate condiviso vive in functions/backend/src/security/superAdmin.ts (gia' coperto dal dominio 'security'). UI ospitata dalla pagina 'Super Admin' AdminMaintenanceRequests.tsx, nome/route fuorvianti eredita' del vecchio uso del file (cfr. docs/FINDINGS.md F-46). Epic EA-171, Story EA-172, Done. Area nuova non coperta da alcun dominio esistente.",
+      "status": "draft",
+      "depth": null,
       "origin": "discovered"
     }
   ]
