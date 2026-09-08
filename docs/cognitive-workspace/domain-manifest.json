@@ -122,11 +122,11 @@
       "paths": [
         "functions/backend/src/backup/**",
         "functions/backend/src/emailTemplates/**",
-        "enable-device/src/pages/admin/requests/AdminMaintenanceRequests.tsx"
+        "enable-device/src/pages/admin/superadmin/**"
       ],
-      "summary": "Azioni operative gated su users/{uid}.superAdmin===true (flag additivo a role:admin, bootstrap manuale in console): deploy forward-only del registro versionato dei template email (registry in codice -> collection Firestore emailTemplates) e trigger dell'export/backup nativo Firestore verso bucket GCS dedicato con lifecycle 30gg. Il gate condiviso vive in functions/backend/src/security/superAdmin.ts (gia' coperto dal dominio 'security'). UI ospitata dalla pagina 'Super Admin' AdminMaintenanceRequests.tsx, nome/route fuorvianti eredita' del vecchio uso del file (cfr. docs/FINDINGS.md F-46). Epic EA-171, Story EA-172, Done. Area nuova non coperta da alcun dominio esistente.",
-      "status": "draft",
-      "depth": null,
+      "summary": "Azioni operative gated su users/{uid}.superAdmin===true (flag additivo a role:admin, bootstrap manuale in console): deploy forward-only del registro versionato dei template email (registry in codice -> collection Firestore emailTemplates) e trigger dell'export/backup nativo Firestore verso bucket GCS dedicato con lifecycle 30gg. Il gate condiviso vive in functions/backend/src/security/superAdmin.ts (gia' coperto dal dominio 'security'). UI ospitata dalla pagina 'Super Admin' (SuperAdminPage.tsx, route /admin/superadmin), rinominata e spostata fuori da admin/requests/ per risolvere la sovrapposizione di path con device-requests (F-46, risolto). Epic EA-171, Story EA-172, Done.",
+      "status": "approved",
+      "depth": "standard",
       "origin": "discovered"
     }
   ]
