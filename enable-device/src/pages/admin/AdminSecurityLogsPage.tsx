@@ -342,6 +342,7 @@ export default function AdminSecurityLogsPage() {
           <Dropdown
             value={filters.severity}
             options={SEVERITY_OPTIONS}
+            optionValue="value"
             onChange={(e) => setFilter("severity", e.value)}
             placeholder="Tutti"
             style={{ width: 140 }}
@@ -355,6 +356,7 @@ export default function AdminSecurityLogsPage() {
           <Dropdown
             value={filters.outcome}
             options={OUTCOME_OPTIONS}
+            optionValue="value"
             onChange={(e) => setFilter("outcome", e.value)}
             placeholder="Tutti"
             style={{ width: 140 }}

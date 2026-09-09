@@ -426,6 +426,7 @@ export default function DeviceRequestChecklists({
               { label: "Nessun template (checklist vuota)", value: null },
               ...availableTemplates.map((t) => ({ label: t.title, value: t.id })),
             ]}
+            optionValue="value"
             loading={loadingTemplates}
             placeholder={
               !deviceType

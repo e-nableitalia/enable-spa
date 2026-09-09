@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ProjectChecklists from "./ProjectChecklists";
+
+async function selectDropdownOption(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, optionLabel: string) {
+  await user.click(trigger);
+  const candidates = await screen.findAllByText(optionLabel);
+  const option = candidates.map((el) => el.closest("li")).find((li) => li?.getAttribute("role") === "option");
+  if (!option) throw new Error(`Dropdown option "${optionLabel}" not found`);
+  fireEvent.click(option);
+}
 
 vi.mock("../../firebase", () => ({ db: {}, functions: {} }));
 
@@ -86,6 +94,42 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
       templateId: undefined,
     });
     expect(onChecklistsChanged).toHaveBeenCalled();
+  });
+
+  it("tornare su 'Nessun template' dopo averne scelto uno reale invia templateId undefined, non l'oggetto opzione", async () => {
+    // Regressione: senza optionValue="value" esplicito, PrimeReact Dropdown
+    // risolve l'opzione "Nessun template (checklist vuota)" (value:null)
+    // all'intero oggetto opzione invece che a null (ObjectUtils.isNotEmpty(null)
+    // e' false): createTemplateId diventava quell'oggetto, inviato al backend
+    // come templateId invece di essere omesso.
+    callable.mockImplementation((name: string) => {
+      if (name === "listTemplates") {
+        return Promise.resolve({ data: { templates: [{ id: "tmpl-1", title: "Template A" }] } });
+      }
+      if (name === "createProjectChecklist") {
+        return Promise.resolve({ data: { checklistId: "new-checklist" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    render(<ProjectChecklists projectId="p1" checklists={[]} projectType="evento" onChecklistsChanged={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "Crea checklist" }));
+    await user.type(screen.getByLabelText("Etichetta tab"), "Fase 1");
+
+    const dialog = screen.getByRole("dialog");
+    const trigger = dialog.querySelector(".p-dropdown-trigger") as HTMLElement;
+
+    await selectDropdownOption(user, trigger, "Template A");
+    await selectDropdownOption(user, trigger, "Nessun template (checklist vuota)");
+
+    await user.click(screen.getByRole("button", { name: "Crea" }));
+
+    expect(callable).toHaveBeenCalledWith(
+      "createProjectChecklist",
+      expect.objectContaining({ templateId: undefined })
+    );
   });
 
   it("readOnly nasconde il pulsante 'Crea checklist' e l'icona di eliminazione", async () => {

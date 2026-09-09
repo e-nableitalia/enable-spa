@@ -82,6 +82,25 @@ describe("ProjectsListPage", () => {
     expect(screen.getByText("Maker Faire")).toBeInTheDocument();
   });
 
+  it("tornare su 'Tutti' dopo aver filtrato mostra di nuovo tutti i progetti", async () => {
+    // Regressione: senza optionValue="value" esplicito, PrimeReact Dropdown
+    // risolve l'opzione "Tutti" (value:"") all'intero oggetto opzione invece
+    // che alla stringa vuota (ObjectUtils.isNotEmpty("") e' false), quindi il
+    // filtro confrontava il projectType con un oggetto, non trovando mai
+    // corrispondenza: la tabella restava vuota anche selezionando "Tutti".
+    const user = userEvent.setup();
+    const { container } = renderPage();
+    await screen.findByText("Device multifunzione");
+
+    const filterTrigger = container.querySelector(".p-dropdown-trigger") as HTMLElement;
+    await selectDropdownOption(user, filterTrigger, "evento");
+    expect(screen.queryByText("Device multifunzione")).not.toBeInTheDocument();
+
+    await selectDropdownOption(user, filterTrigger, "Tutti");
+    expect(screen.getByText("Device multifunzione")).toBeInTheDocument();
+    expect(screen.getByText("Maker Faire")).toBeInTheDocument();
+  });
+
   it("crea un progetto e naviga al dettaglio", async () => {
     const user = userEvent.setup();
     renderPage();
