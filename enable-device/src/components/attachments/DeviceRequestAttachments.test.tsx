@@ -80,18 +80,51 @@ describe("DeviceRequestAttachments (EA-168)", () => {
     expect(callable).toHaveBeenCalledWith("listDeviceRequestAttachments", { requestId: "req-1" });
   });
 
-  it("filtra l'elenco per categoria", async () => {
+  it("filtra l'elenco per categoria, e tornare su 'Tutte le categorie' mostra di nuovo tutto", async () => {
+    // Regressione: senza optionValue="value" esplicito, PrimeReact Dropdown
+    // risolve un'opzione con value:null (qui "Tutte le categorie") all'intero
+    // oggetto opzione invece che a null (ObjectUtils.isNotEmpty(null) e'
+    // false, quindi getOptionValue ricade sull'opzione intera) — il filtro
+    // confrontava poi una stringa categoria con un oggetto, non trovando mai
+    // corrispondenza: la tabella restava vuota anche selezionando "tutte".
     const user = userEvent.setup();
-    render(<DeviceRequestAttachments requestId="req-1" />);
+    const { container } = render(<DeviceRequestAttachments requestId="req-1" />);
     await screen.findByText("fattura.pdf");
 
-    await user.click(screen.getByRole("button", { name: "Filtra per categoria" }));
-    const options = await screen.findAllByText("documenti");
-    const dropdownOption = options.find((el) => el.className.includes("p-dropdown-item-label"));
-    await user.click(dropdownOption!);
+    const trigger = () => container.querySelector(".p-dropdown-trigger") as HTMLElement;
+    await user.click(trigger());
+    const documentiOptions = await screen.findAllByText("documenti");
+    const documentiOption = documentiOptions.find((el) => el.className.includes("p-dropdown-item-label"));
+    await user.click(documentiOption!);
 
     expect(screen.getByText("fattura.pdf")).toBeInTheDocument();
     expect(screen.queryByText("foto.jpg")).not.toBeInTheDocument();
+
+    await user.click(trigger());
+    const tutteOptions = await screen.findAllByText("Tutte le categorie");
+    const tutteOption = tutteOptions.find((el) => el.className.includes("p-dropdown-item-label"));
+    await user.click(tutteOption!);
+
+    expect(screen.getByText("fattura.pdf")).toBeInTheDocument();
+    expect(screen.getByText("foto.jpg")).toBeInTheDocument();
+  });
+
+  it("mostra un'icona informativa con le note al passaggio del mouse, solo per gli allegati che ne hanno", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "listDeviceRequestAttachments") {
+        return Promise.resolve({
+          data: { attachments: [{ ...ATTACHMENT_A, notes: "Documento firmato in originale" }, ATTACHMENT_B] },
+        });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    render(<DeviceRequestAttachments requestId="req-1" />);
+    await screen.findByText("fattura.pdf");
+
+    expect(screen.getByRole("img", { name: "Note: Documento firmato in originale" })).toBeInTheDocument();
+    // ATTACHMENT_B ha notes vuote: nessuna icona per quella riga.
+    expect(screen.queryAllByRole("img", { name: /^Note:/ })).toHaveLength(1);
   });
 
   it("carica un nuovo allegato: chiama la Cloud Function, effettua il PUT del file sulla signed URL e ricarica l'elenco", async () => {

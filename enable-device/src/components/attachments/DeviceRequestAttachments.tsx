@@ -129,6 +129,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
   }, [requestId, getUserFullName]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetchAttachments fetches from a Cloud Function, not derivable from props/state
     fetchAttachments();
   }, [fetchAttachments]);
 
@@ -305,6 +306,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
           <Dropdown
             value={categoryFilter}
             options={[{ label: "Tutte le categorie", value: null }, ...categories.map((c) => ({ label: c, value: c }))]}
+            optionValue="value"
             onChange={(e) => setCategoryFilter(e.value)}
             placeholder="Filtra per categoria"
             style={{ minWidth: 220 }}
@@ -318,6 +320,21 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
         emptyMessage="Nessun allegato collegato a questa richiesta."
         dataKey="id"
       >
+        <Column
+          header=""
+          style={{ width: 40 }}
+          body={(a: DeviceRequestAttachment) =>
+            a.notes ? (
+              <i
+                className="pi pi-info-circle"
+                role="img"
+                aria-label={`Note: ${a.notes}`}
+                title={a.notes}
+                style={{ color: "#6b7280", cursor: "help" }}
+              />
+            ) : null
+          }
+        />
         <Column field="fileName" header="File" />
         <Column field="description" header="Descrizione" />
         <Column field="category" header="Categoria" body={(a: DeviceRequestAttachment) => a.category || "-"} />
