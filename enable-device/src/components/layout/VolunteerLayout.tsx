@@ -90,9 +90,9 @@ export default function VolunteerLayout() {
                         })
                     );
                     setRequests(data);
-                    setShippingRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status) && ["pronta per spedizione", "spedita"].includes(r.status)));
-                    setProductionRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status) && !["pronta per spedizione", "spedita"].includes(r.status)));
-                    // setCompletedRequests(data.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status)));
+                    const live = data.filter((r) => r.archived !== true);
+                    setShippingRequests(live.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status) && ["pronta per spedizione", "spedita"].includes(r.status)));
+                    setProductionRequests(live.filter(r => r.status && PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status) && !["pronta per spedizione", "spedita"].includes(r.status)));
                 });
             } finally {
                 if (!cancelled) setLoading(false);
@@ -157,7 +157,7 @@ export default function VolunteerLayout() {
             command: () => navigate("/volunteer/shipping")
         },
         {
-            label: "Archivio",
+            label: "Archiviate",
             icon: "pi pi-folder",
             command: () => navigate("/volunteer/archive")
         },
@@ -177,6 +177,8 @@ export default function VolunteerLayout() {
         });
     }
 
+    const liveRequests = requests.filter((r) => r.archived !== true);
+    const archivedRequests = requests.filter((r) => r.archived === true);
     if (loading) return <div>Loading...</div>;
     if (!authorized) return null;
     console.log("Active status:", active);
@@ -362,13 +364,13 @@ export default function VolunteerLayout() {
                 >
                     <Routes>
                         <Route index element={<VolunteerDashboard />} />
-                        <Route path="my-requests" element={<MyRequests requests={requests} />} />
+                        <Route path="my-requests" element={<MyRequests requests={liveRequests} />} />
                         <Route path="manageable-requests" element={<ManageableRequestsPage />} />
                         <Route path="manageable-requests/:id" element={<ManageableRequestDetail />} />
                         <Route path="my-requests/:id" element={<VolunteerRequestDetail />} />
                         <Route path="production" element={<Production requests={productionRequests} />} />
                         <Route path="shipping" element={<Shipping requests={shippingRequests} />} />
-                        <Route path="archive" element={<Archive />} />
+                        <Route path="archive" element={<Archive requests={archivedRequests} />} />
                         <Route path="profile" element={<VolunteerProfile />} />
                         <Route path="availability" element={<VolunteerAvailability />} />
                         <Route path="my-printers" element={<MyPrinters />} />

@@ -57,6 +57,33 @@ describe("changeProjectStatus", () => {
     expect(projectsStore["proj-standby"]?.status).toBe("active");
   });
 
+  it("allows a status change with an omitted note, null note, or empty string", async () => {
+    await changeProjectStatus.run(buildRequest({ projectId: "proj-new", newStatus: "active" }, "admin-1"));
+    expect(projectsStore["proj-new"]?.status).toBe("active");
+
+    const withNull = (await changeProjectStatus.run(
+      buildRequest({ projectId: "proj-active", newStatus: "standby", note: null }, "admin-1")
+    )) as { eventId: string };
+    expect(eventsStore["proj-active"]?.[withNull.eventId]).toEqual(
+      expect.objectContaining({ note: "", toStatus: "standby" })
+    );
+
+    const withEmpty = (await changeProjectStatus.run(
+      buildRequest({ projectId: "proj-active", newStatus: "active", note: "" }, "admin-1")
+    )) as { eventId: string };
+    expect(eventsStore["proj-active"]?.[withEmpty.eventId]).toEqual(
+      expect.objectContaining({ note: "", toStatus: "active" })
+    );
+  });
+
+  it("throws invalid-argument when note is neither a string, null, nor omitted", async () => {
+    await expect(
+      changeProjectStatus.run(
+        buildRequest({ projectId: "proj-new", newStatus: "active", note: 42 as unknown as string }, "admin-1")
+      )
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "note must be a string or null"));
+  });
+
   it("blocks any change on archived/closed projects, including a note-only update", async () => {
     for (const projectId of ["proj-archived", "proj-closed"]) {
       const status = projectsStore[projectId]?.status as string;

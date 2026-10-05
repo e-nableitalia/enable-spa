@@ -7,7 +7,6 @@ import { Card } from "primereact/card";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
-import { ToggleButton } from "primereact/togglebutton";
 import { MultiSelect } from "primereact/multiselect";
 import { Dropdown } from "primereact/dropdown";
 import { Checkbox } from "primereact/checkbox";
@@ -37,15 +36,18 @@ interface MyChecklistItem {
 }
 
 /**
- * Completezza type-aware coerente con `checklistCompleteness.ts` lato
- * backend (duplicata qui, solo per il filtro "Solo aperti" — non decide
- * nulla che venga persistito): un item boolean è completo solo se
- * `completed === true`, ogni altro type è completo se `status ===
- * "Completata"`.
+ * Item "chiuso" se risulta completato per qualunque segnale disponibile:
+ * flag `completed` (boolean) oppure `status === "Completata"`. Usare solo
+ * il ramo type-aware lasciava in "Solo aperti" i boolean con status già
+ * Completata ma `completed` non allineato — letti come chiusi dall'operatore.
  */
 function isItemComplete(item: MyChecklistItem): boolean {
-  if (item.type === "boolean") return item.completed === true;
+  if (item.completed === true) return true;
   return item.status === "Completata";
+}
+
+function isEditableOrigin(origin: ChecklistItemOrigin | null | undefined): boolean {
+  return origin?.type === "deviceRequest" || origin?.type === "project";
 }
 
 /**
@@ -61,27 +63,37 @@ function isItemComplete(item: MyChecklistItem): boolean {
  * aperti) e un filtro per stato. L'assegnatario non è mostrato: è per
  * costruzione sempre l'utente corrente.
  *
- * L'aggiornamento riusa `updateDeviceRequestChecklistItem` (non l'endpoint
- * "nudo" del core Organizer) per mantenere lo stesso controllo RBAC
- * (admin o volontario assegnato alla richiesta) già applicato in
- * ChecklistPanel: richiede quindi che l'item abbia un `origin` di tipo
- * "deviceRequest" risolto — se assente (checklist senza provenienza nota),
- * i controlli restano disabilitati per quella riga.
+ * L'aggiornamento riusa il layer RBAC dell'entità di provenienza:
+ * `updateDeviceRequestChecklistItem` per origin deviceRequest,
+ * `updateProjectChecklistItem` per origin project. Se l'origin manca
+ * (checklist orfana non collegata), i controlli restano disabilitati.
+ *
+ * Durante il salvataggio i controlli restano abilitati (come in
+ * ChecklistPanel): si mostra solo uno spinner. Disabilitarli per tutta la
+ * chiamata faceva sembrare "bloccati" soprattutto il flag boolean e gli
+ * item aperti appena toccati.
  */
 export default function MyChecklistItems({
   originBasePath = "/volunteer/my-requests",
+  projectBasePath,
 }: {
   originBasePath?: string;
+  /** Se assente, gli item di progetto mostrano la label senza link. */
+  projectBasePath?: string;
 }) {
   const navigate = useNavigate();
   const toast = useRef<Toast>(null);
   const [items, setItems] = useState<MyChecklistItem[]>([]);
   const [requestLabels, setRequestLabels] = useState<Record<string, string>>({});
+  const [projectLabels, setProjectLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  // true = nascondi i completati (default "Solo aperti").
+  const [showOnlyOpen, setShowOnlyOpen] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const showOnlyOpenRef = useRef(showOnlyOpen);
+  showOnlyOpenRef.current = showOnlyOpen;
 
   // Debounce per-item dell'autosave sul campo testo (Note): stesso pattern
   // di ChecklistPanel.tsx, salvataggio immediato per gli altri campi
@@ -112,19 +124,40 @@ export default function MyChecklistItems({
             .map((item) => item.origin!.id)
         )
       );
-      const labelEntries = await Promise.all(
-        deviceRequestIds.map(async (id) => {
-          try {
-            const snap = await getDoc(doc(db, "deviceRequests", id));
-            const requestNumber = snap.exists() ? (snap.data()?.requestNumber as string | undefined) : undefined;
-            return [id, requestNumber || id] as const;
-          } catch {
-            return [id, id] as const;
-          }
-        })
+      const projectIds = Array.from(
+        new Set(
+          fetchedItems.filter((item) => item.origin?.type === "project").map((item) => item.origin!.id)
+        )
       );
+      const [requestLabelEntries, projectLabelEntries] = await Promise.all([
+        Promise.all(
+          deviceRequestIds.map(async (id) => {
+            try {
+              const snap = await getDoc(doc(db, "deviceRequests", id));
+              const requestNumber = snap.exists()
+                ? (snap.data()?.requestNumber as string | undefined)
+                : undefined;
+              return [id, requestNumber || id] as const;
+            } catch {
+              return [id, id] as const;
+            }
+          })
+        ),
+        Promise.all(
+          projectIds.map(async (id) => {
+            try {
+              const snap = await getDoc(doc(db, "projects", id));
+              const title = snap.exists() ? (snap.data()?.title as string | undefined) : undefined;
+              return [id, title || id] as const;
+            } catch {
+              return [id, id] as const;
+            }
+          })
+        ),
+      ]);
 
-      setRequestLabels(Object.fromEntries(labelEntries));
+      setRequestLabels(Object.fromEntries(requestLabelEntries));
+      setProjectLabels(Object.fromEntries(projectLabelEntries));
       setItems(fetchedItems);
     } catch (err) {
       console.error("[MyChecklistItems] Failed to load checklist items", err);
@@ -145,42 +178,81 @@ export default function MyChecklistItems({
   }, [load]);
 
   const originLabel = (item: MyChecklistItem): string | null => {
-    if (!item.origin || item.origin.type !== "deviceRequest") return null;
-    return `Richiesta ${requestLabels[item.origin.id] ?? item.origin.id}`;
+    if (!item.origin) return null;
+    if (item.origin.type === "deviceRequest") {
+      return `Richiesta ${requestLabels[item.origin.id] ?? item.origin.id}`;
+    }
+    if (item.origin.type === "project") {
+      return `Progetto ${projectLabels[item.origin.id] ?? item.origin.id}`;
+    }
+    return null;
   };
 
   const originColumnBody = (item: MyChecklistItem) => {
     const label = originLabel(item);
-    if (!label || !item.origin) return "-";
-    return (
-      <Button
-        label={label}
-        className="p-button-text p-button-sm"
-        onClick={() => navigate(`${originBasePath}/${item.origin!.id}`)}
-      />
-    );
+    if (!item.origin || !label) {
+      return <span style={{ color: "#6b7280" }}>Senza provenienza</span>;
+    }
+    if (item.origin.type === "deviceRequest") {
+      return (
+        <Button
+          label={label}
+          className="p-button-text p-button-sm"
+          onClick={() => navigate(`${originBasePath}/${item.origin!.id}`)}
+        />
+      );
+    }
+    if (item.origin.type === "project" && projectBasePath) {
+      return (
+        <Button
+          label={label}
+          className="p-button-text p-button-sm"
+          onClick={() => navigate(`${projectBasePath}/${item.origin!.id}`)}
+        />
+      );
+    }
+    return label;
   };
 
   /**
-   * Aggiorna un campo (Stato o Completato) e lo mappa immediatamente sul
-   * backend: aggiornamento ottimistico dello stato locale (nessun reload
-   * completo dell'elenco dopo ogni singolo click, a differenza di
-   * ChecklistPanel — qui l'uso previsto è modificare molti item in
-   * sequenza rapida, un reload ad ogni click sarebbe troppo lento), con
-   * rollback locale se il salvataggio fallisce.
+   * Aggiorna un campo e lo mappa immediatamente sul backend: aggiornamento
+   * ottimistico dello stato locale (nessun reload completo dell'elenco dopo
+   * ogni singolo click, a differenza di ChecklistPanel — qui l'uso previsto
+   * è modificare molti item in sequenza rapida), con rollback locale se il
+   * salvataggio fallisce.
+   *
+   * Con filtro "Solo aperti", un item che diventa completo scompare dalla
+   * vista: in quel caso un toast conferma che il salvataggio è andato a
+   * buon fine (altrimenti sembra che l'edit non abbia funzionato).
    */
   const updateItem = async (
     item: MyChecklistItem,
     patch: Partial<Pick<MyChecklistItem, "status" | "completed" | "notes" | "quantity">>
   ) => {
-    if (!item.origin || item.origin.type !== "deviceRequest") return;
-    const requestId = item.origin.id;
+    if (!isEditableOrigin(item.origin)) return;
+    const origin = item.origin!;
     const previous = item;
+    const optimistic = { ...item, ...patch };
+    const willHideFromOpenFilter =
+      showOnlyOpenRef.current && !isItemComplete(item) && isItemComplete(optimistic);
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
     setSavingItemId(item.id);
     try {
-      const fn = httpsCallable(functions, "updateDeviceRequestChecklistItem");
-      await fn({ requestId, checklistId: item.checklistId, itemId: item.id, ...patch });
+      if (origin.type === "deviceRequest") {
+        const fn = httpsCallable(functions, "updateDeviceRequestChecklistItem");
+        await fn({ requestId: origin.id, checklistId: item.checklistId, itemId: item.id, ...patch });
+      } else {
+        const fn = httpsCallable(functions, "updateProjectChecklistItem");
+        await fn({ projectId: origin.id, checklistId: item.checklistId, itemId: item.id, ...patch });
+      }
+      if (willHideFromOpenFilter) {
+        toast.current?.show({
+          severity: "success",
+          summary: "Completato",
+          detail: `"${item.title}" segnato come completato. Passa a "Tutti" per rivederlo.`,
+          life: 3500,
+        });
+      }
     } catch (err) {
       setItems((prev) => prev.map((i) => (i.id === item.id ? previous : i)));
       toast.current?.show({
@@ -222,41 +294,55 @@ export default function MyChecklistItems({
     }, 600);
   };
 
-  const visibleItems = useMemo(
-    () =>
-      items.filter(
-        (item) =>
-          (showAll || !isItemComplete(item)) &&
-          (statusFilter.length === 0 || statusFilter.includes(item.status))
-      ),
-    [items, showAll, statusFilter]
-  );
+  const visibleItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesStatus = statusFilter.length === 0 || statusFilter.includes(item.status);
+      if (!matchesStatus) return false;
+      // Solo aperti: escludi i completati. Tutti: nessun filtro di completezza.
+      if (showOnlyOpen && isItemComplete(item)) return false;
+      return true;
+    });
+  }, [items, showOnlyOpen, statusFilter]);
+
+  const openCount = useMemo(() => items.filter((item) => !isItemComplete(item)).length, [items]);
+  const totalCount = items.length;
 
   const statusColumnBody = (item: MyChecklistItem) => {
-    const editable = item.origin?.type === "deviceRequest";
+    const editable = isEditableOrigin(item.origin);
+    const saving = savingItemId === item.id;
     if (item.type === "boolean") {
       // Coerente con ChecklistPanel.tsx: per un item boolean lo stato non
       // ha alcun ruolo nel gate di completezza ed è sincronizzato in
-      // automatico dal checkbox "Completato" sotto, non mostrato qui.
+      // automatico dal checkbox Completato; non mostrare il Dropdown.
       return (
-        <Checkbox
-          checked={item.completed === true}
-          disabled={!editable || savingItemId === item.id}
-          onChange={(e) => {
-            const completed = Boolean(e.checked);
-            updateItem(item, { completed, status: completed ? "Completata" : "Assegnare" });
-          }}
-        />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Checkbox
+            inputId={`todo-completed-${item.id}`}
+            checked={item.completed === true}
+            disabled={!editable}
+            onChange={(e) => {
+              const completed = Boolean(e.checked);
+              updateItem(item, { completed, status: completed ? "Completata" : "Assegnare" });
+            }}
+          />
+          <label htmlFor={`todo-completed-${item.id}`} style={{ fontSize: 13, cursor: editable ? "pointer" : "default" }}>
+            Completato
+          </label>
+          {saving && <i className="pi pi-spin pi-spinner" title="Salvataggio in corso..." style={{ fontSize: 14 }} />}
+        </div>
       );
     }
     return (
-      <Dropdown
-        value={item.status}
-        options={CHECKLIST_ITEM_STATUSES}
-        disabled={!editable || savingItemId === item.id}
-        onChange={(e) => updateItem(item, { status: e.value })}
-        style={{ width: "100%" }}
-      />
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Dropdown
+          value={item.status}
+          options={CHECKLIST_ITEM_STATUSES}
+          disabled={!editable}
+          onChange={(e) => updateItem(item, { status: e.value })}
+          style={{ width: "100%" }}
+        />
+        {saving && <i className="pi pi-spin pi-spinner" title="Salvataggio in corso..." style={{ fontSize: 14 }} />}
+      </div>
     );
   };
 
@@ -267,7 +353,7 @@ export default function MyChecklistItems({
    */
   const descriptionColumnBody = (item: MyChecklistItem) => {
     if (item.type !== "numeric") return item.title;
-    const editable = item.origin?.type === "deviceRequest";
+    const editable = isEditableOrigin(item.origin);
     return (
       <div>
         <div>{item.title}</div>
@@ -275,7 +361,7 @@ export default function MyChecklistItems({
           <span style={{ fontSize: 12, color: "#6b7280" }}>Quantità:</span>
           <InputNumber
             value={item.quantity ?? null}
-            disabled={!editable || savingItemId === item.id}
+            disabled={!editable}
             onValueChange={(e) => updateItem(item, { quantity: e.value ?? null })}
             min={0}
             inputStyle={{ width: 70 }}
@@ -286,11 +372,11 @@ export default function MyChecklistItems({
   };
 
   const notesColumnBody = (item: MyChecklistItem) => {
-    const editable = item.origin?.type === "deviceRequest";
+    const editable = isEditableOrigin(item.origin);
     return (
       <InputTextarea
         value={item.notes ?? ""}
-        disabled={!editable || savingItemId === item.id}
+        disabled={!editable}
         onChange={(e) => commitField(item, { notes: e.target.value }, true)}
         rows={1}
         autoResize
@@ -310,14 +396,27 @@ export default function MyChecklistItems({
         {!error && (loading || items.length > 0) && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-              <ToggleButton
-                checked={showAll}
-                onChange={(e) => setShowAll(e.value)}
-                onLabel="Tutti"
-                offLabel="Solo aperti"
-                onIcon="pi pi-list"
-                offIcon="pi pi-filter"
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <Button
+                  type="button"
+                  label="Solo aperti"
+                  size="small"
+                  outlined={!showOnlyOpen}
+                  onClick={() => setShowOnlyOpen(true)}
+                />
+                <Button
+                  type="button"
+                  label="Tutti"
+                  size="small"
+                  outlined={showOnlyOpen}
+                  onClick={() => setShowOnlyOpen(false)}
+                />
+                <span style={{ fontSize: 13, color: "#6b7280" }}>
+                  {showOnlyOpen
+                    ? `Attività aperte: ${openCount}`
+                    : `Tutte le attività: ${totalCount} (${openCount} aperte)`}
+                </span>
+              </div>
               <MultiSelect
                 value={statusFilter}
                 options={CHECKLIST_ITEM_STATUSES}
@@ -327,9 +426,15 @@ export default function MyChecklistItems({
                 style={{ minWidth: 220 }}
               />
             </div>
-            <DataTable value={visibleItems} loading={loading} size="small" emptyMessage="Nessun item corrispondente ai filtri.">
+            <DataTable
+              value={visibleItems}
+              dataKey="id"
+              loading={loading}
+              size="small"
+              emptyMessage="Nessun item corrispondente ai filtri."
+            >
               <Column header="Descrizione" body={descriptionColumnBody} />
-              <Column header="Stato" body={statusColumnBody} style={{ minWidth: 160 }} />
+              <Column header="Stato" body={statusColumnBody} style={{ minWidth: 180 }} />
               <Column header="Note" body={notesColumnBody} style={{ minWidth: 180 }} />
               <Column header="Provenienza" body={originColumnBody} />
             </DataTable>

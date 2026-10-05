@@ -17,6 +17,7 @@ import AdminProduction from "../../pages/admin/requests/AdminProduction";
 import AdminShipping from "../../pages/admin/requests/AdminShipping";
 import AdminCompleted from "../../pages/admin/requests/AdminCompleted";
 import AdminCancelled from "../../pages/admin/requests/AdminCancelled";
+import AdminArchived from "../../pages/admin/requests/AdminArchived";
 import AdminVolunteers from "../../pages/admin/volunteers/AdminVolunteers";
 import PendingVolunteers from "../../pages/admin/volunteers/PendingVolunteers";
 import AdminStats from "../../pages/admin/AdminStats";
@@ -153,37 +154,40 @@ useEffect(() => {
   if (loading || volunteersLoading) return <div>Loading...</div>;
 
   // ===== CLASSIFICAZIONE RICHIESTE =====
+  // Segregazione: menu operativi = solo live; Archiviate = solo archived.
+  const liveRequests = requests.filter((r) => r.archived !== true);
+  const archivedRequests = requests.filter((r) => r.archived === true);
 
   // Richieste da validare: status "inviata" — non ancora visibili ai volontari
-  const validateRequests = requests.filter((r) => r.status === "inviata");
+  const validateRequests = liveRequests.filter((r) => r.status === "inviata");
 
-  const triageRequests = requests.filter((r) =>
+  const triageRequests = liveRequests.filter((r) =>
     PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"].includes(r.status ?? "")
   );
 
   // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
-  const pendingRequests = requests.filter(
+  const pendingRequests = liveRequests.filter(
     (r) => r.status === "attesa volontario"
   );
 
-  const productionRequests = requests.filter((r) =>
+  const productionRequests = liveRequests.filter((r) =>
     PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status ?? "")
   );
 
   // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
-  const shippingRequests = requests.filter((r) =>
+  const shippingRequests = liveRequests.filter((r) =>
     ["pronta per spedizione", "spedita"].includes(r.status ?? "")
   );
 
-  const completedRequests = requests.filter((r) =>
+  const completedRequests = liveRequests.filter((r) =>
     PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status ?? "")
   );
 
-  const cancelledRequests = requests.filter((r) =>
+  const cancelledRequests = liveRequests.filter((r) =>
     PUBLIC_STATUS_GROUPS_FROM_STATUS["annullate / non completabili"].includes(r.status ?? "")
   );
 
-  const attentionRequests = requests.filter((r) => r.requiresAttention === true);
+  const attentionRequests = liveRequests.filter((r) => r.requiresAttention === true);
 
   // Filtra i volontari non attivi
   const pendingVolunteers = volunteers.filter(v => !v.active);
@@ -204,7 +208,7 @@ useEffect(() => {
       icon: "pi pi-folder-open", // folder open per richieste
       items: [
         {
-          label: `Tutte (${requests.length})`,
+          label: `Tutte (${liveRequests.length})`,
           icon: "pi pi-list", // elenco
           command: () => navigate("/admin"),
         },
@@ -242,6 +246,11 @@ useEffect(() => {
           label: `Annullate / KO (${cancelledRequests.length})`,
           icon: "pi pi-ban", // annullate
           command: () => navigate("/admin/requests/cancelled"),
+        },
+        {
+          label: `Archiviate (${archivedRequests.length})`,
+          icon: "pi pi-inbox",
+          command: () => navigate("/admin/requests/archived"),
         },
         {
           label: `Richiede attenzione (${attentionRequests.length})`,
@@ -442,7 +451,7 @@ useEffect(() => {
           }}
         >
           <Routes>
-            <Route path="requests" element={<AdminAll requests={requests} />} />
+            <Route path="requests" element={<AdminAll requests={liveRequests} />} />
             <Route path="requests/validate" element={<AdminValidate requests={validateRequests} />} />
             <Route path="requests/triage" element={<AdminTriage requests={triageRequests} />} />
             <Route path="requests/pending" element={<AdminPending requests={pendingRequests} />} />
@@ -450,9 +459,13 @@ useEffect(() => {
             <Route path="requests/shipping" element={<AdminShipping requests={shippingRequests} />} />
             <Route path="requests/completed" element={<AdminCompleted requests={completedRequests} />} />
             <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
+            <Route path="requests/archived" element={<AdminArchived requests={archivedRequests} />} />
             <Route path="requests/attention" element={<AdminAttention requests={attentionRequests} />} />
             <Route path="superadmin" element={<SuperAdminPage />} />
-            <Route path="my-checklist-items" element={<MyChecklistItems originBasePath="/admin/request" />} />
+            <Route
+              path="my-checklist-items"
+              element={<MyChecklistItems originBasePath="/admin/request" projectBasePath="/admin/project" />}
+            />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
             <Route path="volunteers/contacts" element={<ContactsList />} />

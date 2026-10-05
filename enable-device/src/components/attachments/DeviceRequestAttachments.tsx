@@ -11,11 +11,15 @@ import { InputTextarea } from "primereact/inputtextarea";
 import { Dropdown } from "primereact/dropdown";
 import { Toast } from "primereact/toast";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
+import { SelectButton } from "primereact/selectbutton";
+import { Tag } from "primereact/tag";
 
 interface FirestoreTimestampLike {
   _seconds: number;
   _nanoseconds: number;
 }
+
+type AttachmentRetention = "persistent" | "transient";
 
 interface DeviceRequestAttachment {
   id: string;
@@ -24,6 +28,7 @@ interface DeviceRequestAttachment {
   description: string;
   notes: string;
   category: string | null;
+  retention: AttachmentRetention;
   size: number;
   uploadedBy: string;
   createdAt: FirestoreTimestampLike | null;
@@ -33,6 +38,21 @@ interface DeviceRequestAttachment {
 interface Props {
   /** Id della deviceRequest a cui sono collegati gli allegati. */
   requestId: string;
+  /** Se true, nasconde azioni di scrittura (richiesta archiviata). */
+  readOnly?: boolean;
+}
+
+const RETENTION_OPTIONS: { label: string; value: AttachmentRetention }[] = [
+  { label: "Persistente", value: "persistent" },
+  { label: "Transitorio", value: "transient" },
+];
+
+function normalizeRetention(value: unknown): AttachmentRetention {
+  return value === "transient" ? "transient" : "persistent";
+}
+
+function retentionLabel(value: AttachmentRetention): string {
+  return value === "transient" ? "Transitorio" : "Persistente";
 }
 
 function formatTimestamp(value: FirestoreTimestampLike | null | undefined): string {
@@ -64,7 +84,7 @@ function formatSize(bytes: number): string {
  * azioni per cui l'utente corrente ha una ragionevole aspettativa di
  * successo (admin, o proprietario dell'allegato).
  */
-export default function DeviceRequestAttachments({ requestId }: Props) {
+export default function DeviceRequestAttachments({ requestId, readOnly = false }: Props) {
   const toast = useRef<Toast>(null);
   const currentUid = auth.currentUser?.uid ?? null;
 
@@ -78,11 +98,13 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadNotes, setUploadNotes] = useState("");
   const [uploadCategory, setUploadCategory] = useState("");
+  const [uploadRetention, setUploadRetention] = useState<AttachmentRetention | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const [editingAttachment, setEditingAttachment] = useState<DeviceRequestAttachment | null>(null);
   const [editDescription, setEditDescription] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editRetention, setEditRetention] = useState<AttachmentRetention>("persistent");
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -103,7 +125,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
     return userId;
   }, []);
 
-  const fetchAttachments = useCallback(async () => {
+  const fetchAttachments = useCallback(async (options?: { warnOnError?: boolean }) => {
     setLoading(true);
     try {
       const fn = httpsCallable<{ requestId: string }, { attachments: DeviceRequestAttachment[] }>(
@@ -111,21 +133,31 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
         "listDeviceRequestAttachments"
       );
       const result = await fn({ requestId });
-      const list = result.data.attachments ?? [];
+      const list = (result.data.attachments ?? []).map((a) => ({
+        ...a,
+        retention: normalizeRetention(a.retention),
+      }));
       setAttachments(list);
 
       const uniqueUploaders = Array.from(new Set(list.map((a) => a.uploadedBy)));
       const resolved = await Promise.all(uniqueUploaders.map((uid) => getUserFullName(uid)));
       setUploaderNames(Object.fromEntries(uniqueUploaders.map((uid, i) => [uid, resolved[i]])));
+      return true;
     } catch (err) {
       toast.current?.show({
-        severity: "error",
-        summary: "Errore",
-        detail: err instanceof Error ? err.message : "Impossibile recuperare gli allegati.",
+        severity: options?.warnOnError ? "warn" : "error",
+        summary: options?.warnOnError ? "Elenco non aggiornato" : "Errore",
+        detail: err instanceof Error
+          ? err.message
+          : options?.warnOnError
+            ? "L'allegato è stato caricato, ma non è stato possibile aggiornare l'elenco."
+            : "Impossibile recuperare gli allegati.",
         life: 4000,
       });
+      return false;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [requestId, getUserFullName]);
 
   useEffect(() => {
@@ -143,15 +175,24 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
     setUploadDescription("");
     setUploadNotes("");
     setUploadCategory("");
+    setUploadRetention(null);
     setShowUploadDialog(true);
   };
 
   const handleUpload = async () => {
-    if (!uploadFile || !uploadDescription.trim()) return;
+    if (!uploadFile || !uploadDescription.trim() || !uploadRetention) return;
     setUploading(true);
     try {
       const fn = httpsCallable<
-        { requestId: string; fileName: string; description: string; notes?: string; category?: string; size: number },
+        {
+          requestId: string;
+          fileName: string;
+          description: string;
+          notes?: string;
+          category?: string;
+          retention: AttachmentRetention;
+          size: number;
+        },
         { attachmentId: string; uploadUrl: string }
       >(functions, "uploadDeviceRequestAttachment");
       const result = await fn({
@@ -160,6 +201,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
         description: uploadDescription.trim(),
         notes: uploadNotes.trim() || undefined,
         category: uploadCategory.trim() || undefined,
+        retention: uploadRetention,
         size: uploadFile.size,
       });
 
@@ -178,7 +220,15 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
         life: 3000,
       });
       setShowUploadDialog(false);
-      await fetchAttachments();
+      // Dopo upload: mostra tutte le categorie così il nuovo file non resta nascosto
+      // da un filtro attivo sulla categoria sbagliata.
+      const uploadedCategory = uploadCategory.trim() || null;
+      setCategoryFilter((prev) => {
+        if (prev === null) return null;
+        if (uploadedCategory && prev === uploadedCategory) return prev;
+        return null;
+      });
+      await fetchAttachments({ warnOnError: true });
     } catch (err) {
       toast.current?.show({
         severity: "error",
@@ -214,6 +264,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
     setEditingAttachment(attachment);
     setEditDescription(attachment.description);
     setEditNotes(attachment.notes);
+    setEditRetention(normalizeRetention(attachment.retention));
   };
 
   const handleSaveEdit = async () => {
@@ -221,7 +272,13 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
     setSavingEdit(true);
     try {
       const fn = httpsCallable<
-        { requestId: string; attachmentId: string; description: string; notes?: string },
+        {
+          requestId: string;
+          attachmentId: string;
+          description: string;
+          notes?: string;
+          retention: AttachmentRetention;
+        },
         { attachmentId: string }
       >(functions, "updateDeviceRequestAttachmentDescription");
       await fn({
@@ -229,11 +286,12 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
         attachmentId: editingAttachment.id,
         description: editDescription.trim(),
         notes: editNotes,
+        retention: editRetention,
       });
       toast.current?.show({
         severity: "success",
         summary: "Allegato aggiornato",
-        detail: "Descrizione e note aggiornate.",
+        detail: "Descrizione, note e tipologia aggiornate.",
         life: 3000,
       });
       setEditingAttachment(null);
@@ -293,7 +351,8 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
    * dell'utente corrente: mostriamo le azioni se l'utente è il proprietario,
    * e le lasciamo comunque visibili altrimenti (un tentativo non ammesso
    * viene comunque respinto dal server con un messaggio d'errore chiaro). */
-  const canModify = (attachment: DeviceRequestAttachment) => attachment.uploadedBy === currentUid;
+  const canModify = (attachment: DeviceRequestAttachment) =>
+    !readOnly && attachment.uploadedBy === currentUid;
 
   return (
     <div>
@@ -301,7 +360,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
       <ConfirmDialog />
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <Button label="Carica allegato" icon="pi pi-upload" onClick={openUploadDialog} />
+        {!readOnly && <Button label="Carica allegato" icon="pi pi-upload" onClick={openUploadDialog} />}
         {categories.length > 0 && (
           <Dropdown
             value={categoryFilter}
@@ -322,22 +381,34 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
       >
         <Column
           header=""
-          style={{ width: 40 }}
-          body={(a: DeviceRequestAttachment) =>
-            a.notes ? (
-              <i
-                className="pi pi-info-circle"
-                role="img"
-                aria-label={`Note: ${a.notes}`}
-                title={a.notes}
-                style={{ color: "#6b7280", cursor: "help" }}
+          style={{ width: 48 }}
+          body={(a: DeviceRequestAttachment) => {
+            const notes = a.notes?.trim();
+            if (!notes) return null;
+            return (
+              <Button
+                type="button"
+                icon="pi pi-info-circle"
+                className="p-button-text p-button-rounded p-button-sm"
+                aria-label={`Note: ${notes}`}
+                tooltip={notes}
+                tooltipOptions={{ position: "top", showDelay: 200, style: { maxWidth: 360 } }}
               />
-            ) : null
-          }
+            );
+          }}
         />
         <Column field="fileName" header="File" />
         <Column field="description" header="Descrizione" />
         <Column field="category" header="Categoria" body={(a: DeviceRequestAttachment) => a.category || "-"} />
+        <Column
+          header="Tipologia"
+          body={(a: DeviceRequestAttachment) => (
+            <Tag
+              value={retentionLabel(normalizeRetention(a.retention))}
+              severity={normalizeRetention(a.retention) === "transient" ? "warning" : "success"}
+            />
+          )}
+        />
         <Column field="size" header="Dimensione" body={(a: DeviceRequestAttachment) => formatSize(a.size)} />
         <Column
           header="Caricato da"
@@ -357,23 +428,27 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
                 loading={downloadingId === a.id}
                 onClick={() => handleDownload(a)}
               />
-              <Button
-                icon="pi pi-pencil"
-                className="p-button-text p-button-sm"
-                tooltip="Modifica descrizione/note"
-                aria-label="Modifica descrizione/note"
-                onClick={() => openEditDialog(a)}
-                disabled={!canModify(a)}
-              />
-              <Button
-                icon="pi pi-trash"
-                className="p-button-text p-button-sm p-button-danger"
-                tooltip="Elimina"
-                aria-label="Elimina"
-                loading={deletingId === a.id}
-                onClick={() => handleDelete(a)}
-                disabled={!canModify(a)}
-              />
+              {!readOnly && (
+                <>
+                  <Button
+                    icon="pi pi-pencil"
+                    className="p-button-text p-button-sm"
+                    tooltip="Modifica descrizione/note"
+                    aria-label="Modifica descrizione/note"
+                    onClick={() => openEditDialog(a)}
+                    disabled={!canModify(a)}
+                  />
+                  <Button
+                    icon="pi pi-trash"
+                    className="p-button-text p-button-sm p-button-danger"
+                    tooltip="Elimina"
+                    aria-label="Elimina"
+                    loading={deletingId === a.id}
+                    onClick={() => handleDelete(a)}
+                    disabled={!canModify(a)}
+                  />
+                </>
+              )}
             </div>
           )}
         />
@@ -399,7 +474,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
               icon="pi pi-upload"
               onClick={handleUpload}
               loading={uploading}
-              disabled={!uploadFile || !uploadDescription.trim()}
+              disabled={!uploadFile || !uploadDescription.trim() || !uploadRetention}
             />
           </div>
         }
@@ -445,7 +520,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
             style={{ width: "100%" }}
           />
         </div>
-        <div>
+        <div style={{ marginBottom: 16 }}>
           <label htmlFor="attachment-category" style={{ display: "block", marginBottom: 4 }}>
             Categoria
           </label>
@@ -456,6 +531,22 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
             placeholder="es. documenti, foto..."
             style={{ width: "100%" }}
           />
+        </div>
+        <div>
+          <span id="attachment-retention-label" style={{ display: "block", marginBottom: 4 }}>
+            Tipologia (obbligatoria)
+          </span>
+          <SelectButton
+            id="attachment-retention"
+            value={uploadRetention}
+            onChange={(e) => setUploadRetention(e.value)}
+            options={RETENTION_OPTIONS}
+            aria-labelledby="attachment-retention-label"
+          />
+          <small style={{ display: "block", marginTop: 8, color: "#6b7280" }}>
+            Persistente: liberatorie, modelli 3D e documenti da conservare. Transitorio: foto scaling
+            o materiale sensibile eliminabile in archiviazione.
+          </small>
         </div>
       </Dialog>
 
@@ -495,7 +586,7 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
             style={{ width: "100%" }}
           />
         </div>
-        <div>
+        <div style={{ marginBottom: 16 }}>
           <label htmlFor="edit-attachment-notes" style={{ display: "block", marginBottom: 4 }}>
             Note
           </label>
@@ -505,6 +596,18 @@ export default function DeviceRequestAttachments({ requestId }: Props) {
             onChange={(e) => setEditNotes(e.target.value)}
             rows={2}
             style={{ width: "100%" }}
+          />
+        </div>
+        <div>
+          <span id="edit-attachment-retention-label" style={{ display: "block", marginBottom: 4 }}>
+            Tipologia
+          </span>
+          <SelectButton
+            id="edit-attachment-retention"
+            value={editRetention}
+            onChange={(e) => setEditRetention(e.value)}
+            options={RETENTION_OPTIONS}
+            aria-labelledby="edit-attachment-retention-label"
           />
         </div>
       </Dialog>

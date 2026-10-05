@@ -50,7 +50,9 @@ export const changeProjectStatus = onCall({ region: REGION }, async (request) =>
   const { projectId, newStatus, note } = (request.data ?? {}) as {
     projectId?: string;
     newStatus?: string;
-    note?: string;
+    // null = omesso dal client (stesso problema di templateId: Firebase
+    // può materializzare "assente" come null). Stringa vuota = nota assente.
+    note?: string | null;
   };
 
   if (!projectId || typeof projectId !== "string") {
@@ -61,9 +63,9 @@ export const changeProjectStatus = onCall({ region: REGION }, async (request) =>
     await logOutcome("blocked", { reason: "invalid-argument", field: "newStatus" });
     throw new HttpsError("invalid-argument", "Missing or invalid newStatus");
   }
-  if (note !== undefined && typeof note !== "string") {
+  if (note !== undefined && note !== null && typeof note !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "note" });
-    throw new HttpsError("invalid-argument", "note must be a string");
+    throw new HttpsError("invalid-argument", "note must be a string or null");
   }
 
   const db = getFirestore();
@@ -86,7 +88,7 @@ export const changeProjectStatus = onCall({ region: REGION }, async (request) =>
     batch.set(eventRef, {
       fromStatus: project.status,
       toStatus: newStatus,
-      note: note ?? "",
+      note: typeof note === "string" ? note : "",
       createdBy: uid,
       timestamp: FieldValue.serverTimestamp(),
     });

@@ -3,6 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { requireVolunteerConsents } from "../utils/consents";
 import { setAssignedVolunteers } from "../utils/volunteerAssignment";
 import { getInvokeId } from "../utils/invoke";
+import { assertDeviceRequestNotArchived } from "./deviceRequestArchive";
 
 export const assignVolunteer = onCall(
   { region: "europe-west1" },
@@ -29,6 +30,12 @@ export const assignVolunteer = onCall(
       console.log(`[assignVolunteer] KO: Permission denied for uid ${authUid}`);
       throw new HttpsError("permission-denied", "Only admin can assign volunteers");
     }
+
+    const requestSnap = await db.collection("deviceRequests").doc(deviceId).get();
+    if (!requestSnap.exists) {
+      throw new HttpsError("not-found", "Request not found");
+    }
+    assertDeviceRequestNotArchived(requestSnap.data());
 
     // Accept either a single UID or a full array (complete desired list)
     const volunteerIds: string[] = Array.isArray(userId) ? userId : [userId];

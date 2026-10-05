@@ -5,6 +5,7 @@ initializeApp();
 export {createDeviceRequest} from "./device/createDeviceRequest";
 export {createDeviceRequestInternal} from "./device/createDeviceRequestInternal";
 export {changeStatus} from "./device/changeStatus";
+export {archiveDeviceRequest, restoreDeviceRequest} from "./device/archiveDeviceRequest";
 export {assignVolunteer} from "./device/assignVolunteer";
 export {setDeviceRequestConsent} from "./device/setDeviceRequestConsent";
 export { register, checkRegistration, completeRegistration, registerWithIntegratedAuth, doLogin } from "./auth/register";
@@ -16,7 +17,14 @@ export { inviteVolunteer } from "./volunteer/invite";
 export { acceptVolunteerConsents } from "./volunteer/acceptVolunteerConsents";
 export { setUserRole } from "./volunteer/setUserRole";
 export { listVolunteerAdminData } from "./volunteer/listVolunteerAdminData";
-export { createShipmentRequest, approveShipmentRequest, deleteShipmentRequest } from "./shipments/shipmentRequests";
+export {
+  createShipmentRequest,
+  approveShipmentRequest,
+  deleteShipmentRequest,
+  listShipmentAddressBook,
+  updateShipmentTracking,
+  markShipmentDelivered,
+} from "./shipments/shipmentRequests";
 export { saveGlobalMessage } from "./device/saveGlobalMessage";
 export { updateChecklist } from "./organizer/updateChecklist";
 export { createChecklist } from "./organizer/createChecklist";

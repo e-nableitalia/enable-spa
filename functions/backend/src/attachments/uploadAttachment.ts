@@ -83,6 +83,7 @@ export const uploadAttachment = onCall({ region: REGION }, async (request) => {
     description,
     notes,
     category,
+    retention,
     size,
   } = data;
 
@@ -109,6 +110,13 @@ export const uploadAttachment = onCall({ region: REGION }, async (request) => {
   if (category !== undefined && category !== null && typeof category !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "category" });
     throw new HttpsError("invalid-argument", "category must be a string");
+  }
+  if (retention !== "persistent" && retention !== "transient") {
+    await logOutcome("blocked", { reason: "invalid-argument", field: "retention" });
+    throw new HttpsError(
+      "invalid-argument",
+      "Missing or invalid parameter: retention (must be 'persistent' or 'transient')"
+    );
   }
 
   const db = getFirestore();
@@ -183,6 +191,7 @@ export const uploadAttachment = onCall({ region: REGION }, async (request) => {
         description,
         notes,
         category,
+        retention,
         fileName,
         storagePath,
         size,

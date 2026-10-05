@@ -303,6 +303,17 @@ describe("setDeviceRequestConsent", () => {
     expect(deviceRequestUpdateMock).not.toHaveBeenCalled();
   });
 
+  it("rejects when the device request is archived", async () => {
+    deviceRequestsStore["req-1"] = { ...deviceRequestsStore["req-1"], archived: true };
+
+    await expect(
+      setDeviceRequestConsent.run(buildRequest({ requestId: "req-1", consentType: "waiver" }, "admin-1"))
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    expect(deviceRequestUpdateMock).not.toHaveBeenCalled();
+    expect(deviceRequestsStore["req-1"]).not.toHaveProperty("waiverAcquired");
+  });
+
   // Regressione: la scrittura di un tipo di consenso non deve intaccare i
   // campi già acquisiti dell'altro tipo sullo stesso documento.
   it("does not overwrite the other consent type's fields already set on the document", async () => {

@@ -115,6 +115,7 @@ function baseData(overrides: Record<string, unknown> = {}) {
     fileName: "fattura.pdf",
     description: "Fattura di acquisto",
     size: 1024,
+    retention: "persistent",
     ...overrides,
   };
 }

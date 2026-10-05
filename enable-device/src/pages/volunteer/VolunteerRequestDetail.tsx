@@ -140,15 +140,18 @@ export default function VolunteerRequestDetail() {
           <div style={{ display: "flex", gap: 40 }}>
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 10 }}><strong>Device:</strong> {request.deviceType || "-"}</div>
-              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <strong>Stato:</strong>
                 <Badge value={request.status} severity="info" />
+                {request.archived === true && <Badge value="Archiviata" severity="secondary" />}
+                {request.archived !== true && (
                 <Button
                   label="Cambia Stato"
                   icon="pi pi-pencil"
                   className="p-button-text"
                   onClick={() => { setNewStatus(request.status ?? ""); setNote(""); setShowChangeStatusDialog(true); }}
                 />
+                )}
               </div>
               {request.publicStatus && (
                 <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
@@ -249,7 +252,13 @@ export default function VolunteerRequestDetail() {
         header={
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span>Ultimo evento</span>
-            <Button label="Aggiungi nota" icon="pi pi-plus" className="p-button-text" onClick={() => setShowAddNoteDialog(true)} />
+            <Button
+              label="Aggiungi nota"
+              icon="pi pi-plus"
+              className="p-button-text"
+              disabled={request.archived === true}
+              onClick={() => setShowAddNoteDialog(true)}
+            />
           </div>
         }
         style={{ marginBottom: 24 }}
@@ -293,7 +302,7 @@ export default function VolunteerRequestDetail() {
 
         </TabPanel>
         <TabPanel header="Allegati">
-          <DeviceRequestAttachments requestId={id as string} />
+          <DeviceRequestAttachments requestId={id as string} readOnly={request.archived === true} />
         </TabPanel>
       </TabView>
 

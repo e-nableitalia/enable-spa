@@ -150,8 +150,8 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
 
     expect(within(row).queryByRole("button", { name: /Richiesta/ })).not.toBeInTheDocument();
     // Colonne, in ordine: Descrizione, Stato, Note, Provenienza — l'ultima
-    // (Provenienza) mostra "-" quando origin e' null.
-    expect(row.querySelectorAll("td")[3]).toHaveTextContent("-");
+    // mostra "Senza provenienza" quando origin e' null.
+    expect(row.querySelectorAll("td")[3]).toHaveTextContent("Senza provenienza");
   });
 
   // Scenario: un item completato (senza origin nella risposta) non mostra alcuna azione di navigazione (EA-155)
@@ -169,11 +169,11 @@ describe("MyChecklistItems - elenco aggregato dei propri item di checklist (EA-1
     // Il filtro "Solo aperti" e' attivo di default: un item completato
     // resta nascosto finche' non si passa a "Tutti".
     await screen.findByText("Nessun item corrispondente ai filtri.");
-    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Tutti" }));
 
     const row = await rowFor("Stampa mano");
     expect(within(row).queryByText(/Richiesta/)).not.toBeInTheDocument();
-    expect(row.querySelectorAll("td")[3]).toHaveTextContent("-");
+    expect(row.querySelectorAll("td")[3]).toHaveTextContent("Senza provenienza");
   });
 
   // Scenario: il volontario senza item assegnati vede uno stato vuoto esplicativo
@@ -225,13 +225,13 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
     expect(await screen.findByText("Item aperto")).toBeInTheDocument();
     expect(screen.queryByText("Item completato")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Tutti" }));
 
     expect(await screen.findByText("Item completato")).toBeInTheDocument();
     expect(screen.getByText("Item aperto")).toBeInTheDocument();
   });
 
-  it("un item boolean completato (completed=true, status diverso da Completata) e' considerato chiuso dal filtro 'Solo aperti'", async () => {
+  it("un item boolean con status Completata e' considerato chiuso anche se completed=false", async () => {
     callable.mockResolvedValue({
       data: {
         items: [
@@ -240,8 +240,8 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
             checklistId: "checklist-a",
             title: "Verifica batteria",
             type: "boolean",
-            status: "Assegnare",
-            completed: true,
+            status: "Completata",
+            completed: false,
           },
         ],
       },
@@ -250,6 +250,7 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
     render(<MyChecklistItems />);
 
     await screen.findByText("Nessun item corrispondente ai filtri.");
+    expect(screen.queryByText("Verifica batteria")).not.toBeInTheDocument();
   });
 
   it("mostra il contenuto del campo Note per ciascun item, editabile, vuoto se assente", async () => {
@@ -425,7 +426,7 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
 
     render(<MyChecklistItems />);
     const row = await rowFor("Verifica batteria");
-    await userEvent.click(within(row).getByRole("checkbox"));
+    await userEvent.click(within(row).getByRole("checkbox", { name: "Completato" }));
 
     expect(callable).toHaveBeenCalledWith("updateDeviceRequestChecklistItem", {
       requestId: "req-1",
@@ -436,7 +437,7 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
     });
   });
 
-  it("disabilita l'editing di Stato/Completato quando l'item non ha un origin di tipo deviceRequest risolto", async () => {
+  it("disabilita l'editing di Stato/Completato quando l'item non ha un origin risolto", async () => {
     callable.mockResolvedValue({
       data: {
         items: [
@@ -452,6 +453,116 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
     // form nativo disabilitabile via attributo HTML: PrimeReact esprime lo
     // stato disabilitato con la classe p-disabled sul contenitore root.
     expect(row.querySelector(".p-dropdown")).toHaveClass("p-disabled");
+    expect(within(row).getByText("Senza provenienza")).toBeInTheDocument();
+  });
+
+  it("modificare lo stato di un item con origin project invoca updateProjectChecklistItem", async () => {
+    firestoreDocs["projects/proj-1"] = { title: "Maker Faire" };
+    callable.mockImplementation((name: string) => {
+      if (name === "listMyChecklistItems") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "item-1",
+                checklistId: "checklist-a",
+                title: "Allestimento stand",
+                type: "generic",
+                status: "Assegnare",
+                origin: { type: "project", id: "proj-1" },
+              },
+            ],
+          },
+        });
+      }
+      if (name === "updateProjectChecklistItem") {
+        return Promise.resolve({ data: {} });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    render(<MyChecklistItems projectBasePath="/admin/project" />);
+    expect(await screen.findByRole("button", { name: "Progetto Maker Faire" })).toBeInTheDocument();
+
+    const row = await rowFor("Allestimento stand");
+    const statusTrigger = row.querySelector(".p-dropdown-trigger") as HTMLElement;
+    await userEvent.click(statusTrigger);
+    const option = (await screen.findByText("In corso")).closest("li");
+    if (!option) throw new Error("Option 'In corso' not found");
+    await userEvent.click(option);
+
+    expect(callable).toHaveBeenCalledWith("updateProjectChecklistItem", {
+      projectId: "proj-1",
+      checklistId: "checklist-a",
+      itemId: "item-1",
+      status: "In corso",
+    });
+  });
+
+  // Regressione: disabilitare i controlli per tutto il round-trip di save
+  // faceva apparire "bloccati" gli item aperti appena toccati e il flag
+  // boolean degli item chiusi (visto in Tutti subito dopo il completamento).
+  it("un item boolean con origin deviceRequest resta editabile anche se gia' completato (vista Tutti)", async () => {
+    callable.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "item-1",
+            checklistId: "checklist-a",
+            title: "Verifica batteria",
+            type: "boolean",
+            status: "Completata",
+            completed: true,
+            origin: { type: "deviceRequest", id: "req-1" },
+          },
+        ],
+      },
+    });
+
+    render(<MyChecklistItems />);
+    // Default "Solo aperti": passa a Tutti.
+    await userEvent.click(await screen.findByRole("button", { name: "Tutti" }));
+
+    const row = await rowFor("Verifica batteria");
+    const checkbox = within(row).getByRole("checkbox", { name: "Completato" });
+    expect(checkbox).toBeChecked();
+    expect(checkbox).not.toBeDisabled();
+  });
+
+  it("completare un item con filtro Solo aperti lo nasconde e mostra un toast di conferma", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "listMyChecklistItems") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "item-1",
+                checklistId: "checklist-a",
+                title: "Stampa mano",
+                type: "generic",
+                status: "In corso",
+                origin: { type: "deviceRequest", id: "req-1" },
+              },
+            ],
+          },
+        });
+      }
+      if (name === "updateDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: {} });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    render(<MyChecklistItems />);
+    const row = await rowFor("Stampa mano");
+    const statusTrigger = row.querySelector(".p-dropdown-trigger") as HTMLElement;
+    await userEvent.click(statusTrigger);
+    const option = (await screen.findByText("Completata")).closest("li");
+    if (!option) throw new Error("Option 'Completata' not found");
+    await userEvent.click(option);
+
+    expect(await screen.findByText(/segnato come completato/i)).toBeInTheDocument();
+    expect(screen.queryByText("Stampa mano")).not.toBeInTheDocument();
   });
 
   it("un errore durante l'aggiornamento ripristina il valore precedente e mostra un messaggio", async () => {

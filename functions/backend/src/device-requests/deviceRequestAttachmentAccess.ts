@@ -1,6 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
-import type { Firestore } from "firebase-admin/firestore";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { getAttachmentById, AttachmentRecord } from "../attachments/attachmentModel";
+import { assertDeviceRequestNotArchived } from "../device/deviceRequestArchive";
 
 /**
  * Risoluzione di accesso agli allegati collegati a una `deviceRequest`
@@ -23,7 +24,7 @@ export async function resolveDeviceRequestAttachmentAccess(
   db: Firestore,
   uid: string,
   requestId: string
-): Promise<{ assignedVolunteers: string[] }> {
+): Promise<{ assignedVolunteers: string[]; requestData: DocumentData }> {
   const requestRef = db.collection("deviceRequests").doc(requestId);
   const requestSnap = await requestRef.get();
 
@@ -49,7 +50,18 @@ export async function resolveDeviceRequestAttachmentAccess(
     );
   }
 
-  return { assignedVolunteers };
+  return { assignedVolunteers, requestData };
+}
+
+/** Accesso in scrittura: come sopra, più rifiuto se la richiesta è archiviata. */
+export async function resolveDeviceRequestAttachmentWriteAccess(
+  db: Firestore,
+  uid: string,
+  requestId: string
+): Promise<{ assignedVolunteers: string[] }> {
+  const access = await resolveDeviceRequestAttachmentAccess(db, uid, requestId);
+  assertDeviceRequestNotArchived(access.requestData);
+  return { assignedVolunteers: access.assignedVolunteers };
 }
 
 /**
@@ -67,9 +79,13 @@ export async function resolveDeviceRequestAttachment(
   db: Firestore,
   uid: string,
   requestId: string,
-  attachmentId: string
+  attachmentId: string,
+  options?: { forWrite?: boolean }
 ): Promise<AttachmentRecord> {
-  await resolveDeviceRequestAttachmentAccess(db, uid, requestId);
+  const access = await resolveDeviceRequestAttachmentAccess(db, uid, requestId);
+  if (options?.forWrite) {
+    assertDeviceRequestNotArchived(access.requestData);
+  }
 
   const attachment = await getAttachmentById(db, attachmentId);
   if (!attachment) {

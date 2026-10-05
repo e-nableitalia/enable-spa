@@ -40,7 +40,7 @@ export const deleteDeviceRequestAttachment = onCall({ region: REGION }, async (r
   }
 
   const db = getFirestore();
-  await resolveDeviceRequestAttachment(db, uid, requestId, attachmentId);
+  await resolveDeviceRequestAttachment(db, uid, requestId, attachmentId, { forWrite: true });
 
   const result = (await deleteAttachment.run({
     ...request,

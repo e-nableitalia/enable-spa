@@ -75,6 +75,17 @@ describe("updateProject", () => {
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "title must be a non-empty string"));
   });
 
+  it("throws invalid-argument for a null title", async () => {
+    await expect(
+      updateProject.run(buildRequest({ projectId: "proj-new", title: null }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "title must be a non-empty string"));
+  });
+
+  it("treats a null description as empty string", async () => {
+    await updateProject.run(buildRequest({ projectId: "proj-new", description: null }, "admin-1"));
+    expect(projectsStore["proj-new"]).toEqual(expect.objectContaining({ description: "" }));
+  });
+
   it("throws unauthenticated when there is no auth context", async () => {
     await expect(
       updateProject.run(buildRequest({ projectId: "proj-new", title: "X" }, null))

@@ -36,6 +36,7 @@ const ATTACHMENT_A = {
   description: "Fattura di acquisto",
   notes: "",
   category: "documenti",
+  retention: "persistent",
   size: 51200,
   uploadedBy: "volunteer-1",
   createdAt: { _seconds: 1893456000, _nanoseconds: 0 },
@@ -49,6 +50,7 @@ const ATTACHMENT_B = {
   description: "Foto dispositivo",
   notes: "",
   category: "foto",
+  retention: "transient",
   size: 204800,
   uploadedBy: "admin-1",
   createdAt: { _seconds: 1893456100, _nanoseconds: 0 },
@@ -109,7 +111,7 @@ describe("DeviceRequestAttachments (EA-168)", () => {
     expect(screen.getByText("foto.jpg")).toBeInTheDocument();
   });
 
-  it("mostra un'icona informativa con le note al passaggio del mouse, solo per gli allegati che ne hanno", async () => {
+  it("mostra un pulsante informativo con tooltip sulle note, solo per gli allegati che ne hanno", async () => {
     callable.mockImplementation((name: string) => {
       if (name === "listDeviceRequestAttachments") {
         return Promise.resolve({
@@ -122,9 +124,9 @@ describe("DeviceRequestAttachments (EA-168)", () => {
     render(<DeviceRequestAttachments requestId="req-1" />);
     await screen.findByText("fattura.pdf");
 
-    expect(screen.getByRole("img", { name: "Note: Documento firmato in originale" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Note: Documento firmato in originale" })).toBeInTheDocument();
     // ATTACHMENT_B ha notes vuote: nessuna icona per quella riga.
-    expect(screen.queryAllByRole("img", { name: /^Note:/ })).toHaveLength(1);
+    expect(screen.queryAllByRole("button", { name: /^Note:/ })).toHaveLength(1);
   });
 
   it("carica un nuovo allegato: chiama la Cloud Function, effettua il PUT del file sulla signed URL e ricarica l'elenco", async () => {
@@ -151,6 +153,7 @@ describe("DeviceRequestAttachments (EA-168)", () => {
     await user.upload(fileInput, file);
 
     await user.type(screen.getByLabelText("Descrizione"), "Manuale d'uso");
+    await user.click(screen.getByRole("button", { name: "Persistente" }));
     await user.click(screen.getByRole("button", { name: "Carica" }));
 
     await waitFor(() =>
@@ -160,6 +163,7 @@ describe("DeviceRequestAttachments (EA-168)", () => {
         description: "Manuale d'uso",
         notes: undefined,
         category: undefined,
+        retention: "persistent",
         size: file.size,
       })
     );
@@ -245,6 +249,7 @@ describe("DeviceRequestAttachments (EA-168)", () => {
         attachmentId: "att-1",
         description: "Fattura aggiornata",
         notes: "",
+        retention: "persistent",
       })
     );
   });

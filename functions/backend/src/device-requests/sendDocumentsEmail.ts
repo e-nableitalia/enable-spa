@@ -3,6 +3,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { logSecurityEvent } from "../security/securityLog";
 import { EMAIL_TEMPLATE_IDS } from "../emailTemplates/registry";
+import { assertDeviceRequestNotArchived } from "../device/deviceRequestArchive";
 
 const REGION = "europe-west1";
 
@@ -82,6 +83,7 @@ export const sendDocumentsEmail = onCall(
         if (!snap.exists) {
           throw new HttpsError("not-found", "Device request not found");
         }
+        assertDeviceRequestNotArchived(snap.data());
         if (snap.data()?.documentsEmailSent) {
           return false;
         }

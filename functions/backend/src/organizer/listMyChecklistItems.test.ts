@@ -32,11 +32,14 @@ interface QueryChainMock {
   get: jest.Mock;
 }
 
-function buildChecklistItemQuery(items: Record<string, unknown>[]): QueryChainMock {
+function buildQueryChain(docs: { id?: string; data: Record<string, unknown> }[]): QueryChainMock {
   const chain: QueryChainMock = {
     where: jest.fn(),
     get: jest.fn().mockResolvedValue({
-      docs: items.map((data) => ({ data: () => data })),
+      docs: docs.map((entry) => ({
+        id: entry.id ?? "doc",
+        data: () => entry.data,
+      })),
     }),
   };
   chain.where.mockReturnValue(chain);
@@ -49,13 +52,16 @@ function buildDocSnap(id: string, data: Record<string, unknown> | undefined) {
 
 describe("listMyChecklistItems", () => {
   let usersStore: Record<string, Record<string, unknown> | undefined>;
+  let checklistUpdateMock: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     usersStore = {};
+    checklistUpdateMock = jest.fn().mockResolvedValue(undefined);
 
     docMock.mockImplementation((id: string) => ({
       get: jest.fn().mockResolvedValue(buildDocSnap(id, usersStore[id])),
+      update: checklistUpdateMock,
     }));
 
     collectionMock.mockImplementation((name: string) => {
@@ -69,14 +75,18 @@ describe("listMyChecklistItems", () => {
   });
 
   function mockChecklistItemsQuery(items: Record<string, unknown>[]) {
-    const chain = buildChecklistItemQuery(items);
+    const chain = buildQueryChain(items.map((data) => ({ data })));
+    const deviceRequestsChain = buildQueryChain([]);
+    const projectsChain = buildQueryChain([]);
     collectionMock.mockImplementation((name: string) => {
       if (name === "checklistItems") return chain;
       if (name === "users") return { doc: docMock };
       if (name === "checklists") return { doc: docMock };
+      if (name === "deviceRequests") return deviceRequestsChain;
+      if (name === "projects") return projectsChain;
       throw new Error(`Unexpected collection ${name} in this test setup`);
     });
-    return chain;
+    return { chain, deviceRequestsChain, projectsChain };
   }
 
   // Scenario: un utente vede solo i propri item assegnati attraverso piu' checklist
@@ -85,7 +95,7 @@ describe("listMyChecklistItems", () => {
       { id: "item-1", checklistId: "checklist-a", assignee: "user-1", status: "Assegnare", completed: false },
       { id: "item-2", checklistId: "checklist-b", assignee: "user-1", status: "Assegnare", completed: false },
     ];
-    const chain = mockChecklistItemsQuery(myItems);
+    const { chain } = mockChecklistItemsQuery(myItems);
 
     const result = await listMyChecklistItems.run(buildRequest({}));
 
@@ -98,17 +108,21 @@ describe("listMyChecklistItems", () => {
   // Scenario: il filtro scope applica category direttamente su checklistItems
   it("applies scope as a direct where('category','==', scope) filter on checklistItems, with no post-filter", async () => {
     const items = [
-      { id: "item-1", checklistId: "checklist-a", assignee: "user-1", category: "devicetype-mano", status: "Completata", completed: false },
+      {
+        id: "item-1",
+        checklistId: "checklist-a",
+        assignee: "user-1",
+        category: "devicetype-mano",
+        status: "Completata",
+        completed: false,
+      },
     ];
-    const chain = mockChecklistItemsQuery(items);
+    const { chain } = mockChecklistItemsQuery(items);
 
     const result = await listMyChecklistItems.run(buildRequest({ scope: "devicetype-mano" }));
 
     expect(chain.where).toHaveBeenNthCalledWith(1, "assignee", "==", "user-1");
     expect(chain.where).toHaveBeenNthCalledWith(2, "category", "==", "devicetype-mano");
-    // origin: null aggiunto (nessun checklist match nel batch-read mockato
-    // a []): non più "invariato", vedi regressione sotto sul perché origin
-    // è ora risolto anche per item completati.
     expect((result as { items: unknown[] }).items).toEqual([{ ...items[0], origin: null }]);
   });
 
@@ -132,7 +146,7 @@ describe("listMyChecklistItems", () => {
     const result = await listMyChecklistItems.run(buildRequest({}));
 
     expect(getAllMock).toHaveBeenCalledTimes(1);
-    expect(getAllMock.mock.calls[0]).toHaveLength(2); // checklist-a e checklist-b, entrambe distinte
+    expect(getAllMock.mock.calls[0]).toHaveLength(2);
     const resultItems = (result as { items: Record<string, unknown>[] }).items;
     expect(resultItems.find((i) => i.id === "item-1")?.origin).toEqual({ type: "deviceRequest", id: "req-1" });
     expect(resultItems.find((i) => i.id === "item-2")?.origin).toEqual({ type: "deviceRequest", id: "req-1" });
@@ -147,7 +161,7 @@ describe("listMyChecklistItems", () => {
     expect(getAllMock).not.toHaveBeenCalled();
   });
 
-  it("resolves origin to null when an item's parent checklist has no origin field", async () => {
+  it("resolves origin to null when parent checklist has no origin and no owner reverse-link", async () => {
     const items = [
       { id: "item-1", checklistId: "checklist-a", assignee: "user-1", status: "Assegnare", completed: false },
     ];
@@ -159,14 +173,69 @@ describe("listMyChecklistItems", () => {
     expect((result as { items: Record<string, unknown>[] }).items[0].origin).toBeNull();
   });
 
+  // Regressione: checklist legacy senza origin ma ancora collegate a una
+  // deviceRequest via checklistIds — la To Do List le vedeva senza
+  // provenienza e non editabili.
+  it("reverse-looks up deviceRequest origin when checklist.origin is missing and heals the checklist doc", async () => {
+    const items = [
+      { id: "item-1", checklistId: "checklist-orphan", assignee: "user-1", status: "Assegnare", completed: false },
+    ];
+    const { deviceRequestsChain } = mockChecklistItemsQuery(items);
+    getAllMock.mockResolvedValue([buildDocSnap("checklist-orphan", { title: "Checklist di fabbricazione - REQ-1" })]);
+    deviceRequestsChain.get.mockResolvedValue({
+      docs: [
+        {
+          id: "req-legacy",
+          data: () => ({ checklistIds: ["checklist-orphan", "other"] }),
+        },
+      ],
+    });
+
+    const result = await listMyChecklistItems.run(buildRequest({}));
+
+    expect(deviceRequestsChain.where).toHaveBeenCalledWith("checklistIds", "array-contains-any", [
+      "checklist-orphan",
+    ]);
+    expect((result as { items: Record<string, unknown>[] }).items[0].origin).toEqual({
+      type: "deviceRequest",
+      id: "req-legacy",
+    });
+    expect(checklistUpdateMock).toHaveBeenCalledWith({
+      origin: { type: "deviceRequest", id: "req-legacy" },
+    });
+  });
+
+  it("reverse-looks up project origin when checklist.origin is missing and no deviceRequest owns it", async () => {
+    const items = [
+      { id: "item-1", checklistId: "checklist-proj", assignee: "user-1", status: "In corso", completed: false },
+    ];
+    const { projectsChain } = mockChecklistItemsQuery(items);
+    getAllMock.mockResolvedValue([buildDocSnap("checklist-proj", { title: "Todo progetto" })]);
+    projectsChain.get.mockResolvedValue({
+      docs: [
+        {
+          id: "proj-1",
+          data: () => ({ checklistIds: ["checklist-proj"], title: "Maker Faire" }),
+        },
+      ],
+    });
+
+    const result = await listMyChecklistItems.run(buildRequest({}));
+
+    expect((result as { items: Record<string, unknown>[] }).items[0].origin).toEqual({
+      type: "project",
+      id: "proj-1",
+    });
+  });
+
   // Scenario: un non-admin non puo' interrogare gli item di un altro utente
   it("rejects with permission-denied when a non-admin passes an explicit uid different from their own", async () => {
     usersStore["user-1"] = { role: "volunteer" };
     mockChecklistItemsQuery([]);
 
-    await expect(
-      listMyChecklistItems.run(buildRequest({ uid: "user-2" }))
-    ).rejects.toMatchObject(new HttpsError("permission-denied", "Only admin can query another user's checklist items"));
+    await expect(listMyChecklistItems.run(buildRequest({ uid: "user-2" }))).rejects.toMatchObject(
+      new HttpsError("permission-denied", "Only admin can query another user's checklist items")
+    );
 
     expect(collectionMock).not.toHaveBeenCalledWith("checklistItems");
   });
@@ -176,7 +245,7 @@ describe("listMyChecklistItems", () => {
     const otherUsersItems = [
       { id: "item-9", checklistId: "checklist-z", assignee: "user-2", status: "Completata", completed: false },
     ];
-    const chain = mockChecklistItemsQuery(otherUsersItems);
+    const { chain } = mockChecklistItemsQuery(otherUsersItems);
 
     const result = await listMyChecklistItems.run(buildRequest({ uid: "user-2" }, "admin-1"));
 
@@ -193,17 +262,17 @@ describe("listMyChecklistItems", () => {
   });
 
   it("throws unauthenticated when there is no auth context", async () => {
-    await expect(
-      listMyChecklistItems.run(buildRequest({}, null))
-    ).rejects.toMatchObject(new HttpsError("unauthenticated", "User must be authenticated"));
+    await expect(listMyChecklistItems.run(buildRequest({}, null))).rejects.toMatchObject(
+      new HttpsError("unauthenticated", "User must be authenticated")
+    );
 
     expect(collectionMock).not.toHaveBeenCalled();
   });
 
   it("throws invalid-argument when scope is not a non-empty string", async () => {
-    await expect(
-      listMyChecklistItems.run(buildRequest({ scope: "" }))
-    ).rejects.toMatchObject(new HttpsError("invalid-argument", "scope must be a non-empty string"));
+    await expect(listMyChecklistItems.run(buildRequest({ scope: "" }))).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "scope must be a non-empty string")
+    );
   });
 
   it("logs a success security event when items are listed", async () => {
@@ -224,9 +293,7 @@ describe("listMyChecklistItems", () => {
     usersStore["user-1"] = { role: "volunteer" };
     mockChecklistItemsQuery([]);
 
-    await expect(
-      listMyChecklistItems.run(buildRequest({ uid: "user-2" }))
-    ).rejects.toBeInstanceOf(HttpsError);
+    await expect(listMyChecklistItems.run(buildRequest({ uid: "user-2" }))).rejects.toBeInstanceOf(HttpsError);
 
     expect(logSecurityEvent).toHaveBeenCalledWith(
       expect.objectContaining({

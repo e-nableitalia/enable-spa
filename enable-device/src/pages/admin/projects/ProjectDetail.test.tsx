@@ -226,7 +226,36 @@ describe("ProjectDetail", () => {
     expect(callable).toHaveBeenCalledWith("changeProjectStatus", {
       projectId: "p1",
       newStatus: "active",
-      note: undefined,
+      note: "",
     });
+  });
+
+  it("non permette di salvare un titolo vuoto nel dialog 'Modifica'", async () => {
+    setProject("p1", {
+      title: "Vecchio titolo",
+      description: "Desc",
+      projectType: "progetto",
+      status: "new",
+      checklists: [],
+      createdBy: "admin-1",
+    });
+    setEvents("p1", []);
+    callable.mockImplementation((name: string) => {
+      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
+      if (name === "updateProject") return Promise.resolve({ data: { success: true } });
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    renderDetail();
+
+    await screen.findByText("Vecchio titolo");
+    await user.click(screen.getByRole("button", { name: "Modifica" }));
+    const dialog = screen.getByRole("dialog");
+    const titleInput = within(dialog).getByDisplayValue("Vecchio titolo");
+    await user.clear(titleInput);
+
+    expect(within(dialog).getByRole("button", { name: "Salva" })).toBeDisabled();
+    expect(callable).not.toHaveBeenCalledWith("updateProject", expect.anything());
   });
 });
