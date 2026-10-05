@@ -137,15 +137,6 @@ export default function RequestDevice() {
         <div className="pub">
             <Toast ref={toast} />
 
-            <header className="pub-header">
-                <img src={logo} alt="" />
-                <div>
-                    <strong>e-Nable Italia</strong>
-                    <br />
-                    <span>Richiesta device</span>
-                </div>
-            </header>
-
             <main className="pub-main pub-narrow">
                 <h1 className="pub-title">Richiedi un device e-Nable</h1>
                 <p className="pub-lead">
@@ -379,6 +370,16 @@ export default function RequestDevice() {
                         />
                     </div>
                 )}
+
+                <div className="pub-brandbar">
+                    <img src={logo} alt="" className="pub-brandbar-logo" />
+                    <div className="pub-brandbar-text">
+                        <span className="pub-brandbar-name">e-Nable Italia</span>
+                        <span className="pub-brandbar-meta">
+                            Richiesta device · v{__APP_VERSION__} · Aggiornata al {__BUILD_DATE__}
+                        </span>
+                    </div>
+                </div>
             </main>
             <Footer />
         </div>
