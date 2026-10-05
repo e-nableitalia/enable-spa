@@ -6,7 +6,7 @@ import { RadioButton } from "primereact/radiobutton";
 import { Checkbox } from "primereact/checkbox";
 import { Button } from "primereact/button";
 import { Toast } from "primereact/toast";
-import logo from "../assets/logo.png";
+import heroImage from "../assets/projects-2.jpg";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { getRecaptchaToken } from "../services/security/recaptcha";
@@ -136,6 +136,12 @@ export default function RequestDevice() {
     return (
         <div className="pub">
             <Toast ref={toast} />
+
+            <img
+                className="pub-hero"
+                src={heroImage}
+                alt="Mano robotica che tocca il logo e-Nable Italia"
+            />
 
             <main className="pub-main pub-narrow">
                 <h1 className="pub-title">Richiedi un device e-Nable</h1>
@@ -372,13 +378,9 @@ export default function RequestDevice() {
                 )}
 
                 <div className="pub-brandbar">
-                    <img src={logo} alt="" className="pub-brandbar-logo" />
-                    <div className="pub-brandbar-text">
-                        <span className="pub-brandbar-name">e-Nable Italia</span>
-                        <span className="pub-brandbar-meta">
-                            Richiesta device · v{__APP_VERSION__} · Aggiornata al {__BUILD_DATE__}
-                        </span>
-                    </div>
+                    <span className="pub-brandbar-meta">
+                        Richiesta device · v{__APP_VERSION__} · Aggiornata al {__BUILD_DATE__}
+                    </span>
                 </div>
             </main>
             <Footer />

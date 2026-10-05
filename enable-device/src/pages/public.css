@@ -126,33 +126,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
   margin-top: 40px;
   padding: 16px 0 4px;
-  color: #9a9ea6;
-  font-size: 12px;
-  text-align: left;
-}
-.pub-brandbar-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.pub-brandbar-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  line-height: 1.35;
-}
-.pub-brandbar-name {
-  color: #5b616b;
-  font-weight: 600;
-  font-size: 13px;
+  text-align: center;
 }
 .pub-brandbar-meta {
   color: #9a9ea6;
   font-size: 12px;
+  line-height: 1.4;
 }
 
 /* Request device form */
