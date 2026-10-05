@@ -91,17 +91,17 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
       projectId: "p1",
       label: "Fase 1",
       title: "Fase 1",
-      templateId: undefined,
+      templateId: null,
     });
     expect(onChecklistsChanged).toHaveBeenCalled();
   });
 
-  it("tornare su 'Nessun template' dopo averne scelto uno reale invia templateId undefined, non l'oggetto opzione", async () => {
+  it("tornare su 'Nessun template' dopo averne scelto uno reale invia templateId null, non l'oggetto opzione", async () => {
     // Regressione: senza optionValue="value" esplicito, PrimeReact Dropdown
     // risolve l'opzione "Nessun template (checklist vuota)" (value:null)
     // all'intero oggetto opzione invece che a null (ObjectUtils.isNotEmpty(null)
-    // e' false): createTemplateId diventava quell'oggetto, inviato al backend
-    // come templateId invece di essere omesso.
+    // e' false): createTemplateId diventava quell'oggetto. Ora si normalizza
+    // a null (scelta esplicita "nessun template", come device-requests).
     callable.mockImplementation((name: string) => {
       if (name === "listTemplates") {
         return Promise.resolve({ data: { templates: [{ id: "tmpl-1", title: "Template A" }] } });
@@ -128,7 +128,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
 
     expect(callable).toHaveBeenCalledWith(
       "createProjectChecklist",
-      expect.objectContaining({ templateId: undefined })
+      expect.objectContaining({ templateId: null })
     );
   });
 

@@ -60,6 +60,12 @@ export interface deviceRequestData {
      */
     shippingAddress?: ShippingAddress;
 
+    /**
+     * Flag additivo di archiviazione (non è uno status).
+     * Assente/`false` = live; `true` = solo in menu Archiviate, sola lettura.
+     */
+    archived?: boolean;
+
     // ── Campi operativi creati durante la validazione admin ──────────────────
     /**
      * Nome del destinatario del device (es. "Marco", "il figlio di").

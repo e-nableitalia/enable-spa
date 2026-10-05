@@ -6,6 +6,7 @@ import {sendChangeStatusNotifications, NotificaOptions} from "./changeStatusNoti
 import {assertVolunteerTransitionAllowed} from "../utils/volunteerTransitions";
 import {autoCreateProductionChecklistOnTransition} from "../device-requests/autoCreateProductionChecklist";
 import {isValidRequestStatus} from "../utils/requestStatuses";
+import {assertDeviceRequestNotArchived} from "./deviceRequestArchive";
 
 /**
  * Stati verso cui la transizione richiede lo scarico di responsabilità
@@ -67,6 +68,8 @@ export const changeStatus = onCall(
 
     const requestData = requestSnap.data();
     const currentStatus = requestData?.status;
+
+    assertDeviceRequestNotArchived(requestData);
 
     assertVolunteerTransitionAllowed(
       role,

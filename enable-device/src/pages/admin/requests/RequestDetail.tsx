@@ -18,7 +18,7 @@ import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
-import { REQUEST_STATUSES, getPublicStatusGroup } from "../../../helpers/requestStatus";
+import { REQUEST_STATUSES, getPublicStatusGroup, CLOSED_STATUSES } from "../../../helpers/requestStatus";
 import { setRequiresAttention } from "../../../helpers/requiresAttention";
 import type { ShippingAddress } from "../../../shared/types/shippingAddress";
 import provinceList from "../../../helpers/province.json";
@@ -51,6 +51,10 @@ export default function RequestDetail() {
   const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [showChangeDeviceTypeDialog, setShowChangeDeviceTypeDialog] = useState(false);
   const [sendingDocumentsEmail, setSendingDocumentsEmail] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [purgeTransientOnArchive, setPurgeTransientOnArchive] = useState(true);
+  const [archiving, setArchiving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   // ── Validazione richiesta (status "inviata") ─────────────────────────────
   const [showValidateDialog, setShowValidateDialog] = useState(false);
@@ -293,6 +297,63 @@ export default function RequestDetail() {
     });
     setShowChangeStatusDialog(false);
     await loadData();
+  };
+
+  const handleArchive = async () => {
+    if (!id) return;
+    setArchiving(true);
+    try {
+      const fn = httpsCallable(functions, "archiveDeviceRequest");
+      const result = await fn({
+        requestId: id,
+        purgeTransientAttachments: purgeTransientOnArchive,
+      });
+      const purged = (result.data as { purgedTransientCount?: number })?.purgedTransientCount ?? 0;
+      toast.current?.show({
+        severity: "success",
+        summary: "Richiesta archiviata",
+        detail: purgeTransientOnArchive
+          ? `Archiviata. Allegati transitori eliminati: ${purged}.`
+          : "La richiesta è stata archiviata.",
+        life: 4000,
+      });
+      setShowArchiveDialog(false);
+      await loadData();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Impossibile archiviare la richiesta.",
+        life: 5000,
+      });
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!id) return;
+    setRestoring(true);
+    try {
+      const fn = httpsCallable(functions, "restoreDeviceRequest");
+      await fn({ requestId: id });
+      toast.current?.show({
+        severity: "success",
+        summary: "Richiesta ripristinata",
+        detail: "La richiesta è di nuovo attiva (live).",
+        life: 3000,
+      });
+      await loadData();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Impossibile ripristinare la richiesta.",
+        life: 5000,
+      });
+    } finally {
+      setRestoring(false);
+    }
   };
 
   const handleAddVolunteerToList = async () => {
@@ -674,6 +735,10 @@ export default function RequestDetail() {
 
   if (!request) return <div>Loading...</div>;
 
+  const isArchived = request.archived === true;
+  const canArchive =
+    !isArchived && CLOSED_STATUSES.includes(request.status ?? "");
+
   return (
     <div style={{ padding: 20 }}>
       <Toast ref={toast} />
@@ -988,6 +1053,7 @@ export default function RequestDetail() {
               <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
                 <strong>Device:</strong>
                 <span>{request.deviceType || '-'}</span>
+                {!isArchived && (
                 <Button
                   label="Modifica"
                   icon="pi pi-pencil"
@@ -1006,12 +1072,15 @@ export default function RequestDetail() {
                     setShowChangeDeviceTypeDialog(true);
                   }}
                 />
+                )}
               </div>
-              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <strong>Status:</strong>
                 <span style={{ marginLeft: 8 }}>
                   <Badge value={request.status} severity="info" />
                 </span>
+                {isArchived && <Badge value="Archiviata" severity="secondary" />}
+                {!isArchived && (
                 <Button
                   label="Cambia Stato"
                   icon="pi pi-pencil"
@@ -1019,6 +1088,27 @@ export default function RequestDetail() {
                   style={{ marginLeft: 8 }}
                   onClick={() => setShowChangeStatusDialog(true)}
                 />
+                )}
+                {canArchive && (
+                  <Button
+                    label="Archivia"
+                    icon="pi pi-inbox"
+                    className="p-button-outlined p-button-secondary"
+                    onClick={() => {
+                      setPurgeTransientOnArchive(true);
+                      setShowArchiveDialog(true);
+                    }}
+                  />
+                )}
+                {isArchived && (
+                  <Button
+                    label="Ripristina"
+                    icon="pi pi-replay"
+                    className="p-button-outlined"
+                    loading={restoring}
+                    onClick={handleRestore}
+                  />
+                )}
               </div>
               <div style={{ marginBottom: 10 }}>
                 <strong>Stato pubblico:</strong>
@@ -1036,7 +1126,7 @@ export default function RequestDetail() {
                   ? <Badge value="⚠️ Sì" severity="danger" />
                   : <span style={{ color: "#888" }}>No</span>
                 }
-                {request.requiresAttention
+                {!isArchived && (request.requiresAttention
                   ? <Button
                       label="Rimuovi flag"
                       icon="pi pi-times"
@@ -1050,7 +1140,7 @@ export default function RequestDetail() {
                       className="p-button-text p-button-sm p-button-warning"
                       onClick={() => { setAttentionNote(""); setShowAttentionDialog(true); }}
                     />
-                }
+                )}
               </div>
             </div>
             <div style={{ flex: 1 }}>
@@ -1066,6 +1156,7 @@ export default function RequestDetail() {
                   icon="pi pi-pencil"
                   className="p-button-text"
                   style={{ marginLeft: 8 }}
+                  disabled={isArchived}
                   onClick={() => setShowAssignVolunteerDialog(true)}
                 />
               </div>
@@ -1110,7 +1201,12 @@ export default function RequestDetail() {
                     ? "Email del richiedente non valorizzata"
                     : undefined
               }
-              disabled={!privateData?.email || request.documentsEmailSent === true || sendingDocumentsEmail}
+              disabled={
+                isArchived ||
+                !privateData?.email ||
+                request.documentsEmailSent === true ||
+                sendingDocumentsEmail
+              }
               loading={sendingDocumentsEmail}
               onClick={handleSendDocumentsEmail}
             />
@@ -1118,6 +1214,7 @@ export default function RequestDetail() {
               label="Modifica"
               icon="pi pi-pencil"
               className="p-button-text"
+              disabled={isArchived}
               onClick={() => {
                 setPrivateForm({
                   email: privateData?.email || "",
@@ -1177,6 +1274,7 @@ export default function RequestDetail() {
             label="Modifica"
             icon="pi pi-pencil"
             className="p-button-text"
+            disabled={isArchived}
             onClick={() => {
               setPublicForm({
                 recipient: request.recipient || "",
@@ -1224,6 +1322,7 @@ export default function RequestDetail() {
             label="Modifica"
             icon="pi pi-pencil"
             className="p-button-text"
+            disabled={isArchived}
             onClick={() => {
               const addr = request.shippingAddress;
               setAddressForm(addr ? { ...{ phone: "", notes: "", ...addr } } : { fullName: "", street: "", city: "", province: "", postalCode: "", country: "IT", phone: "", notes: "" });
@@ -1258,12 +1357,14 @@ export default function RequestDetail() {
         header={
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span>Ultimo evento</span>
+            {!isArchived && (
             <Button
               label="Aggiungi nota"
               icon="pi pi-plus"
               className="p-button-text"
               onClick={() => setShowAddNoteDialog(true)}
             />
+            )}
           </div>
         }
         style={{ marginBottom: 30 }}
@@ -1316,7 +1417,7 @@ export default function RequestDetail() {
                   ? <Badge value="Acquisito" severity="success" />
                   : <Badge value="Non acquisito" severity="warning" />
                 }
-                {!request.waiverAcquired && (
+                {!request.waiverAcquired && !isArchived && (
                   <Button
                     label="Segna come acquisito"
                     icon="pi pi-check"
@@ -1342,7 +1443,7 @@ export default function RequestDetail() {
                   ? <Badge value="Acquisita" severity="success" />
                   : <Badge value="Non acquisita" severity="warning" />
                 }
-                {!request.photoReleaseAcquired && (
+                {!request.photoReleaseAcquired && !isArchived && (
                   <Button
                     label="Segna come acquisita"
                     icon="pi pi-check"
@@ -1383,9 +1484,49 @@ export default function RequestDetail() {
 
         </TabPanel>
         <TabPanel header="Allegati">
-          <DeviceRequestAttachments requestId={id as string} />
+          <DeviceRequestAttachments requestId={id as string} readOnly={isArchived} />
         </TabPanel>
       </TabView>
+
+      <Dialog
+        header="Archivia richiesta"
+        visible={showArchiveDialog}
+        style={{ width: "480px" }}
+        modal
+        onHide={() => setShowArchiveDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setShowArchiveDialog(false)}
+              disabled={archiving}
+            />
+            <Button
+              label="Archivia"
+              icon="pi pi-inbox"
+              onClick={handleArchive}
+              loading={archiving}
+            />
+          </div>
+        }
+      >
+        <p>
+          La richiesta passerà nel menu Archiviate in sola lettura. Lo stato
+          ({request.status}) non cambia.
+        </p>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12 }}>
+          <Checkbox
+            inputId="purge-transient"
+            checked={purgeTransientOnArchive}
+            onChange={(e) => setPurgeTransientOnArchive(!!e.checked)}
+          />
+          <label htmlFor="purge-transient">
+            Eliminare anche gli allegati transitori (operazione irreversibile).
+            Gli allegati persistenti restano.
+          </label>
+        </div>
+      </Dialog>
 
       {/* Dialog indirizzo di spedizione */}
       <Dialog

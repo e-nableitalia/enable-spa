@@ -52,7 +52,7 @@ export const updateAttachmentDescription = onCall({ region: REGION }, async (req
   }
 
   const data = request.data ?? {};
-  const { attachmentId, description, notes } = data;
+  const { attachmentId, description, notes, retention } = data;
 
   if (!attachmentId || typeof attachmentId !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "attachmentId" });
@@ -61,6 +61,13 @@ export const updateAttachmentDescription = onCall({ region: REGION }, async (req
   if (notes !== undefined && typeof notes !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "notes", attachmentId });
     throw new HttpsError("invalid-argument", "notes must be a string");
+  }
+  if (retention !== undefined && retention !== "persistent" && retention !== "transient") {
+    await logOutcome("blocked", { reason: "invalid-argument", field: "retention", attachmentId });
+    throw new HttpsError(
+      "invalid-argument",
+      "retention must be 'persistent' or 'transient'"
+    );
   }
 
   const db = getFirestore();
@@ -95,7 +102,7 @@ export const updateAttachmentDescription = onCall({ region: REGION }, async (req
   }
 
   try {
-    await updateAttachmentFields(db, attachmentId, { description, notes });
+    await updateAttachmentFields(db, attachmentId, { description, notes, retention });
 
     console.log(`[updateAttachmentDescription] OK: attachment ${attachmentId} updated by ${uid}`);
     await logOutcome("success", { attachmentId });
@@ -104,6 +111,7 @@ export const updateAttachmentDescription = onCall({ region: REGION }, async (req
       attachmentId,
       description,
       notes: notes ?? attachment.notes,
+      retention: retention ?? attachment.retention,
     };
   } catch (error) {
     // Copre errori infrastrutturali imprevisti (errore di rete Firestore,

@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
+import { assertDeviceRequestNotArchived } from "../device/deviceRequestArchive";
 import { deleteChecklist } from "../organizer/deleteChecklist";
 
 const REGION = "europe-west1";
@@ -69,6 +70,7 @@ export const deleteDeviceRequestChecklist = onCall(
     }
 
     const requestData = requestSnap.data() ?? {};
+    assertDeviceRequestNotArchived(requestData);
     const existingChecklistIds: unknown[] = Array.isArray(requestData.checklistIds)
       ? requestData.checklistIds
       : [];

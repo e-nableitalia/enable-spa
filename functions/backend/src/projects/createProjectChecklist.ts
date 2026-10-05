@@ -24,9 +24,10 @@ type LogOutcome = "success" | "blocked" | "failure";
  * verso `listMyChecklistItems` (comportamento voluto, non un effetto
  * collaterale).
  *
- * Se `templateId` è presente, la checklist viene istanziata da quel
- * template esplicito (`createChecklistFromTemplate`); altrimenti viene
- * creata vuota (`createChecklist`) — nessun auto-lookup implicito per
+ * Se `templateId` è una stringa non vuota, la checklist viene istanziata da
+ * quel template esplicito (`createChecklistFromTemplate`); se è omesso o
+ * `null` (scelta esplicita "nessun template" dal client), viene creata
+ * vuota (`createChecklist`) — nessun auto-lookup implicito per
  * `projectType`, a differenza del fallback legacy di device-requests: qui
  * la scelta del template è sempre esplicita lato consumer.
  */
@@ -57,7 +58,10 @@ export const createProjectChecklist = onCall({ region: REGION }, async (request)
     projectId?: string;
     label?: string;
     title?: string;
-    templateId?: string;
+    // null = scelta esplicita "nessun template" (come createDeviceRequestChecklist);
+    // omesso/undefined = stessa semantica. Il client Firebase serializza null
+    // (non undefined), quindi rifiutare null rompeva "Nessun template".
+    templateId?: string | null;
   };
 
   if (!projectId || typeof projectId !== "string") {
@@ -72,9 +76,9 @@ export const createProjectChecklist = onCall({ region: REGION }, async (request)
     await logOutcome("blocked", { reason: "invalid-argument", field: "title" });
     throw new HttpsError("invalid-argument", "Missing or invalid title");
   }
-  if (templateId !== undefined && typeof templateId !== "string") {
+  if (templateId !== undefined && templateId !== null && typeof templateId !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "templateId" });
-    throw new HttpsError("invalid-argument", "templateId must be a string");
+    throw new HttpsError("invalid-argument", "templateId must be a string or null");
   }
 
   const db = getFirestore();

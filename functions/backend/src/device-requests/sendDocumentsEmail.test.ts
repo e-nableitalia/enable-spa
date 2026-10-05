@@ -204,6 +204,17 @@ describe("sendDocumentsEmail", () => {
     expect(Object.values(mailStore)).toHaveLength(0);
   });
 
+  it("rejects when the device request is archived", async () => {
+    deviceRequestsStore["req-1"] = { ...deviceRequestsStore["req-1"], archived: true };
+
+    await expect(sendDocumentsEmail.run(buildRequest({ requestId: "req-1" }))).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
+
+    expect(Object.values(mailStore)).toHaveLength(0);
+    expect(deviceRequestsStore["req-1"]?.documentsEmailSent).toBe(false);
+  });
+
   it("rejects when the requester's email is missing", async () => {
     privateDataStore["req-1"] = {};
 

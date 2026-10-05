@@ -54,7 +54,7 @@ export const createChecklistShareLink = onCall(
     }
 
     const db = getFirestore();
-    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
+    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId, { forWrite: true });
 
     const existingSnap = await db
       .collection("checklistShareLinks")

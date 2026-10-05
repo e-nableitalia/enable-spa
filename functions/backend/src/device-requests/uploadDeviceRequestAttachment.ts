@@ -3,7 +3,7 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { uploadAttachment } from "../attachments/uploadAttachment";
-import { resolveDeviceRequestAttachmentAccess } from "./deviceRequestAttachmentAccess";
+import { resolveDeviceRequestAttachmentWriteAccess } from "./deviceRequestAttachmentAccess";
 
 const REGION = "europe-west1";
 
@@ -28,12 +28,13 @@ export const uploadDeviceRequestAttachment = onCall({ region: REGION }, async (r
     throw new HttpsError("unauthenticated", "User must be authenticated");
   }
 
-  const { requestId, fileName, description, notes, category, size } = request.data as {
+  const { requestId, fileName, description, notes, category, retention, size } = request.data as {
     requestId?: string;
     fileName?: string;
     description?: string;
     notes?: string;
     category?: string;
+    retention?: string;
     size?: number;
   };
 
@@ -42,7 +43,7 @@ export const uploadDeviceRequestAttachment = onCall({ region: REGION }, async (r
   }
 
   const db = getFirestore();
-  await resolveDeviceRequestAttachmentAccess(db, uid, requestId);
+  await resolveDeviceRequestAttachmentWriteAccess(db, uid, requestId);
 
   const result = (await uploadAttachment.run({
     ...request,
@@ -54,6 +55,7 @@ export const uploadDeviceRequestAttachment = onCall({ region: REGION }, async (r
       description,
       notes,
       category,
+      retention,
       size,
     },
   } as CallableRequest)) as { attachmentId: string; uploadUrl: string; storagePath: string };

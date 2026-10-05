@@ -3,14 +3,14 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   query,
   where,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
+import { FilterMatchMode } from "primereact/api";
 import { auth, db, functions } from "../../firebase";
-import { DataTable } from "primereact/datatable";
+import { DataTable, type DataTableFilterMeta } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
@@ -23,9 +23,8 @@ import { Tag, type TagProps } from "primereact/tag";
 import { Toast } from "primereact/toast";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { ProgressSpinner } from "primereact/progressspinner";
-import type { ShippingAddress } from "../../shared/types/shippingAddress";
 
-type Status = "pending" | "approved" | "deleted";
+type Status = "pending" | "approved" | "in_transit" | "delivered" | "deleted";
 
 interface ShipmentRequest {
   id: string;
@@ -44,6 +43,7 @@ interface ShipmentRequest {
   width?: number;
   height?: number;
   weight?: number;
+  trackingNumber?: string;
   status: Status;
 }
 
@@ -78,6 +78,8 @@ const EMPTY_FORM: FormState = {
 };
 
 interface KnownAddress {
+  kind?: "profile" | "deviceRequest";
+  id?: string;
   label: string;
   name: string;
   addressText: string;
@@ -87,14 +89,22 @@ interface KnownAddress {
 const STATUS_SEVERITY: Record<Status, TagProps["severity"]> = {
   pending: "warning",
   approved: "success",
+  in_transit: "info",
+  delivered: "secondary",
   deleted: "danger",
 };
 
 const STATUS_LABEL: Record<Status, string> = {
   pending: "In attesa",
   approved: "Approvata",
+  in_transit: "In spedizione",
+  delivered: "Consegnata",
   deleted: "Eliminata",
 };
+
+const STATUS_FILTER_OPTIONS = (
+  ["pending", "approved", "in_transit", "delivered"] as const
+).map((s) => ({ label: STATUS_LABEL[s], value: s }));
 
 function toDate(val: unknown): Date | null {
   if (!val) return null;
@@ -117,6 +127,12 @@ function formatDate(val: unknown): string {
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
+const INITIAL_FILTERS: DataTableFilterMeta = {
+  status: { value: null, matchMode: FilterMatchMode.EQUALS },
+  senderName: { value: null, matchMode: FilterMatchMode.CONTAINS },
+  recipientName: { value: null, matchMode: FilterMatchMode.CONTAINS },
+};
+
 export default function ShipmentRequestsPage() {
   const toast = useRef<Toast>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -134,56 +150,24 @@ export default function ShipmentRequestsPage() {
   const [knownAddresses, setKnownAddresses] = useState<KnownAddress[]>([]);
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [viewRequest, setViewRequest] = useState<ShipmentRequest | null>(null);
+  const [editRequest, setEditRequest] = useState<ShipmentRequest | null>(null);
+  const [editTracking, setEditTracking] = useState("");
+  const [filters, setFilters] = useState<DataTableFilterMeta>(INITIAL_FILTERS);
 
   const loadKnownAddresses = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
     setLoadingAddresses(true);
-    const result: KnownAddress[] = [];
-
-    // User's own shipping address from profile
-    const profileSnap = await getDoc(doc(db, "users", user.uid, "private", "profile"));
-    if (profileSnap.exists()) {
-      const profile = profileSnap.data();
-      const addr = profile.shippingAddress as ShippingAddress | undefined;
-      if (addr?.street) {
-        const fullName = addr.fullName || `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim();
-        result.push({
-          label: `Il mio indirizzo — ${fullName}, ${addr.street}, ${addr.postalCode} ${addr.city}`,
-          name: fullName,
-          addressText: `${addr.street}\n${addr.postalCode} ${addr.city} (${addr.province})\n${addr.country || "IT"}`,
-          phone: addr.phone,
-        });
-      }
+    try {
+      const fn = httpsCallable<Record<string, never>, { addresses: KnownAddress[] }>(
+        functions,
+        "listShipmentAddressBook"
+      );
+      const result = await fn({});
+      setKnownAddresses(result.data.addresses ?? []);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Impossibile caricare gli indirizzi noti.";
+      toast.current?.show({ severity: "error", summary: "Errore", detail: msg, life: 4000 });
+      setKnownAddresses([]);
     }
-
-    // Shipping addresses from device requests assigned to this user
-    const q = query(
-      collection(db, "deviceRequests"),
-      where("assignedVolunteers", "array-contains", user.uid)
-    );
-    const reqSnap = await getDocs(q);
-    for (const d of reqSnap.docs) {
-      const data = d.data();
-      const addr = data.shippingAddress as ShippingAddress | undefined;
-      if (addr?.street) {
-        let beneficiaryName = addr.fullName || "";
-        const privSnap = await getDoc(doc(db, "deviceRequests", d.id, "private", "data"));
-        if (privSnap.exists()) {
-          const priv = privSnap.data();
-          const n = `${priv.firstName ?? ""} ${priv.lastName ?? ""}`.trim();
-          if (n) beneficiaryName = n;
-        }
-        result.push({
-          label: `Richiesta ${data.seqId || d.id.slice(0, 8)} — ${beneficiaryName}, ${addr.street}, ${addr.city}`,
-          name: beneficiaryName,
-          addressText: `${addr.street}\n${addr.postalCode} ${addr.city} (${addr.province})\n${addr.country || "IT"}`,
-          phone: addr.phone,
-        });
-      }
-    }
-
-    setKnownAddresses(result);
     setLoadingAddresses(false);
   };
 
@@ -221,7 +205,6 @@ export default function ShipmentRequestsPage() {
     };
   }, []);
 
-  // Pre-process dates for sortable DataTable columns
   const tableData = requests.map((r) => ({
     ...r,
     createdAt: toDate(r.createdAt),
@@ -298,6 +281,63 @@ export default function ShipmentRequestsPage() {
     }
   };
 
+  const openEditDialog = (row: ShipmentRequest) => {
+    setEditRequest(row);
+    setEditTracking(row.trackingNumber ?? "");
+  };
+
+  const handleSaveTracking = async () => {
+    if (!editRequest || saving) return;
+    const trackingNumber = editTracking.trim();
+    if (!trackingNumber) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Tracking obbligatorio",
+        detail: "Inserisci un numero di tracciamento.",
+        life: 4000,
+      });
+      return;
+    }
+    setSaving(true);
+    try {
+      const fn = httpsCallable(functions, "updateShipmentTracking");
+      await fn({ requestId: editRequest.id, trackingNumber });
+      toast.current?.show({
+        severity: "success",
+        summary: "Tracking aggiornato",
+        detail: "Numero di tracciamento salvato.",
+        life: 3000,
+      });
+      setEditRequest(null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Errore durante il salvataggio del tracking.";
+      toast.current?.show({ severity: "error", summary: "Errore", detail: msg, life: 4000 });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMarkDelivered = async () => {
+    if (!editRequest || saving) return;
+    setSaving(true);
+    try {
+      const fn = httpsCallable(functions, "markShipmentDelivered");
+      await fn({ requestId: editRequest.id });
+      toast.current?.show({
+        severity: "success",
+        summary: "Consegnata",
+        detail: "La spedizione è stata segnata come consegnata.",
+        life: 3000,
+      });
+      setEditRequest(null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Errore durante l'aggiornamento dello stato.";
+      toast.current?.show({ severity: "error", summary: "Errore", detail: msg, life: 4000 });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDelete = (requestId: string) => {
     confirmDialog({
       message: "Sei sicuro di voler eliminare questa richiesta?",
@@ -339,8 +379,6 @@ export default function ShipmentRequestsPage() {
     setSelectedRecipientAddress(null);
   };
 
-  // ---- Renderers ----
-
   const statusBody = (row: ShipmentRequest) => (
     <Tag
       value={STATUS_LABEL[row.status] ?? row.status}
@@ -348,16 +386,20 @@ export default function ShipmentRequestsPage() {
     />
   );
 
+  const detailBody = (row: ShipmentRequest) => (
+    <Button
+      icon="pi pi-search"
+      size="small"
+      severity="secondary"
+      tooltip="Dettaglio"
+      tooltipOptions={{ position: "top" }}
+      aria-label="Dettaglio"
+      onClick={() => setViewRequest(row)}
+    />
+  );
+
   const actionsBody = (row: ShipmentRequest) => (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <Button
-        icon="pi pi-search"
-        size="small"
-        severity="secondary"
-        tooltip="Dettaglio"
-        tooltipOptions={{ position: "top" }}
-        onClick={() => setViewRequest(row)}
-      />
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
       {role === "admin" && row.status === "pending" && (
         <Button
           icon="pi pi-check"
@@ -366,6 +408,15 @@ export default function ShipmentRequestsPage() {
           size="small"
           disabled={saving}
           onClick={() => handleApprove(row.id)}
+        />
+      )}
+      {role === "admin" && (row.status === "approved" || row.status === "in_transit") && (
+        <Button
+          icon="pi pi-pencil"
+          label="Modifica"
+          size="small"
+          disabled={saving}
+          onClick={() => openEditDialog(row)}
         />
       )}
       {(role === "admin" || (row.status === "pending" && row.createdBy === uid)) && (
@@ -380,8 +431,6 @@ export default function ShipmentRequestsPage() {
       )}
     </div>
   );
-
-  // ---- Form field helper ----
 
   const textField = (
     label: string,
@@ -431,8 +480,6 @@ export default function ShipmentRequestsPage() {
     </div>
   );
 
-  // ---- Loading state ----
-
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
@@ -440,8 +487,6 @@ export default function ShipmentRequestsPage() {
       </div>
     );
   }
-
-  // ---- Main render ----
 
   return (
     <div style={{ padding: 20 }}>
@@ -482,7 +527,11 @@ export default function ShipmentRequestsPage() {
         rows={10}
         sortMode="multiple"
         dataKey="id"
+        filterDisplay="row"
+        filters={filters}
+        onFilter={(e) => setFilters(e.filters)}
       >
+        <Column header="" body={detailBody} style={{ width: 56 }} />
         <Column
           field="createdAt"
           header="Data"
@@ -490,22 +539,23 @@ export default function ShipmentRequestsPage() {
           sortable
           style={{ minWidth: 140 }}
         />
-        <Column
-          field="reason"
-          header="Motivo"
-          sortable
-          style={{ minWidth: 160 }}
-        />
+        <Column field="reason" header="Motivo" sortable style={{ minWidth: 160 }} />
         <Column
           field="recipientName"
           header="Destinatario"
           sortable
+          filter
+          filterPlaceholder="Filtra"
+          filterMatchMode={FilterMatchMode.CONTAINS}
           style={{ minWidth: 140 }}
         />
         <Column
           field="senderName"
           header="Mittente"
           sortable
+          filter
+          filterPlaceholder="Filtra"
+          filterMatchMode={FilterMatchMode.CONTAINS}
           style={{ minWidth: 140 }}
         />
         <Column
@@ -513,16 +563,34 @@ export default function ShipmentRequestsPage() {
           header="Stato"
           body={statusBody}
           sortable
-          style={{ minWidth: 110 }}
+          filter
+          filterElement={
+            <Dropdown
+              value={(filters.status as { value: string | null } | undefined)?.value ?? null}
+              options={STATUS_FILTER_OPTIONS}
+              onChange={(e) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  status: { value: e.value, matchMode: FilterMatchMode.EQUALS },
+                }))
+              }
+              placeholder="Tutti"
+              showClear
+              style={{ width: "100%" }}
+            />
+          }
+          style={{ minWidth: 130 }}
         />
         <Column
-          header="Azioni"
-          body={actionsBody}
-          style={{ minWidth: 180 }}
+          field="trackingNumber"
+          header="Tracking"
+          body={(row: ShipmentRequest) => row.trackingNumber || "—"}
+          sortable
+          style={{ minWidth: 120 }}
         />
+        <Column header="Azioni" body={actionsBody} style={{ minWidth: 220 }} />
       </DataTable>
 
-      {/* ---- View Dialog ---- */}
       <Dialog
         header={`Richiesta di spedizione — ${viewRequest ? formatDate(viewRequest.createdAt) : ""}`}
         visible={!!viewRequest}
@@ -554,6 +622,7 @@ export default function ShipmentRequestsPage() {
                 <Tag value={STATUS_LABEL[r.status] ?? r.status} severity={STATUS_SEVERITY[r.status] ?? "secondary"} />
               </div>
               {row("Motivo", r.reason)}
+              {row("Tracking", r.trackingNumber)}
               <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Mittente</h4>
               {row("Nome", r.senderName)}
               {row("Indirizzo", r.senderAddress)}
@@ -579,7 +648,67 @@ export default function ShipmentRequestsPage() {
         })()}
       </Dialog>
 
-      {/* ---- Create Dialog ---- */}
+      <Dialog
+        header="Modifica spedizione"
+        visible={!!editRequest}
+        style={{ width: "480px" }}
+        modal
+        onHide={() => !saving && setEditRequest(null)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setEditRequest(null)}
+              disabled={saving}
+            />
+            {editRequest?.status === "in_transit" && (
+              <Button
+                label="Segna come consegnata"
+                icon="pi pi-check-circle"
+                severity="success"
+                onClick={handleMarkDelivered}
+                loading={saving}
+              />
+            )}
+            <Button
+              label="Salva tracking"
+              icon="pi pi-save"
+              onClick={handleSaveTracking}
+              loading={saving}
+              disabled={!editTracking.trim()}
+            />
+          </div>
+        }
+      >
+        {editRequest && (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ fontWeight: 600, fontSize: "0.82em", color: "#888", textTransform: "uppercase" }}>Stato attuale&nbsp;</span>
+              <Tag
+                value={STATUS_LABEL[editRequest.status] ?? editRequest.status}
+                severity={STATUS_SEVERITY[editRequest.status] ?? "secondary"}
+              />
+            </div>
+            <div>
+              <label htmlFor="shipmentTracking" style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>
+                Numero di tracciamento
+              </label>
+              <InputText
+                id="shipmentTracking"
+                value={editTracking}
+                onChange={(e) => setEditTracking(e.target.value)}
+                style={{ width: "100%" }}
+                placeholder="Es. 1Z999AA10123456784"
+              />
+              <small style={{ color: "#888", display: "block", marginTop: 6 }}>
+                Salvando un tracking su una richiesta approvata, lo stato passa a «In spedizione».
+              </small>
+            </div>
+          </>
+        )}
+      </Dialog>
+
       <Dialog
         header="Nuova richiesta di spedizione"
         visible={showDialog}
@@ -604,10 +733,8 @@ export default function ShipmentRequestsPage() {
           </div>
         }
       >
-        {/* Motivo */}
         {textField("Motivo della spedizione", "reason", true)}
 
-        {/* Mittente */}
         <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Mittente</h4>
         {textField("Nome mittente", "senderName", true)}
         <div style={{ marginBottom: 12 }}>
@@ -649,7 +776,6 @@ export default function ShipmentRequestsPage() {
         </div>
         {textField("Note mittente", "senderNotes", false, true)}
 
-        {/* Destinatario */}
         <h4 style={{ margin: "16px 0 8px", color: "#555" }}>Destinatario</h4>
         {textField("Nome destinatario", "recipientName", true)}
         <div style={{ marginBottom: 12 }}>
@@ -694,7 +820,6 @@ export default function ShipmentRequestsPage() {
           <div>{textField("Note consegna", "deliveryNotes")}</div>
         </div>
 
-        {/* Dimensioni */}
         <h4 style={{ margin: "16px 0 8px", color: "#555" }}>
           Dimensioni e peso <span style={{ fontWeight: 400, fontSize: "0.85em" }}>(opzionale)</span>
         </h4>

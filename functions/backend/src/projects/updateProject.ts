@@ -38,21 +38,23 @@ export const updateProject = onCall({ region: REGION }, async (request) => {
 
   const { projectId, title, description } = (request.data ?? {}) as {
     projectId?: string;
-    title?: string;
-    description?: string;
+    title?: string | null;
+    description?: string | null;
   };
 
   if (!projectId || typeof projectId !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "projectId" });
     throw new HttpsError("invalid-argument", "Missing or invalid projectId");
   }
-  if (title !== undefined && (typeof title !== "string" || !title.trim())) {
+  // Titolo obbligatorio quando presente nel payload: null/blank non ammessi
+  // (un progetto non può restare senza titolo).
+  if (title !== undefined && (title === null || typeof title !== "string" || !title.trim())) {
     await logOutcome("blocked", { reason: "invalid-argument", field: "title" });
     throw new HttpsError("invalid-argument", "title must be a non-empty string");
   }
-  if (description !== undefined && typeof description !== "string") {
+  if (description !== undefined && description !== null && typeof description !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "description" });
-    throw new HttpsError("invalid-argument", "description must be a string");
+    throw new HttpsError("invalid-argument", "description must be a string or null");
   }
   if (title === undefined && description === undefined) {
     await logOutcome("blocked", { reason: "invalid-argument", field: "none" });
@@ -73,8 +75,8 @@ export const updateProject = onCall({ region: REGION }, async (request) => {
     assertProjectContentWritable(project.status);
 
     const updates: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
-    if (title !== undefined) updates.title = title.trim();
-    if (description !== undefined) updates.description = description;
+    if (title !== undefined) updates.title = (title as string).trim();
+    if (description !== undefined) updates.description = typeof description === "string" ? description : "";
 
     await db.collection("projects").doc(projectId).update(updates);
 

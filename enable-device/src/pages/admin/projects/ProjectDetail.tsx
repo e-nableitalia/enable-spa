@@ -133,17 +133,31 @@ export default function ProjectDetail() {
 
   const openEditDialog = () => {
     if (!project) return;
-    setEditTitle(project.title);
-    setEditDescription(project.description);
+    setEditTitle(project.title ?? "");
+    setEditDescription(typeof project.description === "string" ? project.description : "");
     setShowEditDialog(true);
   };
 
   const handleSaveEdit = async () => {
     if (!id) return;
+    const title = editTitle.trim();
+    if (!title) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Titolo obbligatorio",
+        detail: "Il progetto deve avere un titolo.",
+        life: 4000,
+      });
+      return;
+    }
     setSavingEdit(true);
     try {
       const fn = httpsCallable(functions, "updateProject");
-      await fn({ projectId: id, title: editTitle.trim(), description: editDescription });
+      await fn({
+        projectId: id,
+        title,
+        description: typeof editDescription === "string" ? editDescription : "",
+      });
       toast.current?.show({ severity: "success", summary: "Progetto aggiornato", life: 3000 });
       setShowEditDialog(false);
       await load();
@@ -179,7 +193,9 @@ export default function ProjectDetail() {
     setSavingStatus(true);
     try {
       const fn = httpsCallable(functions, "changeProjectStatus");
-      await fn({ projectId: id, newStatus, note: statusNote.trim() || undefined });
+      // Sempre stringa (anche vuota): come RequestDetail. Inviare undefined
+      // finiva materializzato come null sul wire → "note must be a string".
+      await fn({ projectId: id, newStatus, note: statusNote.trim() });
       toast.current?.show({ severity: "success", summary: "Cronologia aggiornata", life: 3000 });
       setShowStatusDialog(false);
       await load();

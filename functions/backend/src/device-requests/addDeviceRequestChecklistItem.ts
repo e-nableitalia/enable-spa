@@ -57,7 +57,7 @@ export const addDeviceRequestChecklistItem = onCall(
     }
 
     const db = getFirestore();
-    const { assignedVolunteers } = await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
+    const { assignedVolunteers } = await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId, { forWrite: true });
 
     if (assignee !== undefined && assignee !== null) {
       if (typeof assignee !== "string" || !(await isResolvableChecklistAssignee(db, assignee, assignedVolunteers))) {

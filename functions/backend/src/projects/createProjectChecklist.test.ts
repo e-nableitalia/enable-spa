@@ -69,6 +69,33 @@ describe("createProjectChecklist", () => {
     expect(createChecklistRunMock).not.toHaveBeenCalled();
   });
 
+  it("creates a blank checklist when templateId is explicitly null (nessun template)", async () => {
+    const result = (await createProjectChecklist.run(
+      buildRequest(
+        { projectId: "proj-new", label: "Fase 1", title: "Checklist fase 1", templateId: null },
+        "admin-1"
+      )
+    )) as { checklistId: string };
+
+    expect(result.checklistId).toBe("new-checklist-id");
+    expect(createChecklistRunMock).toHaveBeenCalled();
+    expect(createChecklistFromTemplateRunMock).not.toHaveBeenCalled();
+  });
+
+  it("throws invalid-argument when templateId is neither a string, null, nor omitted", async () => {
+    await expect(
+      createProjectChecklist.run(
+        buildRequest(
+          { projectId: "proj-new", label: "Fase 1", title: "T", templateId: 42 as unknown as string },
+          "admin-1"
+        )
+      )
+    ).rejects.toMatchObject(
+      new HttpsError("invalid-argument", "templateId must be a string or null")
+    );
+    expect(createChecklistRunMock).not.toHaveBeenCalled();
+  });
+
   it("appends to existing checklists without dropping them", async () => {
     await createProjectChecklist.run(
       buildRequest({ projectId: "proj-active", label: "Fase 2", title: "T" }, "admin-1")

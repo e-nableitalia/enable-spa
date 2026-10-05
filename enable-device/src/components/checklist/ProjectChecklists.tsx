@@ -101,14 +101,17 @@ export default function ProjectChecklists({
     setCreatingChecklist(true);
     try {
       const fn = httpsCallable<
-        { projectId: string; label: string; title: string; templateId?: string },
+        { projectId: string; label: string; title: string; templateId: string | null },
         { checklistId: string }
       >(functions, "createProjectChecklist");
+      // Solo stringhe valide come templateId; null = "Nessun template".
+      // Evita di inoltrare l'oggetto-opzione PrimeReact se il Dropdown
+      // non risolvesse correttamente value:null (vedi test regressione).
       await fn({
         projectId,
         label: createLabel.trim(),
         title: createTitle.trim() || createLabel.trim(),
-        templateId: createTemplateId ?? undefined,
+        templateId: typeof createTemplateId === "string" ? createTemplateId : null,
       });
       toast.current?.show({
         severity: "success",

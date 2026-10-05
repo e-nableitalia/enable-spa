@@ -53,6 +53,7 @@ function baseInput(overrides: Partial<AttachmentInput> = {}): AttachmentInput {
     entityId: "request-42",
     uploadedBy: "user-1",
     description: "Fattura di acquisto",
+    retention: "persistent",
     fileName: "fattura.pdf",
     storagePath: "attachments/deviceRequest/request-42/att-1/fattura.pdf",
     size: 1024,
@@ -100,11 +101,23 @@ describe("buildAttachmentDocument", () => {
       description: "Fattura di acquisto",
       notes: "Da archiviare",
       category: "amministrativo",
+      retention: "persistent",
       fileName: "fattura.pdf",
       extension: "pdf",
       storagePath: "attachments/deviceRequest/request-42/att-1/fattura.pdf",
       size: 1024,
     });
+  });
+
+  it("accepts transient retention", () => {
+    const result = buildAttachmentDocument(baseInput({ retention: "transient" }));
+    expect(result.retention).toBe("transient");
+  });
+
+  it("rejects invalid retention", () => {
+    expect(() =>
+      buildAttachmentDocument(baseInput({ retention: "forever" as AttachmentInput["retention"] }))
+    ).toThrow("retention must be 'persistent' or 'transient'");
   });
 
   // Scenario 2: l'estensione è dedotta dal nome file, non un campo fornito dal chiamante
@@ -186,6 +199,7 @@ describe("createAttachment", () => {
       description: "Fattura di acquisto",
       notes: "",
       category: null,
+      retention: "persistent",
       fileName: "fattura.pdf",
       extension: "pdf",
       storagePath: "attachments/deviceRequest/request-42/att-1/fattura.pdf",
@@ -283,7 +297,7 @@ describe("getAttachmentById", () => {
 
     const result = await getAttachmentById(db, "att-1");
 
-    expect(result).toEqual({ id: "att-1", description: "Fattura di acquisto" });
+    expect(result).toEqual({ id: "att-1", description: "Fattura di acquisto", retention: "persistent" });
   });
 
   it("returns null when the attachment does not exist", async () => {
@@ -495,8 +509,8 @@ describe("listAttachmentsForEntity", () => {
     expect(orderByMock).toHaveBeenCalledWith("createdAt", "asc");
     expect(getAllMock).toHaveBeenCalledWith({ __ref: "att-1" }, { __ref: "att-2" });
     expect(result).toEqual([
-      { id: "att-1", description: "desc-att-1" },
-      { id: "att-2", description: "desc-att-2" },
+      { id: "att-1", description: "desc-att-1", retention: "persistent" },
+      { id: "att-2", description: "desc-att-2", retention: "persistent" },
     ]);
   });
 
@@ -518,6 +532,6 @@ describe("listAttachmentsForEntity", () => {
 
     const result = await listAttachmentsForEntity(db, "deviceRequests", "request-42");
 
-    expect(result).toEqual([{ id: "att-1", description: "desc-att-1" }]);
+    expect(result).toEqual([{ id: "att-1", description: "desc-att-1", retention: "persistent" }]);
   });
 });

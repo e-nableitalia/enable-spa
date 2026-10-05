@@ -19,6 +19,20 @@ export const ATTACHMENTS_COLLECTION = "attachments";
  * chiamano "attachments", una è il catalogo, l'altra il suo indice locale). */
 export const ATTACHMENT_INDEX_SUBCOLLECTION = "attachments";
 
+export type AttachmentRetention = "persistent" | "transient";
+
+export const ATTACHMENT_RETENTIONS: readonly AttachmentRetention[] = ["persistent", "transient"];
+
+export function isValidAttachmentRetention(value: unknown): value is AttachmentRetention {
+  return value === "persistent" || value === "transient";
+}
+
+/** Allegati legacy senza campo: trattati come persistenti (non cancellati
+ * in archiviazione finché non riclassificati). */
+export function normalizeAttachmentRetention(value: unknown): AttachmentRetention {
+  return isValidAttachmentRetention(value) ? value : "persistent";
+}
+
 export interface AttachmentInput {
   entityType: string;
   entityId: string;
@@ -27,6 +41,8 @@ export interface AttachmentInput {
   description: string;
   notes?: string;
   category?: string;
+  /** Obbligatoria in upload: persistente | transitorio. */
+  retention: AttachmentRetention;
   fileName: string;
   storagePath: string;
   size: number;
@@ -39,6 +55,7 @@ export interface AttachmentDocumentFields {
   description: string;
   notes: string;
   category: string | null;
+  retention: AttachmentRetention;
   fileName: string;
   extension: string;
   storagePath: string;
@@ -93,6 +110,9 @@ export function buildAttachmentDocument(input: AttachmentInput): AttachmentDocum
   if (!input.description || !input.description.trim()) {
     throw new Error("description is required");
   }
+  if (!isValidAttachmentRetention(input.retention)) {
+    throw new Error("retention must be 'persistent' or 'transient'");
+  }
 
   return {
     entityType: input.entityType,
@@ -101,6 +121,7 @@ export function buildAttachmentDocument(input: AttachmentInput): AttachmentDocum
     description: input.description,
     notes: input.notes ?? "",
     category: input.category ?? null,
+    retention: input.retention,
     fileName: input.fileName,
     extension: deduceFileExtension(input.fileName),
     storagePath: input.storagePath,
@@ -199,25 +220,29 @@ export async function getAttachmentById(
   if (!snap.exists) {
     return null;
   }
-  return snap.data() as AttachmentRecord;
+  const data = snap.data() as AttachmentRecord;
+  return {
+    ...data,
+    retention: normalizeAttachmentRetention(data.retention),
+  };
 }
 
-/** Campi modificabili di un allegato già esistente (EA-166): solo
- * descrizione e note, mai gli altri campi (entità proprietaria, file,
+/** Campi modificabili di un allegato già esistente (EA-166): descrizione,
+ * note e retention — mai gli altri campi (entità proprietaria, file,
  * dimensione, ecc.), che restano fissati al momento dell'upload. */
 export interface AttachmentUpdateInput {
   description: string;
   notes?: string;
+  retention?: AttachmentRetention;
 }
 
 /**
- * Aggiorna descrizione (e, se fornita, le note) di un allegato già
+ * Aggiorna descrizione (e, se forniti, note/retention) di un allegato già
  * esistente in `attachments/{attachmentId}` (EA-166). La descrizione resta
  * il campo obbligatorio del modello dati (Scenario 4): non può essere
  * impostata a vuoto, stessa regola di `buildAttachmentDocument` in fase di
- * creazione. `notes` è aggiornato solo se esplicitamente fornito, altrimenti
- * resta invariato (a differenza della creazione, qui non c'è un default
- * "stringa vuota" da applicare).
+ * creazione. `notes`/`retention` sono aggiornati solo se esplicitamente
+ * forniti, altrimenti restano invariati.
  *
  * L'RBAC (admin su qualunque allegato, volontario solo sui propri) è
  * responsabilità del chiamante (`updateAttachmentDescription`), non di
@@ -239,6 +264,12 @@ export async function updateAttachmentFields(
   };
   if (input.notes !== undefined) {
     fields.notes = input.notes;
+  }
+  if (input.retention !== undefined) {
+    if (!isValidAttachmentRetention(input.retention)) {
+      throw new Error("retention must be 'persistent' or 'transient'");
+    }
+    fields.retention = input.retention;
   }
 
   await db.collection(ATTACHMENTS_COLLECTION).doc(attachmentId).update(fields);
@@ -319,5 +350,11 @@ export async function listAttachmentsForEntity(
 
   return attachmentSnaps
     .filter((snap) => snap.exists)
-    .map((snap) => snap.data() as AttachmentRecord);
+    .map((snap) => {
+      const data = snap.data() as AttachmentRecord;
+      return {
+        ...data,
+        retention: normalizeAttachmentRetention(data.retention),
+      };
+    });
 }

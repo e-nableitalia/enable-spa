@@ -28,11 +28,12 @@ export const updateDeviceRequestAttachmentDescription = onCall({ region: REGION 
     throw new HttpsError("unauthenticated", "User must be authenticated");
   }
 
-  const { requestId, attachmentId, description, notes } = request.data as {
+  const { requestId, attachmentId, description, notes, retention } = request.data as {
     requestId?: string;
     attachmentId?: string;
     description?: string;
     notes?: string;
+    retention?: string;
   };
 
   if (!requestId || typeof requestId !== "string") {
@@ -43,12 +44,17 @@ export const updateDeviceRequestAttachmentDescription = onCall({ region: REGION 
   }
 
   const db = getFirestore();
-  await resolveDeviceRequestAttachment(db, uid, requestId, attachmentId);
+  await resolveDeviceRequestAttachment(db, uid, requestId, attachmentId, { forWrite: true });
 
   const result = (await updateAttachmentDescription.run({
     ...request,
-    data: { attachmentId, description, notes },
-  } as CallableRequest)) as { attachmentId: string; description: string; notes: string };
+    data: { attachmentId, description, notes, retention },
+  } as CallableRequest)) as {
+    attachmentId: string;
+    description: string;
+    notes: string;
+    retention: string;
+  };
 
   console.log(
     `[updateDeviceRequestAttachmentDescription] OK: delegated to updateAttachmentDescription for request ${requestId} by ${uid}`

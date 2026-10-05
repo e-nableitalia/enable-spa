@@ -3,6 +3,7 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { cloneChecklist } from "../organizer/cloneChecklist";
+import { assertDeviceRequestNotArchived } from "../device/deviceRequestArchive";
 
 const REGION = "europe-west1";
 
@@ -91,6 +92,7 @@ export const cloneDeviceRequestChecklist = onCall(
     }
 
     const requestData = requestSnap.data() ?? {};
+    assertDeviceRequestNotArchived(requestData);
 
     const existingChecklistIds: unknown[] = Array.isArray(requestData.checklistIds)
       ? requestData.checklistIds
