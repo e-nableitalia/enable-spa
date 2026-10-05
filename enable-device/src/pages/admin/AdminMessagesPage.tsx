@@ -20,6 +20,7 @@ import { Toast } from "primereact/toast";
 import { TabView, TabPanel } from "primereact/tabview";
 import { Toolbar } from "primereact/toolbar";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
+import { formatGlobalMessageForTelegram } from "../../helpers/htmlToTelegram";
 
 // ---- Types ----
 
@@ -109,6 +110,14 @@ export default function AdminMessagesPage() {
   const [showPersonalDialog, setShowPersonalDialog] = useState(false);
   const [personalForm, setPersonalForm] = useState({ title: "", body: "" });
   const [savingPersonal, setSavingPersonal] = useState(false);
+
+  const telegramPreviewSource = useMemo(
+    () =>
+      globalForm.title.trim() || globalForm.body.trim()
+        ? formatGlobalMessageForTelegram(globalForm.title, globalForm.body)
+        : "",
+    [globalForm.title, globalForm.body]
+  );
 
   // Fetch global messages
   useEffect(() => {
@@ -604,7 +613,7 @@ export default function AdminMessagesPage() {
         header={editingGlobal ? "Modifica messaggio globale" : "Nuovo messaggio globale"}
         visible={showGlobalDialog}
         onHide={() => setShowGlobalDialog(false)}
-        style={{ width: 580 }}
+        style={{ width: 640 }}
         footer={
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <Button
@@ -638,8 +647,12 @@ export default function AdminMessagesPage() {
               onChange={(e) => setGlobalForm((f) => ({ ...f, body: e.target.value }))}
               rows={5}
               style={{ width: "100%" }}
-              placeholder="Testo del messaggio (supporta HTML di base)"
+              placeholder={'Es. <p>Ciao <b>tutti</b>, vedi <a href="https://…">il link</a></p>'}
             />
+            <small style={{ color: "#6b7280", display: "block", marginTop: 4 }}>
+              HTML di base per la home. Telegram supporta solo un subset (
+              <code>b</code>, <code>i</code>, <code>u</code>, <code>a</code>; heading/liste semplificati).
+            </small>
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 160 }}>
@@ -686,6 +699,85 @@ export default function AdminMessagesPage() {
                 type="button"
               />
             </div>
+          </div>
+
+          <div>
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Anteprima</label>
+            <TabView>
+              <TabPanel header="Home">
+                <div
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: 12,
+                    background: "#fafafa",
+                    minHeight: 80,
+                  }}
+                >
+                  {globalForm.title.trim() || globalForm.body.trim() ? (
+                    <>
+                      <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                        {globalForm.title.trim() || "—"}
+                      </div>
+                      <div
+                        style={{ color: "#444", fontSize: "0.95em" }}
+                        dangerouslySetInnerHTML={{
+                          __html: globalForm.body.trim() || "<em style='color:#9ca3af'>Nessun testo</em>",
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <span style={{ color: "#9ca3af" }}>Compila titolo e testo per vedere l&apos;anteprima.</span>
+                  )}
+                </div>
+              </TabPanel>
+              <TabPanel header="Telegram">
+                <div
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: 12,
+                    background: "#f0f9ff",
+                    minHeight: 80,
+                    marginBottom: 10,
+                  }}
+                >
+                  {telegramPreviewSource ? (
+                    <div
+                      style={{ whiteSpace: "pre-wrap", fontSize: "0.95em", color: "#111" }}
+                      dangerouslySetInnerHTML={{
+                        __html: telegramPreviewSource.replace(/\n/g, "<br />"),
+                      }}
+                    />
+                  ) : (
+                    <span style={{ color: "#9ca3af" }}>Compila titolo e testo per vedere l&apos;anteprima.</span>
+                  )}
+                </div>
+                {telegramPreviewSource && (
+                  <>
+                    <small style={{ color: "#6b7280", display: "block", marginBottom: 4 }}>
+                      Sorgente inviata all&apos;API Telegram:
+                    </small>
+                    <pre
+                      style={{
+                        margin: 0,
+                        padding: 10,
+                        background: "#111827",
+                        color: "#e5e7eb",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        maxHeight: 160,
+                        overflow: "auto",
+                      }}
+                    >
+                      {telegramPreviewSource}
+                    </pre>
+                  </>
+                )}
+              </TabPanel>
+            </TabView>
           </div>
         </div>
       </Dialog>

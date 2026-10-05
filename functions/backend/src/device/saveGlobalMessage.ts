@@ -3,53 +3,9 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { logSecurityEvent } from "../security/securityLog";
 import { sendTelegramMessage } from "../utils/telegram";
+import { formatGlobalMessageForTelegram } from "../utils/htmlToTelegram";
 
 const REGION = "europe-west1";
-
-function htmlToTelegram(text: string): string {
-  if (!text) return "";
-
-  let t = text;
-
-  // normalize newline
-  t = t.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
-
-  // remove indentation
-  t = t.replace(/^[ \t]+/gm, "");
-
-  // links
-  t = t.replace(/<a[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, (_, url, label) => {
-    return `<a href="${url}">${(label as string).trim()}</a>`;
-  });
-
-  // bold
-  t = t.replace(/<(b|strong)>(.*?)<\/\1>/gi, "<b>$2</b>");
-
-  // headings → bold
-  t = t.replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "<b>$1</b>\n\n");
-
-  // list items
-  t = t.replace(/<li[^>]*>(.*?)<\/li>/gi, (_, item) => {
-    return `• ${(item as string).trim()}\n`;
-  });
-
-  // block elements
-  t = t.replace(/<\/p>/gi, "\n\n");
-  t = t.replace(/<\/div>/gi, "\n\n");
-  t = t.replace(/<br\s*\/?>/gi, "\n");
-
-  // remove all other tags
-  t = t.replace(/<[^>]+>/g, "");
-
-  // final cleanup
-  t = t
-    .replace(/\n[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .trim();
-
-  return t;
-}
 
 interface SaveGlobalMessageData {
   id?: string;
@@ -136,12 +92,14 @@ export const saveGlobalMessage = onCall(
         const apiUrl = process.env.TELEGRAM_API_URL;
         const secret = process.env.TELEGRAM_API_SECRET;
         if (apiUrl && secret) {
-          const tgText = `📢 Nuovo messaggio: <b>${title.trim()}</b>\n\n${htmlToTelegram(body.trim())}`;
+          const tgText = formatGlobalMessageForTelegram(title, body);
           await sendTelegramMessage(apiUrl, secret, tgText).catch((err) => {
             console.warn("[saveGlobalMessage] Telegram notification failed:", err);
           });
         } else {
-          console.warn("[saveGlobalMessage] notifyTelegram=true but TELEGRAM_API_URL/TELEGRAM_API_SECRET not configured");
+          console.warn(
+            "[saveGlobalMessage] notifyTelegram=true but TELEGRAM_API_URL/TELEGRAM_API_SECRET not configured"
+          );
         }
       }
 
