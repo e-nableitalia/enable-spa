@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import logo from "../assets/logo.png";
+import heroImage from "../assets/projects-2.jpg";
 import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { auth, functions, googleProvider } from "../firebase";
 import { Button } from "primereact/button";
@@ -9,6 +10,7 @@ import { Toast } from "primereact/toast";
 import { httpsCallable } from "firebase/functions";
 
 import Footer from "../components/layout/Footer";
+import "./public.css";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -23,9 +25,6 @@ export default function Login() {
       await doLogin();
       navigate("/home");
     } catch (err) {
-      // Usa un toast per il messaggio di errore
-      // Assicurati di importare e configurare il Toast di PrimeReact
-      // Aggiungi una ref per il toast
       toast.current?.show({
         severity: "error",
         summary: "Errore",
@@ -57,170 +56,141 @@ export default function Login() {
   };
 
   return (
-    <div style={{ maxWidth: 600, margin: "10px auto" }}>
-      <div style={{ maxWidth: 600, margin: "36px auto" }}>
-        <Toast ref={toast} />
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 24,
-            justifyContent: "center",
-            background: "linear-gradient(135deg, #e6f7ff 60%, #fff 100%)",
-            borderRadius: 12,
-            boxShadow: "0 4px 16px rgba(0,80,179,0.08)",
-            padding: "32px 16px",
-          }}
-        >
-          <img
-            src={logo}
-            alt="Logo"
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              boxShadow: "0 2px 8px rgba(0,80,179,0.12)",
-              marginBottom: 8,
-              background: "#fff",
-            }}
-          />
-          <h2 style={{
-            fontWeight: 700,
-            color: "#0050b3",
-            margin: 0,
-            fontSize: "2em",
-            letterSpacing: "0.02em",
-          }}>
-            e-Nable Italia
-          </h2>
-          <h3 style={{
-            color: "#888",
-            textAlign: "center",
-            margin: "8px 0 0 0",
-            fontWeight: 500,
-            fontSize: "1.15em",
-            letterSpacing: "0.01em",
-          }}>
-            Portale di Accesso Volontari
-          </h3>
+    <div className="pub">
+      <Toast ref={toast} />
+
+      <header className="pub-header">
+        <img src={logo} alt="" />
+        <div>
+          <strong>e-Nable Italia</strong>
+          <br />
+          <span>Portale Volontari</span>
         </div>
-        <div
-          style={{
-            background: "#e6f7ff",
-            border: "1px solid #91d5ff",
-            borderRadius: 6,
-            padding: "8px 16px",
-            marginTop: 8,
-            color: "#0050b3",
-            fontWeight: 500,
-            fontSize: "1.1em",
-            textAlign: "center",
-            width: "100%"
-          }}
-        >
-          <span>
-            Benvenuto nel portale dedicato ai volontari della community di<br />
-            e-Nable Italia!<br />
-            <a
-              href="https://e-nableitalia.it"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ textDecoration: "underline", color: "#0050b3" }}
+      </header>
+
+      <img
+        className="pub-hero"
+        src={heroImage}
+        alt="Mano robotica che tocca il logo e-Nable Italia"
+      />
+
+      <main className="pub-main">
+        <h1 className="pub-title">Una mano, progettata insieme.</h1>
+        <p className="pub-lead">
+          Benvenuto nel portale della community di e-Nable Italia: volontari che progettano e
+          realizzano gratuitamente device assistivi per bambini e adulti.{" "}
+          <a href="https://e-nableitalia.it" target="_blank" rel="noopener noreferrer">
+            Visita il sito ufficiale
+          </a>
+        </p>
+
+        <div className="pub-cols">
+          <section className="pub-section" aria-labelledby="request-title">
+            <h2 id="request-title">Devi richiedere un device?</h2>
+            <p>
+              Non è necessario registrarsi. Compila il modulo di richiesta: i nostri volontari ti
+              ricontatteranno via email.
+            </p>
+            <Button
+              label="Voglio richiedere un device"
+              icon="pi pi-arrow-right"
+              iconPos="right"
+              className="pub-btn-primary"
+              onClick={() => navigate("/request-device")}
+            />
+          </section>
+
+          <section className="pub-section" aria-labelledby="login-title">
+            <h2 id="login-title">Accesso volontari</h2>
+            <form
+              className="pub-stack p-fluid"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleLogin();
+              }}
             >
-              Visita il sito ufficiale
-            </a>
-          </span>
+              <Button
+                type="button"
+                label="Accedi con Google"
+                icon="pi pi-google"
+                className="pub-btn-outline"
+                onClick={handleGoogleLogin}
+              />
+              <div className="pub-divider">oppure con le tue credenziali</div>
+              <label htmlFor="login-email" className="pub-sr">
+                Email
+              </label>
+              <InputText
+                id="login-email"
+                type="email"
+                autoComplete="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <label htmlFor="login-password" className="pub-sr">
+                Password
+              </label>
+              <InputText
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <Button type="submit" label="Login" className="pub-btn-primary" />
+            </form>
+          </section>
         </div>
-      </div>
-      <div className="p-fluid" style={{ maxWidth: 400, margin: "0 auto" }}>
-        <Button
-          label="Accedi con Google"
-          icon="pi pi-google"
-          onClick={handleGoogleLogin}
-          className="w-full mb-3"
-          style={{
-            background: "#fff",
-            color: "#0050b3",
-            border: "2px solid #0050b3",
-          }}
-        />
-        <div style={{ textAlign: "center", margin: "16px 0" }}>
-          <span>Oppure accedi con le tue credenziali</span>
+
+        <div className="pub-notes">
+          <div>
+            <h3>Registrazione e accesso</h3>
+            <p>
+              Puoi accedere con il tuo account <b>Google</b> o con <b>le tue credenziali</b>.
+            </p>
+            <p>
+              Se non sei ancora registrato, accedi con <b>"Accedi con Google"</b>{" "}
+              <i>(registrazione automatica)</i> oppure via mail dalla{" "}
+              <button type="button" className="pub-link-btn" onClick={() => navigate("/register")}>
+                pagina di registrazione
+              </button>{" "}
+              <i>(ti verrà inviato un link di conferma via mail)</i>.
+            </p>
+          </div>
+          <div>
+            <h3>Richieste device</h3>
+            <p>
+              Se sei arrivato qui per richiedere un device, non è necessario registrarsi: usa il
+              pulsante <b>"Voglio richiedere un device"</b>.
+            </p>
+          </div>
+          <div>
+            <h3>Portale Volontari e-Nable Italia</h3>
+            <p>Questo portale è riservato ai volontari della community e-Nable Italia.</p>
+            <p>
+              Chiunque desideri entrare a farne parte può farlo, a condizione di conoscere e
+              accettare le regole della community e il relativo codice etico. Leggi prima le{" "}
+              <a
+                href="https://e-nableitalia.it/it_it/informazioni-volontari/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                informazioni per i volontari
+              </a>
+              .
+            </p>
+          </div>
         </div>
-        <InputText
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mb-3"
-        />
-        <InputText
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mb-3"
-        />
-        <Button label="Login" className="p-button-info"
-          onClick={handleLogin} />
-      </div>
 
-      <div className="login-info-message" style={{ marginTop: 12, background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: 6, padding: 16, color: "#614700" }}>
+        <div className="pub-version">
+          <span>v{__APP_VERSION__}</span>
+          <span style={{ margin: "0 6px" }}>·</span>
+          <span>Aggiornata al {__BUILD_DATE__}</span>
+        </div>
+      </main>
 
-        <strong style={{ display: "block", textAlign: "center" }}>Registrazione e accesso</strong><br />
-        Puoi accedere con il tuo account <b>Google</b> o con <b>le tue credenziali</b>.<br /><br />
-        Se non sei ancora registrato, puoi creare un account in modo semplice:
-        accedendo direttamente con <b>"Accedi con Google"</b> <i>(registrazione automatica)</i>
-        oppure via mail dalla <b
-          style={{ cursor: "pointer", textDecoration: "underline" }}
-          onClick={() => navigate("/register")}
-        >
-          pagina di registrazione
-        </b> <i>(ti verrà inviato un link di conferma via mail)</i>.
-        <br /><br />
-
-        <span style={{ fontStyle: "italic" }}>
-          <strong style={{ display: "block", textAlign: "center" }}>Richieste Device</strong><br />
-          Se sei arrivato qui per richiedere un device, non è necessario registrarsi:
-          puoi farlo direttamente cliccando sul pulsante <b>"Voglio richiedere un device"</b> qui sotto.
-        </span>
-        <br /><br />
-
-        <strong style={{ display: "block", textAlign: "center" }}>
-          Portale Volontari e-Nable Italia
-        </strong><br />
-
-        Questo portale è riservato ai volontari della community e-Nable Italia.<br /><br />
-
-        Chiunque desideri entrare a farne parte può farlo, a condizione di conoscere
-        e accettare le regole della community e il relativo codice etico.<br /><br />
-
-        Se desideri diventare volontario, ti invitiamo a leggere prima le informazioni
-        dedicate alla community:
-
-        <a
-          href="https://e-nableitalia.it/it_it/informazioni-volontari/"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ textDecoration: "underline" }}
-        >
-          Informazioni per i volontari
-        </a>.<br /><br />
-      </div>
-      <div style={{ textAlign: "center", marginTop: 24 }}>
-        <Button
-          label="Voglio richiedere un device"
-          icon="pi pi-users"
-          className="p-button-info"
-          onClick={() => navigate("/request-device")}
-        />
-      </div>
-      <div style={{ textAlign: "center", marginTop: 24, color: "#aaa", fontSize: 12 }}>
-        <span>v{__APP_VERSION__}</span>
-        <span style={{ margin: "0 6px" }}>·</span>
-        <span>Aggiornata al {__BUILD_DATE__}</span>
-      </div>
       <Footer />
     </div>
   );

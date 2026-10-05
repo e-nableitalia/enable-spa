@@ -1,0 +1,178 @@
+/* Shared minimal styles for public pages (Login, RequestDevice) */
+.pub {
+  --pub-ink: #1f2328;
+  --pub-muted: #5b616b;
+  --pub-line: #e7e7ea;
+  --pub-accent: #c4492f;
+  --pub-bg: #ffffff;
+  min-height: 100vh;
+  background: var(--pub-bg);
+  color: var(--pub-ink);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.pub a { color: var(--pub-accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.pub-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px 20px;
+}
+.pub-header img { width: 40px; height: 40px; border-radius: 50%; }
+.pub-header strong { font-size: 1.05rem; letter-spacing: 0.01em; }
+.pub-header span { color: var(--pub-muted); font-size: 0.9rem; }
+
+.pub-hero {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  object-position: 35% center;
+  display: block;
+}
+@media (min-width: 768px) {
+  .pub-hero { height: 320px; }
+}
+
+.pub-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 20px 0;
+}
+.pub-narrow { max-width: 760px; }
+
+.pub-title {
+  font-size: 1.9rem;
+  line-height: 1.2;
+  font-weight: 700;
+  margin: 0 0 8px;
+  text-wrap: balance;
+}
+.pub-lead {
+  color: var(--pub-muted);
+  font-size: 1.1rem;
+  margin: 0;
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+@media (min-width: 768px) {
+  .pub-title { font-size: 2.4rem; }
+}
+
+.pub-cols {
+  display: grid;
+  gap: 40px;
+  margin-top: 32px;
+}
+@media (min-width: 880px) {
+  .pub-cols { grid-template-columns: 1fr 1fr; gap: 64px; }
+}
+
+.pub-section h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+.pub-section p { margin: 0 0 12px; color: var(--pub-muted); }
+
+.pub-stack { display: flex; flex-direction: column; gap: 12px; }
+
+.pub-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--pub-muted);
+  font-size: 0.9rem;
+}
+.pub-divider::before,
+.pub-divider::after { content: ""; flex: 1; height: 1px; background: var(--pub-line); }
+
+.pub .p-button.pub-btn-primary {
+  background: var(--pub-accent);
+  border-color: var(--pub-accent);
+  color: #fff;
+}
+.pub .p-button.pub-btn-outline {
+  background: transparent;
+  border: 1px solid var(--pub-ink);
+  color: var(--pub-ink);
+}
+
+.pub-notes {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid var(--pub-line);
+  display: grid;
+  gap: 28px;
+}
+@media (min-width: 880px) {
+  .pub-notes { grid-template-columns: repeat(3, 1fr); gap: 40px; }
+}
+.pub-notes h3 { font-size: 1rem; font-weight: 700; margin: 0 0 8px; }
+.pub-notes p { margin: 0 0 8px; color: var(--pub-muted); font-size: 0.95rem; }
+
+.pub-link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--pub-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.pub-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pub-version { text-align: center; margin-top: 40px; color: #9a9ea6; font-size: 12px; }
+
+/* Request device form */
+.pub-note {
+  margin: 24px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--pub-line);
+}
+.pub-note p { margin: 0 0 10px; color: var(--pub-muted); }
+.pub-note strong { color: var(--pub-ink); }
+
+.pub-form { margin-top: 40px; display: flex; flex-direction: column; gap: 36px; }
+.pub-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pub-form legend {
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 0 0 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--pub-line);
+  width: 100%;
+}
+.pub-fields { display: grid; gap: 16px; margin-top: 12px; }
+@media (min-width: 640px) {
+  .pub-fields { grid-template-columns: 1fr 1fr; }
+  .pub-span-2 { grid-column: span 2; }
+}
+.pub-field { display: flex; flex-direction: column; gap: 6px; }
+.pub-field > label { font-size: 0.95rem; font-weight: 600; }
+.pub-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pub-inline label { font-weight: 400; }
+.pub-check { display: flex; align-items: flex-start; gap: 10px; }
+.pub-check label { font-weight: 400; font-size: 0.95rem; color: var(--pub-muted); }
+.pub-legal { font-size: 0.9rem !important; line-height: 1.6; }
+
+.pub-success {
+  margin-top: 40px;
+  padding: 32px 0;
+  border-top: 1px solid var(--pub-line);
+  border-bottom: 1px solid var(--pub-line);
+}
+.pub-success h2 { margin: 0 0 12px; font-size: 1.4rem; }
+.pub-success p { color: var(--pub-muted); margin: 0 0 12px; }
