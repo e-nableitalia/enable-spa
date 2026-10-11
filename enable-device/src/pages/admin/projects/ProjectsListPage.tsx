@@ -150,9 +150,9 @@ export default function ProjectsListPage() {
         }}
         dataKey="id"
       >
-        <Column field="title" header="Titolo" />
-        <Column field="projectType" header="Tipo" />
-        <Column header="Stato" body={(p: ProjectListItem) => <Tag value={p.status} severity={statusSeverity(p.status)} />} />
+        <Column field="title" header="Titolo" body={(p: ProjectListItem) => p.title || "—"} />
+        <Column field="projectType" header="Tipo" body={(p: ProjectListItem) => p.projectType || "—"} />
+        <Column header="Stato" body={(p: ProjectListItem) => <Tag value={p.status || "—"} severity={statusSeverity(p.status)} />} />
       </DataTable>
 
       <Dialog
@@ -198,7 +198,13 @@ export default function ProjectsListPage() {
             id="newProjectType"
             value={newProject.projectType || null}
             options={DEFAULT_PROJECT_TYPES.map((t) => ({ label: t, value: t }))}
-            onChange={(e) => setNewProject((f) => ({ ...f, projectType: e.value }))}
+            optionValue="value"
+            onChange={(e) =>
+              setNewProject((f) => ({
+                ...f,
+                projectType: typeof e.value === "string" ? e.value : "",
+              }))
+            }
             editable
             placeholder="Seleziona o digita un tipo"
             style={{ width: "100%" }}

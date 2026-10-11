@@ -63,6 +63,14 @@ export const batchUpdateMock = jest.fn((ref: { __type: string; id: string }, upd
     projectsStore[ref.id] = applyUpdate(projectsStore[ref.id] ?? {}, updates);
   }
 });
+export const batchDeleteMock = jest.fn((ref: { __type: string; id: string; __projectId?: string }) => {
+  if (ref.__type === "project") {
+    delete projectsStore[ref.id];
+    delete eventsStore[ref.id];
+  } else if (ref.__type === "event" && ref.__projectId) {
+    if (eventsStore[ref.__projectId]) delete eventsStore[ref.__projectId][ref.id];
+  }
+});
 export const batchCommitMock = jest.fn().mockResolvedValue(undefined);
 
 function usersCollection() {
@@ -106,13 +114,51 @@ function projectDocRef(id: string) {
       return Promise.resolve();
     }),
     update: jest.fn((updates: Record<string, unknown>) => projectUpdateMock(id, updates)),
+    delete: jest.fn(() => {
+      delete projectsStore[id];
+      delete eventsStore[id];
+      return Promise.resolve();
+    }),
     collection: jest.fn((name: string) => {
       if (name !== "events") throw new Error(`Unexpected subcollection ${name}`);
+      const listEvents = () => {
+        const entries = Object.entries(eventsStore[id] ?? {});
+        return {
+          docs: entries.map(([eventId, data]) => ({
+            id: eventId,
+            data: () => data,
+            ref: {
+              id: eventId,
+              __type: "event" as const,
+              __projectId: id,
+              delete: jest.fn(() => {
+                if (eventsStore[id]) delete eventsStore[id][eventId];
+                return Promise.resolve();
+              }),
+            },
+          })),
+        };
+      };
       return {
-        doc: jest.fn(() => {
+        doc: jest.fn((eventId?: string) => {
+          if (eventId) {
+            return {
+              id: eventId,
+              __type: "event" as const,
+              __projectId: id,
+              delete: jest.fn(() => {
+                if (eventsStore[id]) delete eventsStore[id][eventId];
+                return Promise.resolve();
+              }),
+            };
+          }
           idCounter += 1;
           return { id: `event-${idCounter}`, __type: "event" as const, __projectId: id };
         }),
+        get: jest.fn(() => Promise.resolve(listEvents())),
+        orderBy: jest.fn(() => ({
+          get: jest.fn(() => Promise.resolve(listEvents())),
+        })),
       };
     }),
   };
@@ -146,7 +192,12 @@ export function firestoreMockModule() {
   return {
     getFirestore: jest.fn(() => ({
       collection: (name: string) => collectionMock(name),
-      batch: jest.fn(() => ({ set: batchSetMock, update: batchUpdateMock, commit: batchCommitMock })),
+      batch: jest.fn(() => ({
+        set: batchSetMock,
+        update: batchUpdateMock,
+        delete: batchDeleteMock,
+        commit: batchCommitMock,
+      })),
     })),
     FieldValue: {
       serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),

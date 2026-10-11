@@ -103,7 +103,10 @@ export const uploadAttachment = onCall({ region: REGION }, async (request) => {
     await logOutcome("blocked", { reason: "invalid-argument", field: "fileName" });
     throw new HttpsError("invalid-argument", "Missing or invalid parameter: fileName");
   }
-  if (notes !== undefined && typeof notes !== "string") {
+  // null è ammesso (trattato come assente, poi normalizzato a "" in
+  // buildAttachmentDocument): stessa convenzione di `category` e delle note
+  // checklist. Un client che omette Note o manda notes:null non deve fallire.
+  if (notes !== undefined && notes !== null && typeof notes !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "notes" });
     throw new HttpsError("invalid-argument", "notes must be a string");
   }
@@ -221,6 +224,27 @@ export const uploadAttachment = onCall({ region: REGION }, async (request) => {
 
     if (error instanceof HttpsError) {
       throw error;
+    }
+
+    // F-40: bucket dedicato o IAM signed-URL assenti → messaggio più
+    // diagnostico di "Internal Server Error" generico.
+    const message = error instanceof Error ? error.message : String(error);
+    const looksLikeMissingBucket =
+      /bucket.*(does not exist|not found|notFound)/i.test(message) ||
+      /No such object|The specified bucket does not exist/i.test(message);
+    const looksLikeSigningIam =
+      /Permission.*iam\.serviceAccounts\.signBlob|signing|identity toolkit/i.test(message);
+    if (looksLikeMissingBucket) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Attachments storage bucket is not provisioned (expected {projectId}-attachments)"
+      );
+    }
+    if (looksLikeSigningIam) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Cannot sign upload URL: runtime service account lacks Token Creator / signBlob permission"
+      );
     }
     throw new HttpsError("internal", "Internal Server Error");
   }

@@ -227,6 +227,28 @@ describe("uploadAttachment", () => {
     expect(attachmentsStore).toEqual({});
   });
 
+  it("accepts notes:null and stores an empty string", async () => {
+    const result = await uploadAttachment.run(buildRequest(baseData({ notes: null }), "admin-1"));
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        attachmentId: "generated-attachment-id-1",
+        uploadUrl: SIGNED_URL,
+      })
+    );
+    expect(attachmentsStore["generated-attachment-id-1"]).toEqual(
+      expect.objectContaining({ notes: "" })
+    );
+  });
+
+  it("throws invalid-argument when notes is neither string nor null", async () => {
+    await expect(
+      uploadAttachment.run(buildRequest(baseData({ notes: 42 }), "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "notes must be a string"));
+
+    expect(attachmentsStore).toEqual({});
+  });
+
   // Scenario 6: Logging di ogni invocazione
   it("logs a success event consistent with the outcome when the upload succeeds", async () => {
     await uploadAttachment.run(buildRequest(baseData(), "admin-1"));
@@ -283,8 +305,24 @@ describe("uploadAttachment", () => {
   // Regressione (panel review EA-163): un errore infrastrutturale imprevisto
   // (es. bucket non ancora provisionato, F-40) durante la generazione della
   // signed URL non deve sfuggire al logging di sicurezza.
-  it("logs a failure event and throws internal when getSignedUrl throws unexpectedly", async () => {
+  it("logs a failure event and maps a missing-bucket error to failed-precondition", async () => {
     getSignedUrlMock.mockRejectedValueOnce(new Error("bucket does not exist"));
+
+    await expect(uploadAttachment.run(buildRequest(baseData(), "admin-1"))).rejects.toMatchObject(
+      new HttpsError(
+        "failed-precondition",
+        "Attachments storage bucket is not provisioned (expected {projectId}-attachments)"
+      )
+    );
+
+    expect(logSecurityEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "uploadAttachment", outcome: "failure" })
+    );
+    expect(batchCommitMock).not.toHaveBeenCalled();
+  });
+
+  it("logs a failure event and throws internal for other unexpected getSignedUrl errors", async () => {
+    getSignedUrlMock.mockRejectedValueOnce(new Error("network timeout"));
 
     await expect(uploadAttachment.run(buildRequest(baseData(), "admin-1"))).rejects.toMatchObject(
       new HttpsError("internal", "Internal Server Error")
@@ -293,7 +331,6 @@ describe("uploadAttachment", () => {
     expect(logSecurityEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ action: "uploadAttachment", outcome: "failure" })
     );
-    expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   // Test di regressione: contratto di validazione argomenti di base.

@@ -95,10 +95,14 @@ describe("updateAttachmentDescription", () => {
       description: "Descrizione aggiornata",
       notes: "Nota originale",
     });
-    expect(updateAttachmentFieldsMock).toHaveBeenCalledWith(expect.anything(), "att-1", {
-      description: "Descrizione aggiornata",
-      notes: undefined,
-    });
+    expect(updateAttachmentFieldsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "att-1",
+      expect.objectContaining({
+        description: "Descrizione aggiornata",
+        notes: undefined,
+      })
+    );
   });
 
   // Scenario 2: Volontario modifica la descrizione di un proprio allegato
@@ -112,10 +116,14 @@ describe("updateAttachmentDescription", () => {
       description: "Descrizione aggiornata",
       notes: "Nota aggiornata",
     });
-    expect(updateAttachmentFieldsMock).toHaveBeenCalledWith(expect.anything(), "att-1", {
-      description: "Descrizione aggiornata",
-      notes: "Nota aggiornata",
-    });
+    expect(updateAttachmentFieldsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "att-1",
+      expect.objectContaining({
+        description: "Descrizione aggiornata",
+        notes: "Nota aggiornata",
+      })
+    );
   });
 
   // Scenario 3: Volontario nega la modifica su un allegato di altri
@@ -204,6 +212,25 @@ describe("updateAttachmentDescription", () => {
     ).rejects.toMatchObject(new HttpsError("invalid-argument", "notes must be a string"));
 
     expect(getAttachmentByIdMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts notes:null and persists an empty string", async () => {
+    const result = await updateAttachmentDescription.run(
+      buildRequest(baseData({ notes: null }), "admin-1")
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        attachmentId: "att-1",
+        description: "Descrizione aggiornata",
+        notes: "",
+      })
+    );
+    expect(updateAttachmentFieldsMock).toHaveBeenCalledWith(expect.anything(), "att-1", {
+      description: "Descrizione aggiornata",
+      notes: "",
+      retention: undefined,
+    });
   });
 
   it("throws not-found and persists no change when the attachment does not exist", async () => {

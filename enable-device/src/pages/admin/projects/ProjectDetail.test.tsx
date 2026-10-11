@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -17,36 +17,44 @@ vi.mock("react-router-dom", async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 
-const firestoreDocs: Record<string, unknown> = {};
-const firestoreCollections: Record<string, Array<Record<string, unknown>>> = {};
-
 vi.mock("firebase/firestore", () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ __path: segments.join("/") }),
-  getDoc: async (ref: { __path: string }) => {
-    const data = firestoreDocs[ref.__path];
-    return { exists: () => data !== undefined, data: () => data };
-  },
-  collection: (_db: unknown, ...segments: string[]) => ({ __path: segments.join("/") }),
-  getDocs: async (q: { __path: string }) => {
-    const items = firestoreCollections[q.__path] ?? [];
-    return { docs: items.map((data) => ({ data: () => data })) };
-  },
-  query: (ref: unknown) => ref,
-  orderBy: vi.fn(),
+  getDoc: async () => ({ exists: () => false, data: () => undefined }),
 }));
 
-function setProject(id: string, data: Record<string, unknown>) {
-  firestoreDocs[`projects/${id}`] = data;
+function mockProject(
+  overrides: Partial<{
+    id: string;
+    title: string;
+    description: string;
+    projectType: string;
+    status: string;
+    checklists: unknown[];
+    createdBy: string;
+  }> = {},
+  events: Array<Record<string, unknown>> = []
+) {
+  const project = {
+    id: "p1",
+    title: "Device multifunzione",
+    description: "Descrizione",
+    projectType: "progetto",
+    status: "active",
+    checklists: [],
+    createdBy: "admin-1",
+    ...overrides,
+  };
+  callable.mockImplementation((name: string) => {
+    if (name === "getProject") {
+      return Promise.resolve({ data: { project, events } });
+    }
+    if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
+    if (name === "updateProject") return Promise.resolve({ data: { success: true } });
+    if (name === "changeProjectStatus") return Promise.resolve({ data: { success: true, eventId: "e1" } });
+    if (name === "deleteProject") return Promise.resolve({ data: { success: true } });
+    return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+  });
 }
-
-function setEvents(id: string, events: Array<Record<string, unknown>>) {
-  firestoreCollections[`projects/${id}/events`] = events;
-}
-
-afterEach(() => {
-  for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
-  for (const key of Object.keys(firestoreCollections)) delete firestoreCollections[key];
-});
 
 function renderDetail(id = "p1") {
   return render(
@@ -65,39 +73,18 @@ describe("ProjectDetail", () => {
   });
 
   it("mostra i dati generali di un progetto 'active' (Modifica/Nota/Cambia stato abilitati)", async () => {
-    setProject("p1", {
-      title: "Device multifunzione",
-      description: "Descrizione",
-      projectType: "progetto",
-      status: "active",
-      checklists: [],
-      createdBy: "admin-1",
-    });
-    setEvents("p1", []);
-    callable.mockImplementation((name: string) => {
-      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
-      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
-    });
-
+    mockProject({ status: "active" });
     renderDetail();
 
     expect(await screen.findByText("Device multifunzione")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Modifica" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Aggiungi nota" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Cambia stato" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Elimina" })).toBeInTheDocument();
   });
 
   it("un progetto 'archived' disabilita Modifica/Nota/Cambia stato (terminale)", async () => {
-    setProject("p1", {
-      title: "Progetto vecchio",
-      description: "",
-      projectType: "progetto",
-      status: "archived",
-      checklists: [],
-      createdBy: "admin-1",
-    });
-    setEvents("p1", []);
-
+    mockProject({ title: "Progetto vecchio", description: "", status: "archived" });
     renderDetail();
 
     expect(await screen.findByText("Progetto vecchio")).toBeInTheDocument();
@@ -107,16 +94,7 @@ describe("ProjectDetail", () => {
   });
 
   it("un progetto 'standby' disabilita Modifica ma permette Nota e Cambia stato", async () => {
-    setProject("p1", {
-      title: "Progetto in pausa",
-      description: "",
-      projectType: "progetto",
-      status: "standby",
-      checklists: [],
-      createdBy: "admin-1",
-    });
-    setEvents("p1", []);
-
+    mockProject({ title: "Progetto in pausa", description: "", status: "standby" });
     renderDetail();
 
     expect(await screen.findByText("Progetto in pausa")).toBeInTheDocument();
@@ -125,22 +103,15 @@ describe("ProjectDetail", () => {
     expect(screen.getByRole("button", { name: "Cambia stato" })).not.toBeDisabled();
   });
 
-  it("modifica titolo/descrizione tramite il dialog 'Modifica'", async () => {
-    setProject("p1", {
-      title: "Vecchio titolo",
-      description: "Vecchia descrizione",
-      projectType: "progetto",
-      status: "new",
-      checklists: [],
-      createdBy: "admin-1",
-    });
-    setEvents("p1", []);
-    callable.mockImplementation((name: string) => {
-      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
-      if (name === "updateProject") return Promise.resolve({ data: { success: true } });
-      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
-    });
+  it("carica il progetto via getProject (non getDoc diretto)", async () => {
+    mockProject();
+    renderDetail("p1");
+    await screen.findByText("Device multifunzione");
+    expect(callable).toHaveBeenCalledWith("getProject", { projectId: "p1" });
+  });
 
+  it("modifica titolo/descrizione tramite il dialog 'Modifica'", async () => {
+    mockProject({ title: "Vecchio titolo", description: "Vecchia descrizione", status: "new" });
     const user = userEvent.setup();
     renderDetail();
 
@@ -160,21 +131,7 @@ describe("ProjectDetail", () => {
   });
 
   it("aggiunge una nota tramite changeProjectStatus con lo stato corrente", async () => {
-    setProject("p1", {
-      title: "Progetto",
-      description: "",
-      projectType: "progetto",
-      status: "active",
-      checklists: [],
-      createdBy: "admin-1",
-    });
-    setEvents("p1", []);
-    callable.mockImplementation((name: string) => {
-      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
-      if (name === "changeProjectStatus") return Promise.resolve({ data: { success: true, eventId: "e1" } });
-      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
-    });
-
+    mockProject({ title: "Progetto", description: "", status: "active" });
     const user = userEvent.setup();
     renderDetail();
 
@@ -192,21 +149,7 @@ describe("ProjectDetail", () => {
   });
 
   it("cambia stato tramite il dialog 'Cambia stato'", async () => {
-    setProject("p1", {
-      title: "Progetto",
-      description: "",
-      projectType: "progetto",
-      status: "new",
-      checklists: [],
-      createdBy: "admin-1",
-    });
-    setEvents("p1", []);
-    callable.mockImplementation((name: string) => {
-      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
-      if (name === "changeProjectStatus") return Promise.resolve({ data: { success: true, eventId: "e1" } });
-      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
-    });
-
+    mockProject({ title: "Progetto", description: "", status: "new" });
     const user = userEvent.setup();
     renderDetail();
 
@@ -231,21 +174,7 @@ describe("ProjectDetail", () => {
   });
 
   it("non permette di salvare un titolo vuoto nel dialog 'Modifica'", async () => {
-    setProject("p1", {
-      title: "Vecchio titolo",
-      description: "Desc",
-      projectType: "progetto",
-      status: "new",
-      checklists: [],
-      createdBy: "admin-1",
-    });
-    setEvents("p1", []);
-    callable.mockImplementation((name: string) => {
-      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
-      if (name === "updateProject") return Promise.resolve({ data: { success: true } });
-      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
-    });
-
+    mockProject({ title: "Vecchio titolo", description: "Desc", status: "new" });
     const user = userEvent.setup();
     renderDetail();
 
@@ -257,5 +186,22 @@ describe("ProjectDetail", () => {
 
     expect(within(dialog).getByRole("button", { name: "Salva" })).toBeDisabled();
     expect(callable).not.toHaveBeenCalledWith("updateProject", expect.anything());
+  });
+
+  it("elimina il progetto dopo conferma e torna all'elenco", async () => {
+    mockProject({ title: "Da eliminare", status: "new" });
+    const user = userEvent.setup();
+    renderDetail();
+
+    await screen.findByText("Da eliminare");
+    await user.click(screen.getByRole("button", { name: "Elimina" }));
+
+    // ConfirmDialog: dopo l'apertura ci sono due bottoni "Elimina" (toolbar + accept).
+    const eliminateButtons = await screen.findAllByRole("button", { name: "Elimina" });
+    expect(eliminateButtons.length).toBeGreaterThanOrEqual(2);
+    await user.click(eliminateButtons[eliminateButtons.length - 1]);
+
+    expect(callable).toHaveBeenCalledWith("deleteProject", { projectId: "p1" });
+    expect(navigateMock).toHaveBeenCalledWith("/admin/projects");
   });
 });

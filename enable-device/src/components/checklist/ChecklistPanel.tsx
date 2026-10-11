@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
-import { doc, getDoc } from "firebase/firestore";
-import { db, functions } from "../../firebase";
+import { functions } from "../../firebase";
 import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
@@ -60,27 +59,6 @@ const EMPTY_NEW_ITEM: NewItemForm = { title: "", type: null, assignee: "", quant
 interface AssignableUser {
   id: string;
   label: string;
-}
-
-/**
- * Nome completo dell'utente `uid`, risolto da `users/{uid}/private/profile`
- * (stesso pattern di `RequestDetail.getUserFullName`). Non tutti i chiamanti
- * possono leggere il profilo privato di un altro utente (regole Firestore:
- * un volontario legge solo il proprio, EA-141) — in quel caso, o se il
- * profilo non esiste, l'etichetta ricade sull'uid stesso.
- */
-async function resolveAssignableUserLabel(uid: string): Promise<string> {
-  try {
-    const profileSnap = await getDoc(doc(db, "users", uid, "private", "profile"));
-    if (profileSnap.exists()) {
-      const data = profileSnap.data() as { firstName?: string; lastName?: string };
-      const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
-      if (fullName) return fullName;
-    }
-  } catch {
-    // Permessi insufficienti a leggere il profilo altrui: fallback sull'uid.
-  }
-  return uid;
 }
 
 interface Props {
@@ -176,14 +154,11 @@ export default function ChecklistPanel({
   /**
    * Utenti reali selezionabili come assegnatario di un item (EA-141,
    * estesa da F-27): i volontari assegnati alla deviceRequest più
-   * **tutti** gli admin dell'organizzazione, risolti lato server da
-   * `listAssignableChecklistUsers` — le regole Firestore non permettono a
-   * un client di enumerare gli admin diversi da sé stesso (`match
-   * /users/{userId}`, lettura root permessa solo ad admin o al proprietario
-   * stesso), quindi prima di questa funzione un volontario non vedeva mai
-   * un admin diverso da chi stava operando. Stesso perimetro RBAC
-   * validato lato backend da `isResolvableChecklistAssignee`. Sostituisce
-   * il precedente campo di testo libero, mai risolto a un'identità reale.
+   * **tutti** gli admin dell'organizzazione. `listAssignableChecklistUsers`
+   * restituisce già `{ id, label }[]` con i nomi risolti via Admin SDK —
+   * le regole Firestore non permettono al client di leggere i
+   * `private/profile` altrui né di enumerare gli admin. Stesso perimetro
+   * RBAC validato lato backend da `isResolvableChecklistAssignee`.
    */
   const loadAssignableUsers = useCallback(async () => {
     if (!requestId) {
@@ -191,19 +166,21 @@ export default function ChecklistPanel({
       return;
     }
     try {
-      const fn = httpsCallable<{ requestId: string }, { uids: string[] }>(
+      const fn = httpsCallable<{ requestId: string }, { users: AssignableUser[] }>(
         functions,
         "listAssignableChecklistUsers"
       );
       const result = await fn({ requestId });
-
-      const users = await Promise.all(
-        result.data.uids.map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) }))
-      );
-      setAssignableUsers(users);
+      setAssignableUsers(Array.isArray(result.data.users) ? result.data.users : []);
     } catch (err) {
       console.error("[ChecklistPanel] Failed to load assignable users", err);
       setAssignableUsers([]);
+      toast.current?.show({
+        severity: "warn",
+        summary: "Assegnatari non disponibili",
+        detail: "Impossibile caricare l'elenco degli assegnatari per questa richiesta.",
+        life: 4000,
+      });
     }
   }, [requestId]);
 

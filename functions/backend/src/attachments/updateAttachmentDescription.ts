@@ -58,7 +58,10 @@ export const updateAttachmentDescription = onCall({ region: REGION }, async (req
     await logOutcome("blocked", { reason: "invalid-argument", field: "attachmentId" });
     throw new HttpsError("invalid-argument", "Missing or invalid parameter: attachmentId");
   }
-  if (notes !== undefined && typeof notes !== "string") {
+  // null è ammesso (normalizzato a stringa vuota sotto): allineato a
+  // uploadAttachment e al campo category, così un client che manda notes:null
+  // non riceve invalid-argument.
+  if (notes !== undefined && notes !== null && typeof notes !== "string") {
     await logOutcome("blocked", { reason: "invalid-argument", field: "notes", attachmentId });
     throw new HttpsError("invalid-argument", "notes must be a string");
   }
@@ -101,8 +104,16 @@ export const updateAttachmentDescription = onCall({ region: REGION }, async (req
     throw new HttpsError("invalid-argument", "description is required");
   }
 
+  // notes:null → "" (campo opzionale assente); undefined → non aggiornare.
+  const normalizedNotes: string | undefined =
+    notes === null ? "" : typeof notes === "string" ? notes : undefined;
+
   try {
-    await updateAttachmentFields(db, attachmentId, { description, notes, retention });
+    await updateAttachmentFields(db, attachmentId, {
+      description,
+      notes: normalizedNotes,
+      retention,
+    });
 
     console.log(`[updateAttachmentDescription] OK: attachment ${attachmentId} updated by ${uid}`);
     await logOutcome("success", { attachmentId });
@@ -110,7 +121,7 @@ export const updateAttachmentDescription = onCall({ region: REGION }, async (req
     return {
       attachmentId,
       description,
-      notes: notes ?? attachment.notes,
+      notes: normalizedNotes ?? attachment.notes,
       retention: retention ?? attachment.retention,
     };
   } catch (error) {

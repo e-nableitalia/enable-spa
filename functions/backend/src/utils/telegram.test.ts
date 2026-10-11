@@ -30,7 +30,22 @@ describe("sendTelegramMessage", () => {
     expect(options.method).toBe("POST");
     expect(options.headers["Content-Type"]).toBe("application/json");
     expect(options.headers.Authorization).toMatch(/^Bearer .+\..+\..+$/); // JWT: header.payload.signature
-    expect(JSON.parse(options.body)).toEqual({ body: "Ciao" });
+    expect(JSON.parse(options.body)).toEqual({ body: "Ciao", parse_mode: "HTML" });
+  });
+
+  it("allows overriding parse_mode", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await sendTelegramMessage("https://example.com/hook", "shared-secret", "Ciao", "Markdown");
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      body: "Ciao",
+      parse_mode: "Markdown",
+    });
   });
 
   it("throws when the endpoint responds with a non-ok status", async () => {

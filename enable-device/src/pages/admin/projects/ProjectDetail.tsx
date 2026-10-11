@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { collection, doc, getDoc, getDocs, orderBy, query } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../../firebase";
 import { Button } from "primereact/button";
+import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { InputText } from "primereact/inputtext";
@@ -91,28 +92,41 @@ export default function ProjectDetail() {
   const [newStatus, setNewStatus] = useState<string>("new");
   const [statusNote, setStatusNote] = useState("");
   const [savingStatus, setSavingStatus] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const snap = await getDoc(doc(db, "projects", id));
-      if (!snap.exists()) {
-        toast.current?.show({ severity: "error", summary: "Progetto non trovato", life: 4000 });
-        setProject(null);
-        return;
-      }
-      const data = snap.data() as ProjectData;
-      setProject(data);
-      getUserFullName(data.createdBy).then(setCreatorName);
+      // Via Cloud Function (Admin SDK): evita dipendere dalle rules client
+      // su `projects/{id}`, che se non deployate facevano fallire getDoc
+      // con "Progetto non trovato" mentre listProjects funzionava.
+      const fn = httpsCallable<
+        { projectId: string },
+        { project: ProjectData & { id: string }; events: ProjectEvent[] }
+      >(functions, "getProject");
+      const result = await fn({ projectId: id });
+      const data = result.data.project;
+      setProject({
+        title: data.title ?? "",
+        description: data.description ?? "",
+        projectType: data.projectType ?? "",
+        status: data.status ?? "new",
+        checklists: Array.isArray(data.checklists) ? data.checklists : [],
+        createdBy: data.createdBy ?? "",
+      });
+      getUserFullName(data.createdBy ?? "").then(setCreatorName);
 
-      const eventsSnap = await getDocs(query(collection(db, "projects", id, "events"), orderBy("timestamp", "desc")));
-      const eventsData = eventsSnap.docs.map((d) => d.data());
       const enriched = await Promise.all(
-        eventsData.map(async (ev) => ({ ...ev, userName: ev.createdBy ? await getUserFullName(ev.createdBy) : "-" }))
+        (result.data.events ?? []).map(async (ev) => ({
+          ...ev,
+          userName: ev.createdBy ? await getUserFullName(ev.createdBy) : "-",
+        }))
       );
       setEvents(enriched);
     } catch (err) {
+      setProject(null);
+      setEvents([]);
       toast.current?.show({
         severity: "error",
         summary: "Errore",
@@ -124,9 +138,38 @@ export default function ProjectDetail() {
   }, [id]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- load fetches from Firestore, not derivable from props/state
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load fetches from a Cloud Function, not derivable from props/state
     load();
   }, [load]);
+
+  const handleDelete = () => {
+    if (!id || !project) return;
+    confirmDialog({
+      message: `Eliminare definitivamente il progetto "${project.title || id}"? L'operazione non è annullabile.`,
+      header: "Conferma eliminazione",
+      icon: "pi pi-exclamation-triangle",
+      acceptLabel: "Elimina",
+      rejectLabel: "Annulla",
+      acceptClassName: "p-button-danger",
+      accept: async () => {
+        setDeleting(true);
+        try {
+          const fn = httpsCallable(functions, "deleteProject");
+          await fn({ projectId: id });
+          toast.current?.show({ severity: "success", summary: "Progetto eliminato", life: 3000 });
+          navigate("/admin/projects");
+        } catch (err) {
+          toast.current?.show({
+            severity: "error",
+            summary: "Errore",
+            detail: err instanceof Error ? err.message : "Errore durante l'eliminazione.",
+            life: 5000,
+          });
+        }
+        setDeleting(false);
+      },
+    });
+  };
 
   const contentWritable = project ? CONTENT_WRITABLE_STATUSES.has(project.status) : false;
   const isTerminal = project ? TERMINAL_STATUSES.has(project.status) : false;
@@ -223,6 +266,7 @@ export default function ProjectDetail() {
   return (
     <div style={{ padding: 20 }}>
       <Toast ref={toast} />
+      <ConfirmDialog />
       <Button
         label="Torna all'elenco"
         icon="pi pi-arrow-left"
@@ -234,13 +278,13 @@ export default function ProjectDetail() {
       <Panel header="Dati generali" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div>
-            <strong>Titolo:</strong> {project.title}
+            <strong>Titolo:</strong> {project.title || "—"}
           </div>
           <div>
             <strong>Descrizione:</strong> {project.description || "-"}
           </div>
           <div>
-            <strong>Tipo:</strong> {project.projectType}
+            <strong>Tipo:</strong> {project.projectType || "—"}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <strong>Stato:</strong>
@@ -249,7 +293,7 @@ export default function ProjectDetail() {
           <div>
             <strong>Creato da:</strong> {creatorName || project.createdBy}
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             <Button
               label="Modifica"
               icon="pi pi-pencil"
@@ -272,6 +316,13 @@ export default function ProjectDetail() {
               onClick={openTransitionDialog}
               disabled={isTerminal}
               tooltip={isTerminal ? "Un progetto archiviato/chiuso è terminale" : undefined}
+            />
+            <Button
+              label="Elimina"
+              icon="pi pi-trash"
+              className="p-button-outlined p-button-danger"
+              onClick={handleDelete}
+              loading={deleting}
             />
           </div>
         </div>

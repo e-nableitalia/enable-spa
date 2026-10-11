@@ -5,6 +5,7 @@ jest.mock("firebase-admin/firestore", () => firestoreMockModule());
 
 import {
   isValidProjectStatus,
+  normalizeProjectRecord,
   requireStaffRole,
   requireAdmin,
   getProjectOrThrow,
@@ -77,10 +78,69 @@ describe("projectAccess", () => {
     });
   });
 
+  describe("normalizeProjectRecord", () => {
+    it("maps legacy name/createdByUid/draft onto the current contract", () => {
+      expect(
+        normalizeProjectRecord({
+          name: "Idee per bike adapter",
+          description: "legacy",
+          status: "draft",
+          createdByUid: "admin-1",
+        })
+      ).toEqual({
+        title: "Idee per bike adapter",
+        description: "legacy",
+        projectType: "",
+        status: "new",
+        checklists: [],
+        createdBy: "admin-1",
+      });
+    });
+
+    it("prefers title/createdBy/projectType when already present", () => {
+      expect(
+        normalizeProjectRecord({
+          title: "Maker Faire",
+          name: "ignored",
+          projectType: "evento",
+          status: "active",
+          createdBy: "admin-1",
+          createdByUid: "other",
+          checklists: [{ checklistId: "c1", label: "L" }],
+          description: "d",
+        })
+      ).toEqual({
+        title: "Maker Faire",
+        description: "d",
+        projectType: "evento",
+        status: "active",
+        checklists: [{ checklistId: "c1", label: "L" }],
+        createdBy: "admin-1",
+      });
+    });
+  });
+
   describe("getProjectOrThrow", () => {
     it("returns the project doc with its id", async () => {
       const project = await getProjectOrThrow(db(), "proj-1");
       expect(project).toEqual(expect.objectContaining({ id: "proj-1", title: "T", status: "active" }));
+    });
+
+    it("normalizes legacy fields when reading a project", async () => {
+      projectsStore["proj-legacy"] = {
+        name: "Bike adapter",
+        status: "draft",
+        createdByUid: "admin-1",
+      };
+      const project = await getProjectOrThrow(db(), "proj-legacy");
+      expect(project).toEqual(
+        expect.objectContaining({
+          id: "proj-legacy",
+          title: "Bike adapter",
+          status: "new",
+          createdBy: "admin-1",
+        })
+      );
     });
 
     it("throws not-found for a missing project", async () => {

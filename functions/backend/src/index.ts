@@ -60,6 +60,8 @@ export { updateDeviceRequestAttachmentDescription } from "./device-requests/upda
 export { deleteDeviceRequestAttachment } from "./device-requests/deleteDeviceRequestAttachment";
 export { createProject } from "./projects/createProject";
 export { listProjects } from "./projects/listProjects";
+export { getProject } from "./projects/getProject";
+export { deleteProject } from "./projects/deleteProject";
 export { updateProject } from "./projects/updateProject";
 export { changeProjectStatus } from "./projects/changeProjectStatus";
 export { createProjectChecklist } from "./projects/createProjectChecklist";

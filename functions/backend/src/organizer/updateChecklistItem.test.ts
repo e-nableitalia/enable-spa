@@ -312,7 +312,7 @@ describe("updateChecklistItem", () => {
 
     // EA-137 + EA-145: 'completed' e' ora scrivibile da questa funzione, quindi il ramo
     // boolean del gate e' raggiungibile (prima di EA-145 restava sempre irraggiungibile).
-    it("sets completionDate for a boolean item when completed becomes true and assignee is already set", async () => {
+    it("sets completionDate for a boolean item when completed becomes true", async () => {
       setItem({ type: "boolean", assignee: "Mario Rossi", completed: false, status: "Assegnare" });
 
       await updateChecklistItem.run(
@@ -326,15 +326,32 @@ describe("updateChecklistItem", () => {
       });
     });
 
-    it("does not set completionDate for a boolean item that becomes completed without an assignee", async () => {
+    it("sets completionDate for a boolean item that becomes completed without an assignee", async () => {
       setItem({ type: "boolean", assignee: null, completed: false, status: "Assegnare" });
 
       await updateChecklistItem.run(
         buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, completed: true })
       );
 
-      const [updatePayload] = itemUpdateMock.mock.calls[0];
-      expect(updatePayload).not.toHaveProperty("completionDate");
+      expect(itemUpdateMock).toHaveBeenCalledWith({
+        completed: true,
+        completionDate: SERVER_TIMESTAMP_SENTINEL,
+        updatedAt: SERVER_TIMESTAMP_SENTINEL,
+      });
+    });
+
+    it("sets completionDate when a generic item reaches Completata without an assignee", async () => {
+      setItem({ type: "generic", assignee: null, status: "Assegnare", quantity: null });
+
+      await updateChecklistItem.run(
+        buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, status: "Completata" })
+      );
+
+      expect(itemUpdateMock).toHaveBeenCalledWith({
+        status: "Completata",
+        completionDate: SERVER_TIMESTAMP_SENTINEL,
+        updatedAt: SERVER_TIMESTAMP_SENTINEL,
+      });
     });
   });
 

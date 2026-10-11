@@ -72,7 +72,7 @@ export const createProject = onCall({ region: REGION }, async (request) => {
     await projectRef.set({
       title: title.trim(),
       description: description ?? "",
-      projectType,
+      projectType: projectType.trim(),
       status: "new",
       checklists: [],
       createdBy: uid,

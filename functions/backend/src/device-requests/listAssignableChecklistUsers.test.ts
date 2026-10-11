@@ -3,11 +3,12 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 
 /**
  * Store in-memory minimale che simula le collection Firestore coinvolte:
- * `users` (RBAC + query sugli admin) e `deviceRequests` (documento
- * principale, per `assignedVolunteers`). Stesso pattern di
- * `createDeviceRequestChecklist.test.ts`.
+ * `users` (RBAC + query sugli admin), `users/{uid}/private/profile` (label)
+ * e `deviceRequests` (documento principale, per `assignedVolunteers`).
+ * Stesso pattern di `createDeviceRequestChecklist.test.ts`.
  */
 let usersStore: Record<string, Record<string, unknown> | undefined>;
+let profilesStore: Record<string, Record<string, unknown> | undefined>;
 let deviceRequestsStore: Record<string, Record<string, unknown> | undefined>;
 
 const usersWhereMock = jest.fn((field: string, _op: string, value: unknown) => ({
@@ -31,6 +32,23 @@ function buildCollection(name: string) {
             data: () => usersStore[uid],
           })
         ),
+        collection: jest.fn((sub: string) => {
+          if (sub !== "private") throw new Error(`Unexpected subcollection ${sub}`);
+          return {
+            doc: jest.fn((docId: string) => ({
+              get: jest.fn(() => {
+                if (docId !== "profile") {
+                  return Promise.resolve({ exists: false, data: () => undefined });
+                }
+                const profile = profilesStore[uid];
+                return Promise.resolve({
+                  exists: profile !== undefined,
+                  data: () => profile,
+                });
+              }),
+            })),
+          };
+        }),
       })),
       where: usersWhereMock,
     };
@@ -70,6 +88,10 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "admin
   } as CallableRequest;
 }
 
+function userIds(result: unknown): string[] {
+  return (result as { users: { id: string; label: string }[] }).users.map((u) => u.id).sort();
+}
+
 describe("listAssignableChecklistUsers", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -81,6 +103,12 @@ describe("listAssignableChecklistUsers", () => {
       "volunteer-2": { role: "volunteer" },
     };
 
+    profilesStore = {
+      "admin-1": { firstName: "Ada", lastName: "Admin" },
+      "admin-2": { firstName: "Luca", lastName: "Verdi" },
+      "volunteer-1": { firstName: "Anna", lastName: "Bianchi" },
+    };
+
     deviceRequestsStore = {
       "req-1": { assignedVolunteers: ["volunteer-1"] },
     };
@@ -90,16 +118,22 @@ describe("listAssignableChecklistUsers", () => {
   // vedere alcun admin diverso da se stesso tra le opzioni (le regole
   // Firestore non permettono a un client di leggere il documento users/{uid}
   // di un altro utente).
-  it("returns assignedVolunteers plus every admin uid, not just the caller", async () => {
+  it("returns assignedVolunteers plus every admin, with server-resolved labels", async () => {
     const result = await listAssignableChecklistUsers.run(buildRequest({ requestId: "req-1" }, "volunteer-1"));
 
-    expect((result as { uids: string[] }).uids.sort()).toEqual(["admin-1", "admin-2", "volunteer-1"].sort());
+    expect(userIds(result)).toEqual(["admin-1", "admin-2", "volunteer-1"].sort());
+    expect((result as { users: { id: string; label: string }[] }).users).toEqual(
+      expect.arrayContaining([
+        { id: "volunteer-1", label: "Anna Bianchi" },
+        { id: "admin-2", label: "Luca Verdi" },
+      ])
+    );
   });
 
   it("allows an admin caller, even if not assigned to the request", async () => {
     const result = await listAssignableChecklistUsers.run(buildRequest({ requestId: "req-1" }, "admin-1"));
 
-    expect((result as { uids: string[] }).uids.sort()).toEqual(["admin-1", "admin-2", "volunteer-1"].sort());
+    expect(userIds(result)).toEqual(["admin-1", "admin-2", "volunteer-1"].sort());
   });
 
   it("deduplicates an admin who is also listed in assignedVolunteers", async () => {
@@ -107,7 +141,29 @@ describe("listAssignableChecklistUsers", () => {
 
     const result = await listAssignableChecklistUsers.run(buildRequest({ requestId: "req-1" }, "admin-1"));
 
-    expect((result as { uids: string[] }).uids.filter((u) => u === "admin-1")).toHaveLength(1);
+    expect(userIds(result).filter((u) => u === "admin-1")).toHaveLength(1);
+  });
+
+  it("falls back to the legacy assignedVolunteer scalar when assignedVolunteers is absent", async () => {
+    deviceRequestsStore["req-1"] = { assignedVolunteer: "volunteer-1" };
+
+    const result = await listAssignableChecklistUsers.run(buildRequest({ requestId: "req-1" }, "volunteer-1"));
+
+    expect(userIds(result)).toContain("volunteer-1");
+    expect((result as { users: { id: string; label: string }[] }).users).toEqual(
+      expect.arrayContaining([{ id: "volunteer-1", label: "Anna Bianchi" }])
+    );
+  });
+
+  it("falls back to uid when the private profile is missing", async () => {
+    delete profilesStore["volunteer-1"];
+
+    const result = await listAssignableChecklistUsers.run(buildRequest({ requestId: "req-1" }, "admin-1"));
+    const volunteer = (result as { users: { id: string; label: string }[] }).users.find(
+      (u) => u.id === "volunteer-1"
+    );
+
+    expect(volunteer).toEqual({ id: "volunteer-1", label: "volunteer-1" });
   });
 
   it("denies a volunteer not assigned to the request", async () => {

@@ -258,6 +258,21 @@ describe("getChecklistShareStatus", () => {
     });
   });
 
+  it("marks an item completed when status is Completata even without an assignee", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1"] } };
+    checklistItemsStore = {
+      "item-1": { title: "Stampa mano", type: "generic", assignee: null, status: "Completata" },
+    };
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({
+      percentComplete: 100,
+      requestNumber: null,
+      items: [{ title: "Stampa mano", completed: true }],
+    });
+  });
+
   // Rappresentazione omogenea richiesta dall'operatore: un item boolean
   // e' completo/non completo tramite `completed`, non `status` (che per
   // un boolean non ha alcun ruolo nel gate) — stesso flag semplificato

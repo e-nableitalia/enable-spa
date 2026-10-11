@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
-import { requireStaffRole, type ProjectDoc, type ProjectRecord } from "./projectAccess";
+import { normalizeProjectRecord, requireStaffRole, type ProjectDoc } from "./projectAccess";
 
 const REGION = "europe-west1";
 
@@ -28,7 +28,7 @@ export const listProjects = onCall({ region: REGION }, async (request) => {
   const snap = await db.collection("projects").orderBy("createdAt", "desc").get();
   const projects: ProjectDoc[] = snap.docs.map((doc) => ({
     id: doc.id,
-    ...(doc.data() as ProjectRecord),
+    ...normalizeProjectRecord(doc.data() as Record<string, unknown>),
   }));
 
   console.log(`[listProjects] OK: ${projects.length} project(s) read by ${uid}`);

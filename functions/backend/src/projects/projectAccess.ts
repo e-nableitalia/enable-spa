@@ -43,6 +43,38 @@ export interface ProjectDoc extends ProjectRecord {
   id: string;
 }
 
+/**
+ * Normalizza un documento `projects/{id}` al contratto EA-169/170.
+ * Documenti legacy (pre-EA-169) usano `name` al posto di `title`,
+ * `createdByUid` al posto di `createdBy`, spesso senza `projectType`, e
+ * a volte `status: "draft"` (non nel dominio attuale). Senza questa
+ * mappatura `listProjects` mostra righe "senza titolo/tipo".
+ */
+export function normalizeProjectRecord(raw: Record<string, unknown> | undefined | null): ProjectRecord {
+  const data = raw ?? {};
+  const titleFromTitle = typeof data.title === "string" ? data.title.trim() : "";
+  const titleFromName = typeof data.name === "string" ? data.name.trim() : "";
+  const title = titleFromTitle || titleFromName;
+
+  const projectType = typeof data.projectType === "string" ? data.projectType : "";
+
+  let status = typeof data.status === "string" ? data.status : "new";
+  if (status === "draft") {
+    status = "new";
+  }
+
+  const createdByFromField = typeof data.createdBy === "string" ? data.createdBy : "";
+  const createdByFromUid = typeof data.createdByUid === "string" ? data.createdByUid : "";
+  const createdBy = createdByFromField || createdByFromUid;
+
+  const description = typeof data.description === "string" ? data.description : "";
+  const checklists = Array.isArray(data.checklists)
+    ? (data.checklists as ProjectChecklistRef[])
+    : [];
+
+  return { title, description, projectType, status, checklists, createdBy };
+}
+
 export function isValidProjectStatus(value: unknown): value is ProjectStatus {
   return typeof value === "string" && (PROJECT_STATUSES as readonly string[]).includes(value);
 }
@@ -72,7 +104,7 @@ export async function getProjectOrThrow(db: Firestore, projectId: string): Promi
   if (!snap.exists) {
     throw new HttpsError("not-found", "Project not found");
   }
-  return { id: snap.id, ...(snap.data() as ProjectRecord) };
+  return { id: snap.id, ...normalizeProjectRecord(snap.data() as Record<string, unknown>) };
 }
 
 /** Blocca qualunque modifica (entità, checklist, item) fuori da

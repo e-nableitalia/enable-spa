@@ -26,6 +26,32 @@ describe("listProjects", () => {
     expect(result.projects.map((p) => p.id).sort()).toEqual(["proj-1", "proj-2"]);
   });
 
+  it("normalizes legacy docs that use name/createdByUid/draft instead of title/createdBy/new", async () => {
+    Object.assign(projectsStore, {
+      "proj-legacy": {
+        name: "Idee per bike adapter",
+        description: "legacy",
+        status: "draft",
+        createdByUid: "admin-1",
+        createdByDisplayName: "Ada Admin",
+      },
+    });
+
+    const result = (await listProjects.run(buildRequest({}, "admin-1"))) as {
+      projects: Array<{ id: string; title: string; projectType: string; status: string; createdBy: string }>;
+    };
+    const legacy = result.projects.find((p) => p.id === "proj-legacy");
+    expect(legacy).toEqual(
+      expect.objectContaining({
+        id: "proj-legacy",
+        title: "Idee per bike adapter",
+        projectType: "",
+        status: "new",
+        createdBy: "admin-1",
+      })
+    );
+  });
+
   it("returns every project for a volunteer too (staff-only, not admin-only)", async () => {
     const result = (await listProjects.run(buildRequest({}, "volunteer-1"))) as {
       projects: Array<{ id: string }>;

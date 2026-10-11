@@ -51,9 +51,13 @@ export async function resolveDeviceRequestChecklistAccess(
   if (options?.forWrite) {
     assertDeviceRequestNotArchived(requestData);
   }
+  // Compatibilità backward: documenti pre-migrazione hanno ancora
+  // `assignedVolunteer` scalare (vedi deviceData.ts).
   const assignedVolunteers: string[] = Array.isArray(requestData.assignedVolunteers)
     ? requestData.assignedVolunteers.filter((v: unknown): v is string => typeof v === "string")
-    : [];
+    : typeof requestData.assignedVolunteer === "string" && requestData.assignedVolunteer
+      ? [requestData.assignedVolunteer]
+      : [];
 
   const userSnap = await db.collection("users").doc(uid).get();
   const role = userSnap.exists ? userSnap.data()?.role : undefined;
