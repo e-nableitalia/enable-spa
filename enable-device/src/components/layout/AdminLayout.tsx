@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { PanelMenu } from "primereact/panelmenu";
 import { Button } from "primereact/button";
 import { Avatar } from "primereact/avatar";
@@ -37,8 +37,7 @@ import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
 import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
 import AdminChecklistTemplatesPage from "../../pages/admin/AdminChecklistTemplatesPage";
 import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
-import ProjectsListPage from "../../pages/admin/projects/ProjectsListPage";
-import ProjectDetail from "../../pages/admin/projects/ProjectDetail";
+import ProjectsWorkspace from "../../pages/admin/projects/ProjectsWorkspace";
 import { version } from "../../../package.json";
 
 // Documenti Firestore arricchiti con sotto-dati privati/pubblici a forma
@@ -61,6 +60,20 @@ export default function AdminLayout() {
   const [volunteersLoading, setVolunteersLoading] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const navTo = useCallback(
+    (path: string) => {
+      navigate(path);
+      setSidebarVisible(false);
+    },
+    [navigate]
+  );
+
+  const menuLabel = useCallback(
+    (label: string, isActive: boolean) => (isActive ? `• ${label}` : label),
+    []
+  );
 
   const loadVolunteers = useCallback(async () => {
     setVolunteersLoading(true);
@@ -201,66 +214,66 @@ useEffect(() => {
     {
       label: "Dashboard",
       icon: "pi pi-home",
-      command: () => navigate("/admin/dashboard"),
+      command: () => navTo("/admin/dashboard"),
     },
     {
       label: "To Do List",
       icon: "pi pi-check-square",
-      command: () => navigate("/admin/my-checklist-items"),
+      command: () => navTo("/admin/my-checklist-items"),
     },
     {
       label: "Richieste",
       icon: "pi pi-folder-open", // folder open per richieste
       items: [
         {
-          label: `Tutte (${liveRequests.length})`,
+          label: menuLabel(`Tutte (${liveRequests.length})`, location.pathname === "/admin" || location.pathname.startsWith("/admin/requests")),
           icon: "pi pi-list", // elenco
-          command: () => navigate("/admin"),
+          command: () => navTo("/admin"),
         },
         {
           label: `Da validare (${validateRequests.length})`,
           icon: "pi pi-clock",
-          command: () => navigate("/admin/requests/validate"),
+          command: () => navTo("/admin/requests/validate"),
         },
         {
           label: `Da gestire (${triageRequests.length})`,
           icon: "pi pi-inbox",
-          command: () => navigate("/admin/requests/triage"),
+          command: () => navTo("/admin/requests/triage"),
         },
         {
           label: `In attesa volontario (${pendingRequests.length})`,
           icon: "pi pi-user",
-          command: () => navigate("/admin/requests/pending"),
+          command: () => navTo("/admin/requests/pending"),
         },
         {
           label: `In produzione (${productionRequests.length})`,
           icon: "pi pi-cog",
-          command: () => navigate("/admin/requests/production"),
+          command: () => navTo("/admin/requests/production"),
         },
         {
           label: `Spedite (${shippingRequests.length})`,
           icon: "pi pi-send", // spedizione
-          command: () => navigate("/admin/requests/shipping"),
+          command: () => navTo("/admin/requests/shipping"),
         },
         {
           label: `Completate (${completedRequests.length})`,
           icon: "pi pi-check-circle", // completate
-          command: () => navigate("/admin/requests/completed"),
+          command: () => navTo("/admin/requests/completed"),
         },
         {
           label: `Annullate / KO (${cancelledRequests.length})`,
           icon: "pi pi-ban", // annullate
-          command: () => navigate("/admin/requests/cancelled"),
+          command: () => navTo("/admin/requests/cancelled"),
         },
         {
           label: `Archiviate (${archivedRequests.length})`,
           icon: "pi pi-inbox",
-          command: () => navigate("/admin/requests/archived"),
+          command: () => navTo("/admin/requests/archived"),
         },
         {
           label: `Richiede attenzione (${attentionRequests.length})`,
           icon: "pi pi-exclamation-triangle",
-          command: () => navigate("/admin/requests/attention"),
+          command: () => navTo("/admin/requests/attention"),
         },
       ],
     },
@@ -271,64 +284,64 @@ useEffect(() => {
         {
           label: `Elenco (${volunteers.length})`,
           icon: "pi pi-address-book", // elenco volontari
-          command: () => navigate("/admin/volunteers/all"),
+          command: () => navTo("/admin/volunteers/all"),
         },
         {
           label: `Attesa attivazione (${pendingVolunteers.length})`,
           icon: "pi pi-user-plus", // attesa attivazione
-          command: () => navigate("/admin/volunteers/pending"),
+          command: () => navTo("/admin/volunteers/pending"),
         },
         {
           label: `Contatti`,
           icon: "pi pi-address-book", // elenco contatti
-          command: () => navigate("/admin/volunteers/contacts"),
+          command: () => navTo("/admin/volunteers/contacts"),
         },
         {
           label: "Manutenzione Volontari",
           icon: "pi pi-wrench", // manutenzione volontari
-          command: () => navigate("/admin/volunteers/maintenance"),
+          command: () => navTo("/admin/volunteers/maintenance"),
         },
         {
           label: "Dashboard volontari",
           icon: "pi pi-id-card", // dashboard volontari
-          command: () => navigate("/volunteer"),
+          command: () => navTo("/volunteer"),
         },        
       ],
     },
     {
       label: "Richieste spedizioni",
       icon: "pi pi-truck",
-      command: () => navigate("/admin/shipments"),
+      command: () => navTo("/admin/shipments"),
     },
     {
-      label: "Progetti speciali e iniziative",
+      label: menuLabel("Progetti speciali e iniziative", location.pathname.startsWith("/admin/projects")),
       icon: "pi pi-sitemap",
-      command: () => navigate("/admin/projects"),
+      command: () => navTo("/admin/projects"),
     },
     {
       label: "Comunicazioni",
       icon: "pi pi-comments",
-      command: () => navigate("/admin/messages"),
+      command: () => navTo("/admin/messages"),
     },
     {
       label: "Catalogo template checklist",
       icon: "pi pi-list-check",
-      command: () => navigate("/admin/checklist-templates"),
+      command: () => navTo("/admin/checklist-templates"),
     },
     {
       label: "Log Email",
       icon: "pi pi-envelope",
-      command: () => navigate("/admin/email-logs"),
+      command: () => navTo("/admin/email-logs"),
     },
     {
       label: "Security Logs",
       icon: "pi pi-shield",
-      command: () => navigate("/admin/security-logs"),
+      command: () => navTo("/admin/security-logs"),
     },
     {
       label: "Statistiche",
       icon: "pi pi-chart-bar", // statistiche
-      command: () => navigate("/admin/stats"),
+      command: () => navTo("/admin/stats"),
     },
   ];
 
@@ -482,8 +495,8 @@ useEffect(() => {
             <Route path="security-logs" element={<AdminSecurityLogsPage />} />
             <Route path="stats" element={<AdminStats />} />
             <Route path="request/:id" element={<RequestDetail />} />
-            <Route path="projects" element={<ProjectsListPage scope="admin" canManage />} />
-            <Route path="projects/:id" element={<ProjectDetail scope="admin" canManage />} />
+            <Route path="projects" element={<ProjectsWorkspace scope="admin" canManage />} />
+            <Route path="projects/:id" element={<ProjectsWorkspace scope="admin" canManage />} />
             <Route path="project/:id" element={<LegacyProjectRedirect />} />
             <Route path="dashboard" element={<AdminDashboard requests={requests}/>} />
             <Route path="*" element={<Navigate to="/admin/requests" replace />} />

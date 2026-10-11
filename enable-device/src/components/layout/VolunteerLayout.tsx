@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Routes, Route, Navigate } from "react-router-dom";
+import { useLocation, useNavigate, Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getDoc, doc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
@@ -24,13 +24,13 @@ import VolunteerRequestDetail from "../../pages/volunteer/VolunteerRequestDetail
 import ManageableRequestsPage from "../../pages/volunteer/ManageableRequestsPage";
 import ManageableRequestDetail from "../../pages/volunteer/ManageableRequestDetail";
 import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
-import ProjectsListPage from "../../pages/admin/projects/ProjectsListPage";
-import ProjectDetail from "../../pages/admin/projects/ProjectDetail";
+import ProjectsWorkspace from "../../pages/admin/projects/ProjectsWorkspace";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { version } from "../../../package.json";
 
 export default function VolunteerLayout() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [authorized, setAuthorized] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -41,6 +41,11 @@ export default function VolunteerLayout() {
     const [role, setRole] = useState<string | null>(null);
     const [showInfo, setShowInfo] = useState(false);
     const [sidebarVisible, setSidebarVisible] = useState(false);
+
+    const navTo = (path: string) => {
+        navigate(path);
+        setSidebarVisible(false);
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -116,62 +121,64 @@ export default function VolunteerLayout() {
         {
             label: "Le mie informazioni",
             icon: "pi pi-user",
-            command: () => navigate("/volunteer/profile")
+            command: () => navTo("/volunteer/profile")
         },
         {
             label: "Disponibilità e coinvolgimento",
             icon: "pi pi-heart",
-            command: () => navigate("/volunteer/availability")
+            command: () => navTo("/volunteer/availability")
         },
         {
             label: "Le mie stampanti",
             icon: "pi pi-print",
-            command: () => navigate("/volunteer/my-printers")
+            command: () => navTo("/volunteer/my-printers")
         },
         {
             label: "Dashboard",
             icon: "pi pi-home",
-            command: () => navigate("/volunteer")
+            command: () => navTo("/volunteer")
         },
         {
             label: "Richieste da gestire",
             icon: "pi pi-list",
-            command: () => navigate("/volunteer/manageable-requests")
+            command: () => navTo("/volunteer/manageable-requests")
         },
         {
             label: "Le mie richieste",
             icon: "pi pi-inbox",
-            command: () => navigate("/volunteer/my-requests")
+            command: () => navTo("/volunteer/my-requests")
         },
         {
             label: "To Do List",
             icon: "pi pi-check-square",
-            command: () => navigate("/volunteer/my-checklist-items")
+            command: () => navTo("/volunteer/my-checklist-items")
         },
         {
             label: "In produzione",
             icon: "pi pi-cog",
-            command: () => navigate("/volunteer/production")
+            command: () => navTo("/volunteer/production")
         },
         {
             label: "Spedizioni",
             icon: "pi pi-send",
-            command: () => navigate("/volunteer/shipping")
+            command: () => navTo("/volunteer/shipping")
         },
         {
             label: "Archiviate",
             icon: "pi pi-folder",
-            command: () => navigate("/volunteer/archive")
+            command: () => navTo("/volunteer/archive")
         },
         {
-            label: "Progetti speciali e iniziative",
+            label: location.pathname.startsWith("/volunteer/projects")
+                ? "• Progetti speciali e iniziative"
+                : "Progetti speciali e iniziative",
             icon: "pi pi-sitemap",
-            command: () => navigate("/volunteer/projects")
+            command: () => navTo("/volunteer/projects")
         },
         {
             label: "Richieste spedizioni",
             icon: "pi pi-truck",
-            command: () => navigate("/volunteer/shipments")
+            command: () => navTo("/volunteer/shipments")
         }
     ];
 
@@ -180,7 +187,7 @@ export default function VolunteerLayout() {
         items.unshift({
             label: "Admin Dashboard",
             icon: "pi pi-shield",
-            command: () => navigate("/admin")
+            command: () => navTo("/admin")
         });
     }
 
@@ -220,7 +227,7 @@ export default function VolunteerLayout() {
                     <PanelMenu model={[{
                         label: "Le mie informazioni",
                         icon: "pi pi-user",
-                        command: () => navigate("/volunteer/profile")
+                        command: () => navTo("/volunteer/profile")
                     }]} />
                 </Sidebar>
 
@@ -385,8 +392,8 @@ export default function VolunteerLayout() {
                             path="my-checklist-items"
                             element={<MyChecklistItems projectBasePath="/volunteer/projects" />}
                         />
-                        <Route path="projects" element={<ProjectsListPage scope="volunteer" />} />
-                        <Route path="projects/:id" element={<ProjectDetail scope="volunteer" />} />
+                        <Route path="projects" element={<ProjectsWorkspace scope="volunteer" />} />
+                        <Route path="projects/:id" element={<ProjectsWorkspace scope="volunteer" />} />
                         <Route path="shipments" element={<ShipmentRequestsPage />} />
                         <Route path="*" element={<Navigate to="/volunteer" />} />
                     </Routes>

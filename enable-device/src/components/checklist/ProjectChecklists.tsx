@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../firebase";
 import { Button } from "primereact/button";
@@ -38,6 +39,8 @@ interface Props {
    * (`standby`/`archived`/`closed`): nasconde creazione/eliminazione e
    * passa `readOnly` ai pannelli item. */
   readOnly?: boolean;
+  /** Query param usato per deep-link alla checklist attiva. */
+  tabQueryKey?: string;
 }
 
 /**
@@ -56,7 +59,9 @@ export default function ProjectChecklists({
   onChecklistsChanged,
   isAdmin = false,
   readOnly = false,
+  tabQueryKey,
 }: Props) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useRef<Toast>(null);
   const [creatingChecklist, setCreatingChecklist] = useState(false);
   const [deletingChecklistId, setDeletingChecklistId] = useState<string | null>(null);
@@ -68,6 +73,20 @@ export default function ProjectChecklists({
   const [createTemplateId, setCreateTemplateId] = useState<string | null>(null);
   const [availableTemplates, setAvailableTemplates] = useState<AvailableTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  const activeChecklistId = tabQueryKey ? searchParams.get(tabQueryKey) ?? "" : "";
+  const activeIndex = useMemo(() => {
+    if (!activeChecklistId) return 0;
+    const idx = checklists.findIndex((c) => c.checklistId === activeChecklistId);
+    return idx >= 0 ? idx : 0;
+  }, [activeChecklistId, checklists]);
+
+  const updateActiveChecklist = (checklistId: string) => {
+    if (!tabQueryKey) return;
+    const next = new URLSearchParams(searchParams);
+    next.set(tabQueryKey, checklistId);
+    setSearchParams(next, { replace: true });
+  };
 
   const fetchAvailableTemplates = useCallback(async () => {
     setLoadingTemplates(true);
@@ -172,7 +191,11 @@ export default function ProjectChecklists({
       <ConfirmDialog />
 
       {checklists.length > 0 && (
-        <TabView renderActiveOnly={false}>
+        <TabView
+          renderActiveOnly={false}
+          activeIndex={activeIndex}
+          onTabChange={(e) => updateActiveChecklist(checklists[e.index]?.checklistId ?? "")}
+        >
           {checklists.map((c) => {
             const title = titles[c.checklistId] ?? c.label;
             return (

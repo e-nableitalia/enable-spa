@@ -33,6 +33,8 @@ const EMPTY_NEW_PROJECT: NewProjectForm = { title: "", description: "", projectT
 interface Props {
   scope: "admin" | "volunteer";
   canManage?: boolean;
+  compact?: boolean;
+  selectedProjectId?: string;
 }
 
 /**
@@ -42,7 +44,12 @@ interface Props {
  * nuovo e distinto da device-requests, nessun bisogno di integrarsi nel suo
  * `onSnapshot` già corposo).
  */
-export default function ProjectsListPage({ scope, canManage = false }: Props) {
+export default function ProjectsListPage({
+  scope,
+  canManage = false,
+  compact = false,
+  selectedProjectId,
+}: Props) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const toast = useRef<Toast>(null);
@@ -151,12 +158,19 @@ export default function ProjectsListPage({ scope, canManage = false }: Props) {
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: compact ? 0 : 20 }}>
       <Toast ref={toast} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2>Progetti speciali e iniziative</h2>
-        {canManage && <Button label="Crea progetto" icon="pi pi-plus" onClick={openCreateDialog} />}
-      </div>
+      {!compact && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2>Progetti speciali e iniziative</h2>
+          {canManage && <Button label="Crea progetto" icon="pi pi-plus" onClick={openCreateDialog} />}
+        </div>
+      )}
+      {compact && canManage && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <Button label="Crea progetto" icon="pi pi-plus" onClick={openCreateDialog} size="small" />
+        </div>
+      )}
 
       <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <label htmlFor="projectTypeFilter">Filtra per tipo:</label>
@@ -183,11 +197,13 @@ export default function ProjectsListPage({ scope, canManage = false }: Props) {
         loading={loading}
         emptyMessage="Nessun progetto trovato."
         selectionMode="single"
+        selection={filteredProjects.find((p) => p.id === selectedProjectId) ?? null}
         onSelectionChange={(e) => {
           const selected = e.value as ProjectListItem;
           if (selected) navigate(`${listPath}/${selected.id}`, { state: { from: fromPath } });
         }}
         dataKey="id"
+        size={compact ? "small" : undefined}
       >
         <Column field="title" header="Titolo" body={(p: ProjectListItem) => p.title || "—"} />
         <Column field="projectType" header="Tipo" body={(p: ProjectListItem) => p.projectType || "—"} />

@@ -69,6 +69,7 @@ async function getUserFullName(uid: string): Promise<string> {
 interface Props {
   scope: "admin" | "volunteer";
   canManage?: boolean;
+  compact?: boolean;
 }
 
 interface DetailLocationState {
@@ -79,7 +80,7 @@ interface DetailLocationState {
  * Pagina di dettaglio di un progetto speciale/iniziativa/evento
  * (EA-169/170): dati generali, cronologia e checklist.
  */
-export default function ProjectDetail({ scope, canManage = false }: Props) {
+export default function ProjectDetail({ scope, canManage = false, compact = false }: Props) {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -276,8 +277,8 @@ export default function ProjectDetail({ scope, canManage = false }: Props) {
     setSavingStatus(false);
   };
 
-  if (loading) return <div style={{ padding: 20 }}>Caricamento...</div>;
-  if (!project) return <div style={{ padding: 20 }}>Progetto non trovato.</div>;
+  if (loading) return <div style={{ padding: compact ? 12 : 20 }}>Caricamento...</div>;
+  if (!project) return <div style={{ padding: compact ? 12 : 20 }}>Progetto non trovato.</div>;
 
   const statusSeverity = (status: string): "success" | "warning" | "danger" | "info" => {
     if (status === "active") return "success";
@@ -287,19 +288,23 @@ export default function ProjectDetail({ scope, canManage = false }: Props) {
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: compact ? 12 : 20 }}>
       <Toast ref={toast} />
       <ConfirmDialog />
-      <Button
-        label="Indietro"
-        icon="pi pi-arrow-left"
-        className="p-button-text"
-        onClick={goBack}
-        style={{ marginBottom: 16 }}
-      />
-      <div style={{ marginBottom: 16, color: "#6b7280", fontSize: 14 }}>
-        <Link to={listPath}>Progetti</Link> / <span>{project.title || id}</span>
-      </div>
+      {!compact && (
+        <>
+          <Button
+            label="Indietro"
+            icon="pi pi-arrow-left"
+            className="p-button-text"
+            onClick={goBack}
+            style={{ marginBottom: 16 }}
+          />
+          <div style={{ marginBottom: 16, color: "#6b7280", fontSize: 14 }}>
+            <Link to={listPath}>Progetti</Link> / <span>{project.title || id}</span>
+          </div>
+        </>
+      )}
 
       <Panel header="Dati generali" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -372,6 +377,7 @@ export default function ProjectDetail({ scope, canManage = false }: Props) {
           onChecklistsChanged={load}
           isAdmin={canManage}
           readOnly={!canWriteContent}
+          tabQueryKey="checklist"
         />
       </Panel>
 
