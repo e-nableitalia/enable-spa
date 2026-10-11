@@ -75,7 +75,7 @@ function isEditableOrigin(origin: ChecklistItemOrigin | null | undefined): boole
  */
 export default function MyChecklistItems({
   originBasePath = "/volunteer/my-requests",
-  projectBasePath,
+  projectBasePath = "/volunteer/projects",
 }: {
   originBasePath?: string;
   /** Se assente, gli item di progetto mostrano la label senza link. */

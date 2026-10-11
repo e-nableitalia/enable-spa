@@ -24,6 +24,8 @@ import VolunteerRequestDetail from "../../pages/volunteer/VolunteerRequestDetail
 import ManageableRequestsPage from "../../pages/volunteer/ManageableRequestsPage";
 import ManageableRequestDetail from "../../pages/volunteer/ManageableRequestDetail";
 import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
+import ProjectsListPage from "../../pages/admin/projects/ProjectsListPage";
+import ProjectDetail from "../../pages/admin/projects/ProjectDetail";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { version } from "../../../package.json";
 
@@ -160,6 +162,11 @@ export default function VolunteerLayout() {
             label: "Archiviate",
             icon: "pi pi-folder",
             command: () => navigate("/volunteer/archive")
+        },
+        {
+            label: "Progetti speciali e iniziative",
+            icon: "pi pi-sitemap",
+            command: () => navigate("/volunteer/projects")
         },
         {
             label: "Richieste spedizioni",
@@ -374,7 +381,12 @@ export default function VolunteerLayout() {
                         <Route path="profile" element={<VolunteerProfile />} />
                         <Route path="availability" element={<VolunteerAvailability />} />
                         <Route path="my-printers" element={<MyPrinters />} />
-                        <Route path="my-checklist-items" element={<MyChecklistItems />} />
+                        <Route
+                            path="my-checklist-items"
+                            element={<MyChecklistItems projectBasePath="/volunteer/projects" />}
+                        />
+                        <Route path="projects" element={<ProjectsListPage scope="volunteer" />} />
+                        <Route path="projects/:id" element={<ProjectDetail scope="volunteer" />} />
                         <Route path="shipments" element={<ShipmentRequestsPage />} />
                         <Route path="*" element={<Navigate to="/volunteer" />} />
                     </Routes>

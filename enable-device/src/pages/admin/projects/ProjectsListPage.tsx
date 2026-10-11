@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../firebase";
 import { Button } from "primereact/button";
@@ -30,6 +30,11 @@ interface NewProjectForm {
 
 const EMPTY_NEW_PROJECT: NewProjectForm = { title: "", description: "", projectType: "" };
 
+interface Props {
+  scope: "admin" | "volunteer";
+  canManage?: boolean;
+}
+
 /**
  * Elenco amministrativo dei progetti speciali/iniziative/eventi (EA-169/170),
  * filtrabile per `projectType`. Fetch via Cloud Function `listProjects`
@@ -37,8 +42,9 @@ const EMPTY_NEW_PROJECT: NewProjectForm = { title: "", description: "", projectT
  * nuovo e distinto da device-requests, nessun bisogno di integrarsi nel suo
  * `onSnapshot` già corposo).
  */
-export default function ProjectsListPage() {
+export default function ProjectsListPage({ scope, canManage = false }: Props) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useRef<Toast>(null);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +54,8 @@ export default function ProjectsListPage() {
   // quel campo è "vuoto" per ObjectUtils.isNotEmpty (null, "", ecc.) — con
   // "Tutti" selezionato il filtro confronterebbe un oggetto con una
   // stringa categoria, non trovando mai corrispondenza (tabella vuota).
-  const [typeFilter, setTypeFilter] = useState<string>("");
+  const typeFilter = searchParams.get("type") ?? "";
+  const queryFilter = searchParams.get("q") ?? "";
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProject, setNewProject] = useState<NewProjectForm>(EMPTY_NEW_PROJECT);
@@ -81,7 +88,31 @@ export default function ProjectsListPage() {
     return Array.from(new Set([...DEFAULT_PROJECT_TYPES, ...fromData]));
   }, [projects]);
 
-  const filteredProjects = typeFilter ? projects.filter((p) => p.projectType === typeFilter) : projects;
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      const matchesType = typeFilter ? project.projectType === typeFilter : true;
+      const matchesQuery = queryFilter
+        ? project.title.toLowerCase().includes(queryFilter.toLowerCase())
+        : true;
+      return matchesType && matchesQuery;
+    });
+  }, [projects, queryFilter, typeFilter]);
+
+  const listPath = `/${scope}/projects`;
+  const fromPath = `${listPath}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+
+  const updateSearch = (patch: { type?: string; q?: string }) => {
+    const next = new URLSearchParams(searchParams);
+    if (patch.type !== undefined) {
+      if (patch.type) next.set("type", patch.type);
+      else next.delete("type");
+    }
+    if (patch.q !== undefined) {
+      if (patch.q) next.set("q", patch.q);
+      else next.delete("q");
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   const openCreateDialog = () => {
     setNewProject(EMPTY_NEW_PROJECT);
@@ -100,7 +131,7 @@ export default function ProjectsListPage() {
       toast.current?.show({ severity: "success", summary: "Progetto creato", life: 3000 });
       setShowCreateDialog(false);
       await load();
-      navigate(`/admin/project/${result.data.projectId}`);
+      navigate(`${listPath}/${result.data.projectId}`, { state: { from: fromPath } });
     } catch (err) {
       toast.current?.show({
         severity: "error",
@@ -124,18 +155,26 @@ export default function ProjectsListPage() {
       <Toast ref={toast} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h2>Progetti speciali e iniziative</h2>
-        <Button label="Crea progetto" icon="pi pi-plus" onClick={openCreateDialog} />
+        {canManage && <Button label="Crea progetto" icon="pi pi-plus" onClick={openCreateDialog} />}
       </div>
 
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <label htmlFor="projectTypeFilter">Filtra per tipo:</label>
         <Dropdown
           id="projectTypeFilter"
           value={typeFilter}
           options={[{ label: "Tutti", value: "" }, ...availableTypes.map((t) => ({ label: t, value: t }))]}
           optionValue="value"
-          onChange={(e) => setTypeFilter(e.value)}
+          onChange={(e) => updateSearch({ type: e.value })}
           style={{ minWidth: 200 }}
+        />
+        <label htmlFor="projectTitleFilter">Cerca titolo:</label>
+        <InputText
+          id="projectTitleFilter"
+          value={queryFilter}
+          onChange={(e) => updateSearch({ q: e.target.value })}
+          placeholder="Es. Maker Faire"
+          style={{ minWidth: 220 }}
         />
       </div>
 
@@ -146,7 +185,7 @@ export default function ProjectsListPage() {
         selectionMode="single"
         onSelectionChange={(e) => {
           const selected = e.value as ProjectListItem;
-          if (selected) navigate(`/admin/project/${selected.id}`);
+          if (selected) navigate(`${listPath}/${selected.id}`, { state: { from: fromPath } });
         }}
         dataKey="id"
       >

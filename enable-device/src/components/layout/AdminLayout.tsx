@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PanelMenu } from "primereact/panelmenu";
 import { Button } from "primereact/button";
 import { Avatar } from "primereact/avatar";
@@ -46,6 +46,11 @@ import { version } from "../../../package.json";
 // profile): nessuno schema fisso, coerente con l'`any[]` che i consumer
 // (AdminAll, AdminTriage, AdminVolunteers, ...) si aspettano ancora oggi.
 type AdminRecord = Record<string, unknown> & { id: string; status?: string };
+
+function LegacyProjectRedirect() {
+  const { id } = useParams();
+  return <Navigate to={id ? `/admin/projects/${id}` : "/admin/projects"} replace />;
+}
 
 export default function AdminLayout() {
   const [user, setUser] = useState<User | null>(null);
@@ -464,7 +469,7 @@ useEffect(() => {
             <Route path="superadmin" element={<SuperAdminPage />} />
             <Route
               path="my-checklist-items"
-              element={<MyChecklistItems originBasePath="/admin/request" projectBasePath="/admin/project" />}
+              element={<MyChecklistItems originBasePath="/admin/request" projectBasePath="/admin/projects" />}
             />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
@@ -477,8 +482,9 @@ useEffect(() => {
             <Route path="security-logs" element={<AdminSecurityLogsPage />} />
             <Route path="stats" element={<AdminStats />} />
             <Route path="request/:id" element={<RequestDetail />} />
-            <Route path="projects" element={<ProjectsListPage />} />
-            <Route path="project/:id" element={<ProjectDetail />} />
+            <Route path="projects" element={<ProjectsListPage scope="admin" canManage />} />
+            <Route path="projects/:id" element={<ProjectDetail scope="admin" canManage />} />
+            <Route path="project/:id" element={<LegacyProjectRedirect />} />
             <Route path="dashboard" element={<AdminDashboard requests={requests}/>} />
             <Route path="*" element={<Navigate to="/admin/requests" replace />} />
           </Routes>

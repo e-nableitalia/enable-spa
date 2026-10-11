@@ -137,6 +137,10 @@ export default function ProjectChecklistPanel({
   }, [onTitleResolved]);
 
   const loadAssignableUsers = useCallback(async () => {
+    if (readOnly) {
+      setAssignableUsers([]);
+      return;
+    }
     try {
       const fn = httpsCallable<Record<string, never>, { uids: string[] }>(
         functions,
@@ -151,7 +155,7 @@ export default function ProjectChecklistPanel({
       console.error("[ProjectChecklistPanel] Failed to load assignable users", err);
       setAssignableUsers([]);
     }
-  }, []);
+  }, [readOnly]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loadAssignableUsers fetches from Firestore, not derivable from props/state
