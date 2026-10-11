@@ -8,7 +8,7 @@ import { Card } from "primereact/card";
 import { Tag } from "primereact/tag";
 import { Avatar } from "primereact/avatar";
 import { db } from "../../firebase";
-import { getPublicStatusGroup } from "../../helpers/requestStatus";
+import { PUBLIC_STATUS_GROUPS_FROM_STATUS, getPublicStatusGroup } from "../../helpers/requestStatus";
 
 type Request = {
   id?: string;
@@ -45,20 +45,14 @@ type Board = {
   }[];
 };
 
-const ALL_STATUSES = [
-  "da gestire",
-  "fabbricazione in corso",
-  "completati",
-  "annullate / non completabili",
-  "senza stato",
-];
+const ALL_STATUSES = Object.keys(PUBLIC_STATUS_GROUPS_FROM_STATUS);
 
 const COLUMN_COLORS: Record<string, string> = {
+  "da validare": "#60a5fa",
   "da gestire": "#f87171",
   "fabbricazione in corso": "#facc15",
   "completati": "#34d399",
   "annullate / non completabili": "#c084fc",
-  "senza stato": "#94a3b8",
 };
 
 async function getUserFullName(userId: string): Promise<string> {
@@ -74,18 +68,24 @@ async function getUserFullName(userId: string): Promise<string> {
   return userId;
 }
 
+async function resolveUserDisplayNames(uids: string[]): Promise<Record<string, string>> {
+  const unique = Array.from(new Set(uids.filter(Boolean)));
+  const entries = await Promise.all(
+    unique.map(async (uid) => [uid, await getUserFullName(uid)] as const)
+  );
+  return Object.fromEntries(entries);
+}
+
 async function buildBoard(requests: Request[]): Promise<Board> {
   const statusMap: Record<string, Request[]> = {};
-
-  console.debug("Building board with requests:", requests); // Log per debug
+  const allAssignedVolunteerIds = requests.flatMap((req) => req.assignedVolunteers ?? []);
+  const userNamesById = await resolveUserDisplayNames(allAssignedVolunteerIds);
 
   requests.forEach((req) => {
     // Raggruppamento pubblico display-only, ricalcolato al volo da status (EA-150)
     const publicStatus = getPublicStatusGroup(req.status || "");
 
-    const status = ALL_STATUSES.includes(publicStatus)
-      ? publicStatus
-      : "senza stato";
+    const status = ALL_STATUSES.includes(publicStatus) ? publicStatus : "da gestire";
 
     if (!statusMap[status]) statusMap[status] = [];
     statusMap[status].push(req);
@@ -96,8 +96,8 @@ async function buildBoard(requests: Request[]): Promise<Board> {
       const cards =
         statusMap[status] && statusMap[status].length > 0
           ? await Promise.all(
-            statusMap[status].map(async (r) => ({
-              id: r.id || r.requestId || Math.random().toString(),
+            statusMap[status].map(async (r, index) => ({
+              id: r.id || r.requestId || `${status}-${index}`,
               title: r.deviceType || "Richiesta",
               name: r.firstName ? `${r.firstName} ${r.lastName || ""}`.trim() : "Richiedente",
               age: r.age,
@@ -108,7 +108,7 @@ async function buildBoard(requests: Request[]): Promise<Board> {
               publicStatus: getPublicStatusGroup(r.status || ""),
               status: r.status,
               assignedVolunteers: r.assignedVolunteers?.length
-                ? (await Promise.all(r.assignedVolunteers.map(getUserFullName))).join(", ")
+                ? r.assignedVolunteers.map((uid) => userNamesById[uid] ?? uid).join(", ")
                 : "",
             }))
           )
