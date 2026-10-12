@@ -33,6 +33,7 @@ type Request = {
 type KanbanCard = {
   id: string;
   title: string;
+  deviceType?: string;
   description?: string;
   name?: string;
   age?: number;
@@ -77,16 +78,21 @@ const REQUEST_STATUS_COLORS: Record<string, string> = {
 
 type VolunteerOption = { label: string; value: string };
 type SubstateOption = { label: string; value: string };
+type DeviceOption = { label: string; value: string };
 
 async function getUserFullName(userId: string): Promise<string> {
   if (!userId || userId.includes("/")) return userId;
-  const profileRef = doc(db, "users", userId, "private", "profile");
-  const profileSnap = await getDoc(profileRef);
-  if (profileSnap.exists()) {
-    const data = profileSnap.data();
-    const firstName = data.firstName || "";
-    const lastName = data.lastName || "";
-    return `${firstName} ${lastName}`.trim() || userId;
+  try {
+    const profileRef = doc(db, "users", userId, "private", "profile");
+    const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists()) {
+      const data = profileSnap.data();
+      const firstName = data.firstName || "";
+      const lastName = data.lastName || "";
+      return `${firstName} ${lastName}`.trim() || userId;
+    }
+  } catch {
+    // Fallback robusto: non bloccare l'intera board su errori profilo singolo.
   }
   return userId;
 }
@@ -94,7 +100,13 @@ async function getUserFullName(userId: string): Promise<string> {
 async function resolveUserDisplayNames(uids: string[]): Promise<Record<string, string>> {
   const unique = Array.from(new Set(uids.filter(Boolean)));
   const entries = await Promise.all(
-    unique.map(async (uid) => [uid, await getUserFullName(uid)] as const)
+    unique.map(async (uid) => {
+      try {
+        return [uid, await getUserFullName(uid)] as const;
+      } catch {
+        return [uid, uid] as const;
+      }
+    })
   );
   return Object.fromEntries(entries);
 }
@@ -104,28 +116,51 @@ function statusColor(status: string): string {
 }
 
 async function buildCards(requests: Request[]): Promise<KanbanCard[]> {
-  const allAssignedVolunteerIds = requests.flatMap((req) => req.assignedVolunteers ?? []);
-  const userNamesById = await resolveUserDisplayNames(allAssignedVolunteerIds);
+  try {
+    const allAssignedVolunteerIds = requests.flatMap((req) => req.assignedVolunteers ?? []);
+    const userNamesById = await resolveUserDisplayNames(allAssignedVolunteerIds);
 
-  return requests.map((r, index) => {
-    // Raggruppamento pubblico display-only, ricalcolato al volo da status.
-    const safeStatus = r.status ?? "";
-    const safeVolunteerIds = r.assignedVolunteers ?? [];
-    const assignedVolunteers = safeVolunteerIds.map((uid) => userNamesById[uid] ?? uid).join(", ");
-    const publicStatus = getPublicStatusGroup(safeStatus);
-    return {
-      id: r.id || r.requestId || `req-${index}`,
-      title: r.deviceType || "Richiesta",
-      name: r.firstName ? `${r.firstName} ${r.lastName || ""}`.trim() : "Richiedente",
-      age: r.age,
-      gender: r.gender,
-      description: r.description || (r.province ? `Provincia: ${r.province}` : ""),
-      publicStatus: ALL_STATUSES.includes(publicStatus) ? publicStatus : "da gestire",
-      status: safeStatus,
-      assignedVolunteerIds: safeVolunteerIds,
-      assignedVolunteers,
-    };
-  });
+    return requests.map((r, index) => {
+      // Raggruppamento pubblico display-only, ricalcolato al volo da status.
+      const safeStatus = r.status ?? "";
+      const safeVolunteerIds = r.assignedVolunteers ?? [];
+      const assignedVolunteers = safeVolunteerIds.map((uid) => userNamesById[uid] ?? uid).join(", ");
+      const publicStatus = getPublicStatusGroup(safeStatus);
+      return {
+        id: r.id || r.requestId || `req-${index}`,
+        title: r.deviceType || "Richiesta",
+        deviceType: r.deviceType || "Richiesta",
+        name: r.firstName ? `${r.firstName} ${r.lastName || ""}`.trim() : "Richiedente",
+        age: r.age,
+        gender: r.gender,
+        description: r.description || (r.province ? `Provincia: ${r.province}` : ""),
+        publicStatus: ALL_STATUSES.includes(publicStatus) ? publicStatus : "da gestire",
+        status: safeStatus,
+        assignedVolunteerIds: safeVolunteerIds,
+        assignedVolunteers,
+      };
+    });
+  } catch {
+    // Ultimo fallback: mostrare comunque le card senza risoluzione nomi.
+    return requests.map((r, index) => {
+      const safeStatus = r.status ?? "";
+      const safeVolunteerIds = r.assignedVolunteers ?? [];
+      const publicStatus = getPublicStatusGroup(safeStatus);
+      return {
+        id: r.id || r.requestId || `req-${index}`,
+        title: r.deviceType || "Richiesta",
+        deviceType: r.deviceType || "Richiesta",
+        name: r.firstName ? `${r.firstName} ${r.lastName || ""}`.trim() : "Richiedente",
+        age: r.age,
+        gender: r.gender,
+        description: r.description || (r.province ? `Provincia: ${r.province}` : ""),
+        publicStatus: ALL_STATUSES.includes(publicStatus) ? publicStatus : "da gestire",
+        status: safeStatus,
+        assignedVolunteerIds: safeVolunteerIds,
+        assignedVolunteers: safeVolunteerIds.join(", "),
+      };
+    });
+  }
 }
 
 export default function AdminDashboard({
@@ -139,6 +174,17 @@ export default function AdminDashboard({
   const [selectedPublicStatuses, setSelectedPublicStatuses] = useState<string[]>([]);
   const [selectedSubstates, setSelectedSubstates] = useState<string[]>([]);
   const [selectedVolunteerIds, setSelectedVolunteerIds] = useState<string[]>([]);
+  const [selectedDeviceTypes, setSelectedDeviceTypes] = useState<string[]>([]);
+
+  const expandedStatuses = useMemo(
+    () => ALL_STATUSES.filter((status) => collapsed[status] !== true),
+    [collapsed]
+  );
+
+  const expandedCards = useMemo(
+    () => cards.filter((card) => expandedStatuses.includes(card.publicStatus || "")),
+    [cards, expandedStatuses]
+  );
 
   useEffect(() => {
     let active = true;
@@ -157,7 +203,7 @@ export default function AdminDashboard({
 
   const volunteerOptions = useMemo<VolunteerOption[]>(() => {
     const byId = new Map<string, string>();
-    cards.forEach((card) => {
+    expandedCards.forEach((card) => {
       const ids = card.assignedVolunteerIds ?? [];
       const names = (card.assignedVolunteers ?? "").split(", ").filter(Boolean);
       ids.forEach((id, idx) => {
@@ -167,19 +213,57 @@ export default function AdminDashboard({
     return Array.from(byId.entries())
       .sort((a, b) => a[1].localeCompare(b[1]))
       .map(([value, label]) => ({ value, label }));
-  }, [cards]);
+  }, [expandedCards]);
 
   const substateOptions = useMemo<SubstateOption[]>(() => {
     const states = new Set(
-      cards
+      expandedCards
         .map((card) => card.status)
         .filter((status): status is string => typeof status === "string" && status.length > 0)
     );
     return Array.from(states).sort().map((value) => ({ value, label: value }));
-  }, [cards]);
+  }, [expandedCards]);
+
+  const deviceOptions = useMemo<DeviceOption[]>(() => {
+    const values = new Set(
+      expandedCards
+        .map((card) => card.deviceType)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    );
+    return Array.from(values).sort().map((value) => ({ value, label: value }));
+  }, [expandedCards]);
+
+  const publicStatusOptions = useMemo(() => {
+    const values = new Set(
+      expandedCards
+        .map((card) => card.publicStatus)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    );
+    return Array.from(values).sort().map((value) => ({ value, label: value }));
+  }, [expandedCards]);
+
+  useEffect(() => {
+    const allowed = new Set(publicStatusOptions.map((o) => o.value));
+    setSelectedPublicStatuses((prev) => prev.filter((value) => allowed.has(value)));
+  }, [publicStatusOptions]);
+
+  useEffect(() => {
+    const allowed = new Set(substateOptions.map((o) => o.value));
+    setSelectedSubstates((prev) => prev.filter((value) => allowed.has(value)));
+  }, [substateOptions]);
+
+  useEffect(() => {
+    const allowed = new Set(volunteerOptions.map((o) => o.value));
+    setSelectedVolunteerIds((prev) => prev.filter((value) => allowed.has(value)));
+  }, [volunteerOptions]);
+
+  useEffect(() => {
+    const allowed = new Set(deviceOptions.map((o) => o.value));
+    setSelectedDeviceTypes((prev) => prev.filter((value) => allowed.has(value)));
+  }, [deviceOptions]);
 
   const filteredCards = useMemo(() => {
-    return cards.filter((card) => {
+    return expandedCards.filter((card) => {
       const matchesPublicStatus =
         selectedPublicStatuses.length === 0 ||
         selectedPublicStatuses.includes(card.publicStatus || "");
@@ -187,9 +271,12 @@ export default function AdminDashboard({
       const matchesVolunteer =
         selectedVolunteerIds.length === 0 ||
         selectedVolunteerIds.every((uid) => (card.assignedVolunteerIds ?? []).includes(uid));
-      return matchesPublicStatus && matchesSubstate && matchesVolunteer;
+      const matchesDevice =
+        selectedDeviceTypes.length === 0 ||
+        selectedDeviceTypes.includes(card.deviceType || "Richiesta");
+      return matchesPublicStatus && matchesSubstate && matchesVolunteer && matchesDevice;
     });
-  }, [cards, selectedPublicStatuses, selectedSubstates, selectedVolunteerIds]);
+  }, [expandedCards, selectedDeviceTypes, selectedPublicStatuses, selectedSubstates, selectedVolunteerIds]);
 
   const board = useMemo<Board>(() => {
     return {
@@ -246,7 +333,7 @@ export default function AdminDashboard({
             <MultiSelect
               id="filter-public-status"
               value={selectedPublicStatuses}
-              options={ALL_STATUSES.map((s) => ({ label: s, value: s }))}
+              options={publicStatusOptions}
               onChange={(e) => setSelectedPublicStatuses(e.value)}
               display="chip"
               placeholder="Tutti"
@@ -262,6 +349,20 @@ export default function AdminDashboard({
               value={selectedSubstates}
               options={substateOptions}
               onChange={(e) => setSelectedSubstates(e.value)}
+              display="chip"
+              placeholder="Tutti"
+              style={{ width: "100%" }}
+            />
+          </div>
+          <div style={{ minWidth: 260 }}>
+            <label htmlFor="filter-device" style={{ display: "block", marginBottom: 4 }}>
+              Device
+            </label>
+            <MultiSelect
+              id="filter-device"
+              value={selectedDeviceTypes}
+              options={deviceOptions}
+              onChange={(e) => setSelectedDeviceTypes(e.value)}
               display="chip"
               placeholder="Tutti"
               style={{ width: "100%" }}
@@ -289,6 +390,7 @@ export default function AdminDashboard({
               setSelectedPublicStatuses([]);
               setSelectedSubstates([]);
               setSelectedVolunteerIds([]);
+              setSelectedDeviceTypes([]);
             }}
           />
         </div>
@@ -490,6 +592,11 @@ export default function AdminDashboard({
             );
           })}
         </div>
+        {filteredCards.length === 0 && (
+          <div style={{ marginTop: 12, color: "#6b7280" }}>
+            Nessuna card corrisponde ai filtri selezionati.
+          </div>
+        )}
       </div>
     </div>
   );
