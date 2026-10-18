@@ -65,9 +65,19 @@ interface AssignableUser {
  */
 async function resolveAssignableUserLabel(uid: string): Promise<string> {
   try {
-    const profileSnap = await getDoc(doc(db, "users", uid, "private", "profile"));
-    if (profileSnap.exists()) {
-      const data = profileSnap.data() as { firstName?: string; lastName?: string };
+    const privateProfileSnap = await getDoc(doc(db, "users", uid, "private", "profile"));
+    if (privateProfileSnap.exists()) {
+      const data = privateProfileSnap.data() as { firstName?: string; lastName?: string };
+      const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+      if (fullName) return fullName;
+    }
+  } catch {
+    // Permessi insufficienti sul profilo privato altrui.
+  }
+  try {
+    const publicProfileSnap = await getDoc(doc(db, "users", uid, "public", "profile"));
+    if (publicProfileSnap.exists()) {
+      const data = publicProfileSnap.data() as { firstName?: string; lastName?: string };
       const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
       if (fullName) return fullName;
     }
@@ -121,6 +131,8 @@ export default function ProjectChecklistPanel({
   const [newItem, setNewItem] = useState<NewItemForm>(EMPTY_NEW_ITEM);
   const [addingItem, setAddingItem] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, Partial<ChecklistItem>>>({});
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [generatingShareLink, setGeneratingShareLink] = useState(false);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
 
   const autosaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -137,25 +149,25 @@ export default function ProjectChecklistPanel({
   }, [onTitleResolved]);
 
   const loadAssignableUsers = useCallback(async () => {
-    if (readOnly) {
-      setAssignableUsers([]);
-      return;
-    }
     try {
-      const fn = httpsCallable<Record<string, never>, { uids: string[] }>(
+      const fn = httpsCallable<Record<string, never>, { users?: AssignableUser[]; uids?: string[] }>(
         functions,
         "listAssignableProjectUsers"
       );
       const result = await fn({});
-      const users = await Promise.all(
-        result.data.uids.map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) }))
-      );
+      const apiUsers = Array.isArray(result.data.users) ? result.data.users : [];
+      if (apiUsers.length > 0) {
+        setAssignableUsers(apiUsers);
+        return;
+      }
+      const apiUids = Array.isArray(result.data.uids) ? result.data.uids : [];
+      const users = await Promise.all(apiUids.map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) })));
       setAssignableUsers(users);
     } catch (err) {
       console.error("[ProjectChecklistPanel] Failed to load assignable users", err);
       setAssignableUsers([]);
     }
-  }, [readOnly]);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loadAssignableUsers fetches from Firestore, not derivable from props/state
@@ -319,6 +331,37 @@ export default function ProjectChecklistPanel({
     }
   };
 
+  const generateShareLink = async () => {
+    setGeneratingShareLink(true);
+    try {
+      const fn = httpsCallable<{ projectId: string; checklistId: string }, { token: string; url: string }>(
+        functions,
+        "createProjectChecklistShareLink"
+      );
+      const result = await fn({ projectId, checklistId });
+      setShareUrl(result.data.url);
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante la generazione del link di condivisione.",
+        life: 4000,
+      });
+    } finally {
+      setGeneratingShareLink(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.current?.show({ severity: "success", summary: "Link copiato", life: 2000 });
+    } catch {
+      // Copia negli appunti non disponibile: il link resta comunque visibile.
+    }
+  };
+
   return (
     <div>
       <Toast ref={toast} />
@@ -352,6 +395,14 @@ export default function ProjectChecklistPanel({
                 onClick={() => setShowAddDialog(true)}
               />
             )}
+            <Button
+              label="Genera link di condivisione"
+              icon="pi pi-share-alt"
+              size="small"
+              className="p-button-text"
+              loading={generatingShareLink}
+              onClick={generateShareLink}
+            />
           </div>
 
           <DataTable value={checklist.items.map(getDraft)} emptyMessage="Nessun item nella checklist." size="small">
@@ -546,6 +597,23 @@ export default function ProjectChecklistPanel({
               style={{ width: "100%" }}
             />
           </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        header="Link di condivisione checklist"
+        visible={shareUrl !== null}
+        onHide={() => setShareUrl(null)}
+        style={{ width: 480 }}
+      >
+        <p>
+          Questo link mostra a chiunque lo apra, senza bisogno di accedere, solo la percentuale di
+          avanzamento della checklist e l'elenco delle attività completate/non completate. Non sono
+          mostrati dettagli interni come assegnatari o note.
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <InputText value={shareUrl ?? ""} readOnly style={{ width: "100%" }} />
+          <Button icon="pi pi-copy" tooltip="Copia" onClick={copyShareLink} />
         </div>
       </Dialog>
     </div>

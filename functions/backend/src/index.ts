@@ -72,6 +72,13 @@ export { removeProjectChecklistItem } from "./projects/removeProjectChecklistIte
 export { getProjectChecklist } from "./projects/getProjectChecklist";
 export { getProjectChecklistCompleteness } from "./projects/getProjectChecklistCompleteness";
 export { listAssignableProjectUsers } from "./projects/listAssignableProjectUsers";
+export { createProjectChecklistShareLink } from "./projects/createProjectChecklistShareLink";
+export { getProjectChecklistShareStatus } from "./projects/getProjectChecklistShareStatus";
+export { uploadProjectAttachment } from "./projects/uploadProjectAttachment";
+export { listProjectAttachments } from "./projects/listProjectAttachments";
+export { downloadProjectAttachment } from "./projects/downloadProjectAttachment";
+export { updateProjectAttachmentDescription } from "./projects/updateProjectAttachmentDescription";
+export { deleteProjectAttachment } from "./projects/deleteProjectAttachment";
 export { deployEmailTemplates } from "./emailTemplates/deployEmailTemplates";
 export { triggerFirestoreBackup } from "./backup/triggerFirestoreBackup";
 

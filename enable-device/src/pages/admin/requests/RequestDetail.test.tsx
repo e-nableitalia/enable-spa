@@ -3,7 +3,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import RequestDetail from "./RequestDetail";
 
-vi.mock("react-router-dom", () => ({ useParams: () => ({ id: "req1" }) }));
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useParams: () => ({ id: "req1" }),
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: "/admin/requests/req1", search: "", hash: "", state: null, key: "test" }),
+  };
+});
 vi.mock("../../../firebase", () => ({ db: {}, functions: {}, auth: {} }));
 
 // setDeviceRequestConsent (EA-158) è una Cloud Function: a differenza delle

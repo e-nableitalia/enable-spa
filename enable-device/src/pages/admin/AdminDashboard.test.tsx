@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import AdminDashboard from "./AdminDashboard";
 
 vi.mock("../../firebase", () => ({ db: {} }));
@@ -20,7 +21,11 @@ describe("AdminDashboard (EA-150) - colonne Kanban derivate da status", () => {
       { id: "r5", status: "inviata" },
     ];
 
-    render(<AdminDashboard requests={requests} />);
+    render(
+      <MemoryRouter>
+        <AdminDashboard requests={requests} />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByText("fabbricazione in corso (1)")).toBeInTheDocument();
     expect(await screen.findByText("completati (1)")).toBeInTheDocument();
