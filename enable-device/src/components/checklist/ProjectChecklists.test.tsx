@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import ProjectChecklists from "./ProjectChecklists";
 
 async function selectDropdownOption(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, optionLabel: string) {
@@ -47,13 +49,15 @@ function mockChecklistLoad() {
 }
 
 describe("ProjectChecklists - vista a tab delle checklist di un progetto", () => {
+  const renderInRouter = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
   beforeEach(() => {
     callable.mockReset();
     mockChecklistLoad();
   });
 
   it("una checklist collegata mostra una tab etichettata col label", async () => {
-    render(
+    renderInRouter(
       <ProjectChecklists
         projectId="p1"
         checklists={[{ checklistId: "c1", label: "Fase 1" }]}
@@ -68,7 +72,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
   });
 
   it("nessuna checklist collegata mostra il messaggio vuoto", () => {
-    render(
+    renderInRouter(
       <ProjectChecklists projectId="p1" checklists={[]} projectType="progetto" onChecklistsChanged={vi.fn()} />
     );
 
@@ -79,7 +83,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
   it("'Crea checklist' invoca createProjectChecklist con label/title/projectType e ricarica il genitore", async () => {
     const user = userEvent.setup();
     const onChecklistsChanged = vi.fn();
-    render(
+    renderInRouter(
       <ProjectChecklists projectId="p1" checklists={[]} projectType="evento" onChecklistsChanged={onChecklistsChanged} />
     );
 
@@ -113,7 +117,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
     });
 
     const user = userEvent.setup();
-    render(<ProjectChecklists projectId="p1" checklists={[]} projectType="evento" onChecklistsChanged={vi.fn()} />);
+    renderInRouter(<ProjectChecklists projectId="p1" checklists={[]} projectType="evento" onChecklistsChanged={vi.fn()} />);
 
     await user.click(screen.getByRole("button", { name: "Crea checklist" }));
     await user.type(screen.getByLabelText("Etichetta tab"), "Fase 1");
@@ -133,7 +137,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
   });
 
   it("readOnly nasconde il pulsante 'Crea checklist' e l'icona di eliminazione", async () => {
-    render(
+    renderInRouter(
       <ProjectChecklists
         projectId="p1"
         checklists={[{ checklistId: "c1", label: "Fase 1" }]}
@@ -164,7 +168,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
       return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
     });
 
-    render(
+    renderInRouter(
       <ProjectChecklists
         projectId="p1"
         checklists={[{ checklistId: "c1", label: "Fase 1" }]}
@@ -175,7 +179,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
     );
 
     await screen.findAllByText("Titolo c1");
-    await user.click(screen.getByRole("button", { name: "Elimina checklist Titolo c1" }));
+    await user.click(screen.getByRole("button", { name: "Elimina checklist Fase 1" }));
     await user.click(await screen.findByRole("button", { name: "Elimina" }));
 
     expect(callable).toHaveBeenCalledWith("deleteProjectChecklist", { projectId: "p1", checklistId: "c1" });

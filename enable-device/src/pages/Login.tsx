@@ -76,7 +76,7 @@ export default function Login() {
 
         <div className="pub-cols">
           <section className="pub-section" aria-labelledby="request-title">
-            <h2 id="request-title">Devi richiedere un device?</h2>
+            <h2 id="request-title">Sei una famiglia e devi richiedere un device?</h2>
             <p>
               Non è necessario registrarsi. Compila il modulo di richiesta: i nostri volontari ti
               ricontatteranno via email.

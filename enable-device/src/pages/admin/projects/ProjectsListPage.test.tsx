@@ -31,7 +31,7 @@ async function selectDropdownOption(user: ReturnType<typeof userEvent.setup>, tr
 function renderPage() {
   return render(
     <MemoryRouter>
-      <ProjectsListPage />
+      <ProjectsListPage scope="admin" canManage />
     </MemoryRouter>
   );
 }
@@ -120,6 +120,8 @@ describe("ProjectsListPage", () => {
       "createProject",
       expect.objectContaining({ title: "Nuovo progetto", projectType: "progetto" })
     );
-    expect(navigateMock).toHaveBeenCalledWith("/admin/project/p3");
+    expect(navigateMock).toHaveBeenCalledWith("/admin/projects/p3", {
+      state: { from: "/admin/projects" },
+    });
   });
 });

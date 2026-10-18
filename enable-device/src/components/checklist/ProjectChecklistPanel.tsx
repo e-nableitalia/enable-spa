@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
 import { db, functions } from "../../firebase";
@@ -65,9 +66,19 @@ interface AssignableUser {
  */
 async function resolveAssignableUserLabel(uid: string): Promise<string> {
   try {
-    const profileSnap = await getDoc(doc(db, "users", uid, "private", "profile"));
-    if (profileSnap.exists()) {
-      const data = profileSnap.data() as { firstName?: string; lastName?: string };
+    const privateProfileSnap = await getDoc(doc(db, "users", uid, "private", "profile"));
+    if (privateProfileSnap.exists()) {
+      const data = privateProfileSnap.data() as { firstName?: string; lastName?: string };
+      const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+      if (fullName) return fullName;
+    }
+  } catch {
+    // Permessi insufficienti sul profilo privato altrui.
+  }
+  try {
+    const publicProfileSnap = await getDoc(doc(db, "users", uid, "public", "profile"));
+    if (publicProfileSnap.exists()) {
+      const data = publicProfileSnap.data() as { firstName?: string; lastName?: string };
       const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
       if (fullName) return fullName;
     }
@@ -118,9 +129,14 @@ export default function ProjectChecklistPanel({
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [newItem, setNewItem] = useState<NewItemForm>(EMPTY_NEW_ITEM);
   const [addingItem, setAddingItem] = useState(false);
+  const [importingItems, setImportingItems] = useState(false);
+  const [importText, setImportText] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Partial<ChecklistItem>>>({});
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [generatingShareLink, setGeneratingShareLink] = useState(false);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
 
   const autosaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -138,14 +154,18 @@ export default function ProjectChecklistPanel({
 
   const loadAssignableUsers = useCallback(async () => {
     try {
-      const fn = httpsCallable<Record<string, never>, { uids: string[] }>(
+      const fn = httpsCallable<Record<string, never>, { users?: AssignableUser[]; uids?: string[] }>(
         functions,
         "listAssignableProjectUsers"
       );
       const result = await fn({});
-      const users = await Promise.all(
-        result.data.uids.map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) }))
-      );
+      const apiUsers = Array.isArray(result.data.users) ? result.data.users : [];
+      if (apiUsers.length > 0) {
+        setAssignableUsers(apiUsers);
+        return;
+      }
+      const apiUids = Array.isArray(result.data.uids) ? result.data.uids : [];
+      const users = await Promise.all(apiUids.map(async (uid) => ({ id: uid, label: await resolveAssignableUserLabel(uid) })));
       setAssignableUsers(users);
     } catch (err) {
       console.error("[ProjectChecklistPanel] Failed to load assignable users", err);
@@ -315,6 +335,108 @@ export default function ProjectChecklistPanel({
     }
   };
 
+  const parseImportedLines = (raw: string): string[] =>
+    raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setImportText((prev) => {
+        if (!prev.trim()) return text;
+        return `${prev}\n${text}`;
+      });
+    } catch {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: "Impossibile leggere il file selezionato.",
+        life: 4000,
+      });
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const importItems = async () => {
+    const lines = parseImportedLines(importText);
+    if (lines.length === 0) {
+      toast.current?.show({
+        severity: "warn",
+        summary: "Nessun item da importare",
+        detail: "Inserisci almeno una riga non vuota.",
+        life: 3000,
+      });
+      return;
+    }
+
+    setImportingItems(true);
+    try {
+      const fn = httpsCallable(functions, "addProjectChecklistItem");
+      for (const title of lines) {
+        await fn({
+          projectId,
+          checklistId,
+          title,
+          type: "boolean",
+        });
+      }
+      toast.current?.show({
+        severity: "success",
+        summary: "Import completato",
+        detail: `${lines.length} item importati come Sì/No.`,
+        life: 3000,
+      });
+      setShowImportDialog(false);
+      setImportText("");
+      await load();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante l'import degli item.",
+        life: 5000,
+      });
+    } finally {
+      setImportingItems(false);
+    }
+  };
+
+  const generateShareLink = async () => {
+    setGeneratingShareLink(true);
+    try {
+      const fn = httpsCallable<{ projectId: string; checklistId: string }, { token: string; url: string }>(
+        functions,
+        "createProjectChecklistShareLink"
+      );
+      const result = await fn({ projectId, checklistId });
+      setShareUrl(result.data.url);
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante la generazione del link di condivisione.",
+        life: 4000,
+      });
+    } finally {
+      setGeneratingShareLink(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.current?.show({ severity: "success", summary: "Link copiato", life: 2000 });
+    } catch {
+      // Copia negli appunti non disponibile: il link resta comunque visibile.
+    }
+  };
+
   return (
     <div>
       <Toast ref={toast} />
@@ -348,6 +470,23 @@ export default function ProjectChecklistPanel({
                 onClick={() => setShowAddDialog(true)}
               />
             )}
+            {!readOnly && (
+              <Button
+                label="Importa item"
+                icon="pi pi-upload"
+                size="small"
+                className="p-button-text"
+                onClick={() => setShowImportDialog(true)}
+              />
+            )}
+            <Button
+              label="Genera link di condivisione"
+              icon="pi pi-share-alt"
+              size="small"
+              className="p-button-text"
+              loading={generatingShareLink}
+              onClick={generateShareLink}
+            />
           </div>
 
           <DataTable value={checklist.items.map(getDraft)} emptyMessage="Nessun item nella checklist." size="small">
@@ -542,6 +681,74 @@ export default function ProjectChecklistPanel({
               style={{ width: "100%" }}
             />
           </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        header="Importa item da testo o file"
+        visible={showImportDialog}
+        onHide={() => setShowImportDialog(false)}
+        style={{ width: 520 }}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setShowImportDialog(false)}
+              disabled={importingItems}
+            />
+            <Button
+              label="Importa"
+              icon="pi pi-upload"
+              loading={importingItems}
+              disabled={parseImportedLines(importText).length === 0}
+              onClick={importItems}
+            />
+          </div>
+        }
+      >
+        <p style={{ marginTop: 0 }}>
+          Ogni riga non vuota verrà importata come un item di tipo Sì/No.
+        </p>
+        <div style={{ marginBottom: 12 }}>
+          <label htmlFor="projectChecklistImportFile" style={{ display: "block", marginBottom: 6 }}>
+            File locale (.txt)
+          </label>
+          <input
+            id="projectChecklistImportFile"
+            type="file"
+            accept=".txt,text/plain"
+            onChange={handleImportFileChange}
+          />
+        </div>
+        <div>
+          <label htmlFor="projectChecklistImportText" style={{ display: "block", marginBottom: 6 }}>
+            Oppure incolla il testo (una riga per item)
+          </label>
+          <InputTextarea
+            id="projectChecklistImportText"
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            rows={10}
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Dialog>
+
+      <Dialog
+        header="Link di condivisione checklist"
+        visible={shareUrl !== null}
+        onHide={() => setShareUrl(null)}
+        style={{ width: 480 }}
+      >
+        <p>
+          Questo link mostra a chiunque lo apra, senza bisogno di accedere, solo la percentuale di
+          avanzamento della checklist e l'elenco delle attività completate/non completate. Non sono
+          mostrati dettagli interni come assegnatari o note.
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <InputText value={shareUrl ?? ""} readOnly style={{ width: "100%" }} />
+          <Button icon="pi pi-copy" tooltip="Copia" onClick={copyShareLink} />
         </div>
       </Dialog>
     </div>

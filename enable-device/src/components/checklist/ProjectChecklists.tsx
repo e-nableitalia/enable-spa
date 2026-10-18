@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../firebase";
 import { Button } from "primereact/button";
@@ -38,6 +39,8 @@ interface Props {
    * (`standby`/`archived`/`closed`): nasconde creazione/eliminazione e
    * passa `readOnly` ai pannelli item. */
   readOnly?: boolean;
+  /** Query param usato per deep-link alla checklist attiva. */
+  tabQueryKey?: string;
 }
 
 /**
@@ -56,18 +59,39 @@ export default function ProjectChecklists({
   onChecklistsChanged,
   isAdmin = false,
   readOnly = false,
+  tabQueryKey,
 }: Props) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useRef<Toast>(null);
   const [creatingChecklist, setCreatingChecklist] = useState(false);
   const [deletingChecklistId, setDeletingChecklistId] = useState<string | null>(null);
   const [titles, setTitles] = useState<Record<string, string>>({});
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [createLabel, setCreateLabel] = useState("");
   const [createTitle, setCreateTitle] = useState("");
+  const [editChecklistId, setEditChecklistId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editTitle, setEditTitle] = useState("");
   const [createTemplateId, setCreateTemplateId] = useState<string | null>(null);
   const [availableTemplates, setAvailableTemplates] = useState<AvailableTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const activeChecklistId = tabQueryKey ? searchParams.get(tabQueryKey) ?? "" : "";
+  const activeIndex = useMemo(() => {
+    if (!activeChecklistId) return 0;
+    const idx = checklists.findIndex((c) => c.checklistId === activeChecklistId);
+    return idx >= 0 ? idx : 0;
+  }, [activeChecklistId, checklists]);
+
+  const updateActiveChecklist = (checklistId: string) => {
+    if (!tabQueryKey) return;
+    const next = new URLSearchParams(searchParams);
+    next.set(tabQueryKey, checklistId);
+    setSearchParams(next, { replace: true });
+  };
 
   const fetchAvailableTemplates = useCallback(async () => {
     setLoadingTemplates(true);
@@ -166,26 +190,90 @@ export default function ProjectChecklists({
     });
   };
 
+  const openEditChecklistDialog = async (checklist: ProjectChecklistRef) => {
+    setEditChecklistId(checklist.checklistId);
+    setEditLabel(checklist.label);
+    setEditTitle(titles[checklist.checklistId] ?? checklist.label);
+    setShowEditDialog(true);
+    try {
+      const fn = httpsCallable<{ projectId: string; checklistId: string }, { title?: string }>(
+        functions,
+        "getProjectChecklist"
+      );
+      const result = await fn({ projectId, checklistId: checklist.checklistId });
+      const resolvedTitle = typeof result.data.title === "string" ? result.data.title : "";
+      if (resolvedTitle) setEditTitle(resolvedTitle);
+    } catch {
+      // Mantiene il fallback già impostato, senza interrompere l'edit.
+    }
+  };
+
+  const handleSaveChecklistMetadata = async () => {
+    if (!editChecklistId) return;
+    const label = editLabel.trim();
+    const title = editTitle.trim();
+    if (!label || !title) return;
+
+    setSavingEdit(true);
+    try {
+      const fn = httpsCallable<
+        { projectId: string; checklistId: string; label: string; title: string },
+        { checklistId: string; label: string; title: string }
+      >(functions, "updateProjectChecklistMetadata");
+      await fn({ projectId, checklistId: editChecklistId, label, title });
+      toast.current?.show({ severity: "success", summary: "Checklist aggiornata", life: 3000 });
+      setTitles((prev) => ({ ...prev, [editChecklistId]: title }));
+      setShowEditDialog(false);
+      await onChecklistsChanged();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante l'aggiornamento della checklist.",
+        life: 5000,
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <div>
       <Toast ref={toast} />
       <ConfirmDialog />
 
       {checklists.length > 0 && (
-        <TabView renderActiveOnly={false}>
+        <TabView
+          renderActiveOnly={false}
+          activeIndex={activeIndex}
+          onTabChange={(e) => updateActiveChecklist(checklists[e.index]?.checklistId ?? "")}
+        >
           {checklists.map((c) => {
-            const title = titles[c.checklistId] ?? c.label;
+            const label = c.label;
             return (
               <TabPanel
                 key={c.checklistId}
                 header={
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {title}
+                    {label}
+                    {isAdmin && !readOnly && (
+                      <i
+                        className="pi pi-pencil"
+                        role="button"
+                        aria-label={`Modifica checklist ${label}`}
+                        title="Modifica checklist"
+                        style={{ fontSize: 12, color: "#2563eb" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void openEditChecklistDialog(c);
+                        }}
+                      />
+                    )}
                     {isAdmin && !readOnly && (
                       <i
                         className="pi pi-trash"
                         role="button"
-                        aria-label={`Elimina checklist ${title}`}
+                        aria-label={`Elimina checklist ${label}`}
                         title="Elimina checklist"
                         style={{
                           fontSize: 12,
@@ -195,7 +283,7 @@ export default function ProjectChecklists({
                         onClick={(e) => {
                           e.stopPropagation();
                           if (deletingChecklistId) return;
-                          handleDeleteChecklist(c.checklistId, title);
+                          handleDeleteChecklist(c.checklistId, label);
                         }}
                       />
                     )}
@@ -226,6 +314,54 @@ export default function ProjectChecklists({
           <Button label="Crea checklist" icon="pi pi-plus" onClick={openCreateDialog} />
         </div>
       )}
+
+      <Dialog
+        header="Modifica checklist"
+        visible={showEditDialog}
+        style={{ width: "480px" }}
+        modal
+        onHide={() => setShowEditDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setShowEditDialog(false)}
+              disabled={savingEdit}
+            />
+            <Button
+              label="Salva"
+              icon="pi pi-check"
+              onClick={handleSaveChecklistMetadata}
+              loading={savingEdit}
+              disabled={!editLabel.trim() || !editTitle.trim()}
+            />
+          </div>
+        }
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="editChecklistLabel" style={{ display: "block", marginBottom: 4 }}>
+            Nome (etichetta tab)
+          </label>
+          <InputText
+            id="editChecklistLabel"
+            value={editLabel}
+            onChange={(e) => setEditLabel(e.target.value)}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div>
+          <label htmlFor="editChecklistTitle" style={{ display: "block", marginBottom: 4 }}>
+            Titolo checklist
+          </label>
+          <InputText
+            id="editChecklistTitle"
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Dialog>
 
       <Dialog
         header="Crea checklist"

@@ -56,11 +56,12 @@ function mockProject(
   });
 }
 
-function renderDetail(id = "p1") {
+function renderDetail(id = "p1", scope: "admin" | "volunteer" = "admin", canManage = true) {
   return render(
-    <MemoryRouter initialEntries={[`/admin/project/${id}`]}>
+    <MemoryRouter initialEntries={[`/${scope}/projects/${id}`]}>
       <Routes>
-        <Route path="/admin/project/:id" element={<ProjectDetail />} />
+        <Route path="/admin/projects/:id" element={<ProjectDetail scope="admin" canManage />} />
+        <Route path="/volunteer/projects/:id" element={<ProjectDetail scope="volunteer" canManage={canManage} />} />
       </Routes>
     </MemoryRouter>
   );
@@ -76,7 +77,7 @@ describe("ProjectDetail", () => {
     mockProject({ status: "active" });
     renderDetail();
 
-    expect(await screen.findByText("Device multifunzione")).toBeInTheDocument();
+    expect((await screen.findAllByText("Device multifunzione")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Modifica" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Aggiungi nota" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Cambia stato" })).not.toBeDisabled();
@@ -87,7 +88,7 @@ describe("ProjectDetail", () => {
     mockProject({ title: "Progetto vecchio", description: "", status: "archived" });
     renderDetail();
 
-    expect(await screen.findByText("Progetto vecchio")).toBeInTheDocument();
+    expect((await screen.findAllByText("Progetto vecchio")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Modifica" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Aggiungi nota" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cambia stato" })).toBeDisabled();
@@ -97,7 +98,7 @@ describe("ProjectDetail", () => {
     mockProject({ title: "Progetto in pausa", description: "", status: "standby" });
     renderDetail();
 
-    expect(await screen.findByText("Progetto in pausa")).toBeInTheDocument();
+    expect((await screen.findAllByText("Progetto in pausa")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Modifica" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Aggiungi nota" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Cambia stato" })).not.toBeDisabled();
@@ -106,7 +107,7 @@ describe("ProjectDetail", () => {
   it("carica il progetto via getProject (non getDoc diretto)", async () => {
     mockProject();
     renderDetail("p1");
-    await screen.findByText("Device multifunzione");
+    await screen.findAllByText("Device multifunzione");
     expect(callable).toHaveBeenCalledWith("getProject", { projectId: "p1" });
   });
 
@@ -115,7 +116,7 @@ describe("ProjectDetail", () => {
     const user = userEvent.setup();
     renderDetail();
 
-    await screen.findByText("Vecchio titolo");
+    await screen.findAllByText("Vecchio titolo");
     await user.click(screen.getByRole("button", { name: "Modifica" }));
     const dialog = screen.getByRole("dialog");
     const titleInput = within(dialog).getByDisplayValue("Vecchio titolo");
@@ -135,7 +136,7 @@ describe("ProjectDetail", () => {
     const user = userEvent.setup();
     renderDetail();
 
-    await screen.findByText("Progetto");
+    await screen.findAllByText("Progetto");
     await user.click(screen.getByRole("button", { name: "Aggiungi nota" }));
     const dialog = screen.getByRole("dialog");
     await user.type(within(dialog).getByLabelText("Nota"), "Nota di avanzamento");
@@ -153,7 +154,7 @@ describe("ProjectDetail", () => {
     const user = userEvent.setup();
     renderDetail();
 
-    await screen.findByText("Progetto");
+    await screen.findAllByText("Progetto");
     await user.click(screen.getByRole("button", { name: "Cambia stato" }));
     const dialog = screen.getByRole("dialog");
 
@@ -178,7 +179,7 @@ describe("ProjectDetail", () => {
     const user = userEvent.setup();
     renderDetail();
 
-    await screen.findByText("Vecchio titolo");
+    await screen.findAllByText("Vecchio titolo");
     await user.click(screen.getByRole("button", { name: "Modifica" }));
     const dialog = screen.getByRole("dialog");
     const titleInput = within(dialog).getByDisplayValue("Vecchio titolo");
@@ -193,7 +194,7 @@ describe("ProjectDetail", () => {
     const user = userEvent.setup();
     renderDetail();
 
-    await screen.findByText("Da eliminare");
+    await screen.findAllByText("Da eliminare");
     await user.click(screen.getByRole("button", { name: "Elimina" }));
 
     // ConfirmDialog: dopo l'apertura ci sono due bottoni "Elimina" (toolbar + accept).
@@ -203,5 +204,14 @@ describe("ProjectDetail", () => {
 
     expect(callable).toHaveBeenCalledWith("deleteProject", { projectId: "p1" });
     expect(navigateMock).toHaveBeenCalledWith("/admin/projects");
+  });
+
+  it("in scope volunteer mostra il progetto in sola lettura", async () => {
+    mockProject({ title: "Progetto readonly", status: "active" });
+    renderDetail("p1", "volunteer", false);
+
+    expect((await screen.findAllByText("Progetto readonly")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Modifica" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Elimina" })).not.toBeInTheDocument();
   });
 });

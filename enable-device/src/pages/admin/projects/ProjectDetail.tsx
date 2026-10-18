@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../../firebase";
@@ -14,6 +14,7 @@ import { Tag } from "primereact/tag";
 import { Toast } from "primereact/toast";
 import RequestTimeline from "../../../components/timeline/RequestTimeline";
 import ProjectChecklists, { type ProjectChecklistRef } from "../../../components/checklist/ProjectChecklists";
+import ProjectAttachments from "../../../components/attachments/ProjectAttachments";
 
 const PROJECT_STATUSES = ["new", "active", "standby", "archived", "closed"] as const;
 const CONTENT_WRITABLE_STATUSES = new Set(["new", "active"]);
@@ -66,21 +67,31 @@ async function getUserFullName(uid: string): Promise<string> {
   return uid;
 }
 
+interface Props {
+  scope: "admin" | "volunteer";
+  canManage?: boolean;
+  compact?: boolean;
+}
+
+interface DetailLocationState {
+  from?: string;
+}
+
 /**
- * Pagina admin di dettaglio di un progetto speciale/iniziativa/evento
- * (EA-169/170): dati generali (editabili solo in `new`/`active`), cambio di
- * stato con nota di cronologia (riuso di `RequestTimeline`, stessa forma
- * evento di `deviceRequests`), e gestione checklist (`ProjectChecklists`).
+ * Pagina di dettaglio di un progetto speciale/iniziativa/evento
+ * (EA-169/170): dati generali, cronologia e checklist.
  */
-export default function ProjectDetail() {
+export default function ProjectDetail({ scope, canManage = false, compact = false }: Props) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useRef<Toast>(null);
 
   const [project, setProject] = useState<ProjectData | null>(null);
   const [events, setEvents] = useState<ProjectEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatorName, setCreatorName] = useState("");
+  const [timelineCollapsed, setTimelineCollapsed] = useState(false);
 
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -93,6 +104,20 @@ export default function ProjectDetail() {
   const [statusNote, setStatusNote] = useState("");
   const [savingStatus, setSavingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const listPath = `/${scope}/projects`;
+  const locationState = (location.state ?? {}) as DetailLocationState;
+
+  const goBack = useCallback(() => {
+    if (locationState.from) {
+      navigate(locationState.from);
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(listPath);
+  }, [listPath, locationState.from, navigate]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -157,7 +182,7 @@ export default function ProjectDetail() {
           const fn = httpsCallable(functions, "deleteProject");
           await fn({ projectId: id });
           toast.current?.show({ severity: "success", summary: "Progetto eliminato", life: 3000 });
-          navigate("/admin/projects");
+          navigate(listPath);
         } catch (err) {
           toast.current?.show({
             severity: "error",
@@ -172,6 +197,7 @@ export default function ProjectDetail() {
   };
 
   const contentWritable = project ? CONTENT_WRITABLE_STATUSES.has(project.status) : false;
+  const canWriteContent = canManage && contentWritable;
   const isTerminal = project ? TERMINAL_STATUSES.has(project.status) : false;
 
   const openEditDialog = () => {
@@ -253,8 +279,8 @@ export default function ProjectDetail() {
     setSavingStatus(false);
   };
 
-  if (loading) return <div style={{ padding: 20 }}>Caricamento...</div>;
-  if (!project) return <div style={{ padding: 20 }}>Progetto non trovato.</div>;
+  if (loading) return <div style={{ padding: compact ? 12 : 20 }}>Caricamento...</div>;
+  if (!project) return <div style={{ padding: compact ? 12 : 20 }}>Progetto non trovato.</div>;
 
   const statusSeverity = (status: string): "success" | "warning" | "danger" | "info" => {
     if (status === "active") return "success";
@@ -264,16 +290,23 @@ export default function ProjectDetail() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: compact ? 12 : 20 }}>
       <Toast ref={toast} />
       <ConfirmDialog />
-      <Button
-        label="Torna all'elenco"
-        icon="pi pi-arrow-left"
-        className="p-button-text"
-        onClick={() => navigate("/admin/projects")}
-        style={{ marginBottom: 16 }}
-      />
+      {!compact && (
+        <>
+          <Button
+            label="Indietro"
+            icon="pi pi-arrow-left"
+            className="p-button-text"
+            onClick={goBack}
+            style={{ marginBottom: 16 }}
+          />
+          <div style={{ marginBottom: 16, color: "#6b7280", fontSize: 14 }}>
+            <Link to={listPath}>Progetti</Link> / <span>{project.title || id}</span>
+          </div>
+        </>
+      )}
 
       <Panel header="Dati generali" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -293,42 +326,50 @@ export default function ProjectDetail() {
           <div>
             <strong>Creato da:</strong> {creatorName || project.createdBy}
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-            <Button
-              label="Modifica"
-              icon="pi pi-pencil"
-              className="p-button-outlined"
-              onClick={openEditDialog}
-              disabled={!contentWritable}
-              tooltip={!contentWritable ? "Modifica disponibile solo per progetti 'new'/'active'" : undefined}
-            />
-            <Button
-              label="Aggiungi nota"
-              icon="pi pi-comment"
-              className="p-button-outlined"
-              onClick={openNoteDialog}
-              disabled={isTerminal}
-            />
-            <Button
-              label="Cambia stato"
-              icon="pi pi-sync"
-              className="p-button-outlined"
-              onClick={openTransitionDialog}
-              disabled={isTerminal}
-              tooltip={isTerminal ? "Un progetto archiviato/chiuso è terminale" : undefined}
-            />
-            <Button
-              label="Elimina"
-              icon="pi pi-trash"
-              className="p-button-outlined p-button-danger"
-              onClick={handleDelete}
-              loading={deleting}
-            />
-          </div>
+          {canManage && (
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <Button
+                label="Modifica"
+                icon="pi pi-pencil"
+                className="p-button-outlined"
+                onClick={openEditDialog}
+                disabled={!contentWritable}
+                tooltip={!contentWritable ? "Modifica disponibile solo per progetti 'new'/'active'" : undefined}
+              />
+              <Button
+                label="Aggiungi nota"
+                icon="pi pi-comment"
+                className="p-button-outlined"
+                onClick={openNoteDialog}
+                disabled={isTerminal}
+              />
+              <Button
+                label="Cambia stato"
+                icon="pi pi-sync"
+                className="p-button-outlined"
+                onClick={openTransitionDialog}
+                disabled={isTerminal}
+                tooltip={isTerminal ? "Un progetto archiviato/chiuso è terminale" : undefined}
+              />
+              <Button
+                label="Elimina"
+                icon="pi pi-trash"
+                className="p-button-outlined p-button-danger"
+                onClick={handleDelete}
+                loading={deleting}
+              />
+            </div>
+          )}
         </div>
       </Panel>
 
-      <Panel header="Cronologia" style={{ marginBottom: 16 }}>
+      <Panel
+        header="Cronologia"
+        style={{ marginBottom: 16 }}
+        toggleable
+        collapsed={timelineCollapsed}
+        onToggle={(e) => setTimelineCollapsed(e.value)}
+      >
         {events.length > 0 ? (
           <RequestTimeline events={events} />
         ) : (
@@ -342,12 +383,22 @@ export default function ProjectDetail() {
           checklists={project.checklists ?? []}
           projectType={project.projectType}
           onChecklistsChanged={load}
-          isAdmin
+          isAdmin={canManage}
+          readOnly={!canWriteContent}
+          tabQueryKey="checklist"
+        />
+      </Panel>
+
+      <Panel header="Allegati" style={{ marginTop: 16 }}>
+        <ProjectAttachments
+          projectId={id as string}
           readOnly={!contentWritable}
         />
       </Panel>
 
-      <Dialog
+      {canManage && (
+        <>
+          <Dialog
         header="Modifica progetto"
         visible={showEditDialog}
         style={{ width: "480px" }}
@@ -385,7 +436,7 @@ export default function ProjectDetail() {
         </div>
       </Dialog>
 
-      <Dialog
+          <Dialog
         header={statusDialogMode === "note" ? "Aggiungi nota" : "Cambia stato"}
         visible={showStatusDialog}
         style={{ width: "480px" }}
@@ -425,6 +476,8 @@ export default function ProjectDetail() {
           />
         </div>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }

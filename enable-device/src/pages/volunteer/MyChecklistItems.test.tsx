@@ -481,7 +481,7 @@ describe("MyChecklistItems - gestione in blocco: toggle, filtro stato, Note ed e
       return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
     });
 
-    render(<MyChecklistItems projectBasePath="/admin/project" />);
+    render(<MyChecklistItems projectBasePath="/admin/projects" />);
     expect(await screen.findByRole("button", { name: "Progetto Maker Faire" })).toBeInTheDocument();
 
     const row = await rowFor("Allestimento stand");

@@ -2,7 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import AdminRequestTable from "./AdminRequestTable";
 
-vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: "/admin/requests", search: "", hash: "", state: null, key: "test" }),
+  };
+});
 vi.mock("../../firebase", () => ({ db: {}, functions: {} }));
 vi.mock("firebase/firestore", () => ({
   doc: () => ({}),

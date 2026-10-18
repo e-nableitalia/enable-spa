@@ -288,6 +288,36 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
       expect.objectContaining({ requestId: "r1", checklistId: "c42" })
     );
   });
+
+  it("importa item da testo creando un item boolean per ogni riga non vuota, in ordine", async () => {
+    mockChecklistWithId("c42", []);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(
+      within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"),
+      "Primo item\n\nSecondo item"
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addDeviceRequestChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({
+      requestId: "r1",
+      checklistId: "c42",
+      title: "Primo item",
+      type: "boolean",
+    });
+    expect(addCalls[1][1]).toMatchObject({
+      requestId: "r1",
+      checklistId: "c42",
+      title: "Secondo item",
+      type: "boolean",
+    });
+  });
 });
 
 // Scenario 3 (EA-141): l'assegnatario di un item è una selezione tra utenti

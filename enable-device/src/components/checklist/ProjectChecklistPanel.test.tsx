@@ -150,4 +150,67 @@ describe("ProjectChecklistPanel", () => {
     expect(row.querySelector(".pi-trash")).not.toBeInTheDocument();
     expect(within(row).getByDisplayValue("Item")).toBeDisabled();
   });
+
+  it("genera un link di condivisione checklist progetto", async () => {
+    mockChecklist([]);
+    callable.mockImplementation((name: string) => {
+      if (name === "getProjectChecklist") {
+        return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "progetto", items: [] } });
+      }
+      if (name === "getProjectChecklistCompleteness") return Promise.resolve({ data: { complete: false } });
+      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
+      if (name === "createProjectChecklistShareLink") {
+        return Promise.resolve({ data: { token: "token-1", url: "https://app.e-nableitalia.it/project-checklist-share/token-1" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    render(<ProjectChecklistPanel projectId="p1" checklistId="c1" />);
+
+    await screen.findByText("Checklist test");
+    await user.click(screen.getByRole("button", { name: "Genera link di condivisione" }));
+
+    expect(callable).toHaveBeenCalledWith("createProjectChecklistShareLink", { projectId: "p1", checklistId: "c1" });
+    expect(await screen.findByDisplayValue("https://app.e-nableitalia.it/project-checklist-share/token-1")).toBeInTheDocument();
+  });
+
+  it("importa item da testo creando un item boolean per ogni riga non vuota, in ordine", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "getProjectChecklist") {
+        return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "progetto", items: [] } });
+      }
+      if (name === "getProjectChecklistCompleteness") return Promise.resolve({ data: { complete: false } });
+      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
+      if (name === "addProjectChecklistItem") return Promise.resolve({ data: { itemId: "new-item" } });
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    render(<ProjectChecklistPanel projectId="p1" checklistId="c1" />);
+    await screen.findByText("Checklist test");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(
+      within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"),
+      "Task A\n\nTask B"
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addProjectChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({
+      projectId: "p1",
+      checklistId: "c1",
+      title: "Task A",
+      type: "boolean",
+    });
+    expect(addCalls[1][1]).toMatchObject({
+      projectId: "p1",
+      checklistId: "c1",
+      title: "Task B",
+      type: "boolean",
+    });
+  });
 });

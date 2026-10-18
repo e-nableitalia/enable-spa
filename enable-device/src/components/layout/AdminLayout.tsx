@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { PanelMenu } from "primereact/panelmenu";
 import { Button } from "primereact/button";
 import { Avatar } from "primereact/avatar";
@@ -21,7 +21,6 @@ import AdminArchived from "../../pages/admin/requests/AdminArchived";
 import AdminVolunteers from "../../pages/admin/volunteers/AdminVolunteers";
 import PendingVolunteers from "../../pages/admin/volunteers/PendingVolunteers";
 import AdminStats from "../../pages/admin/AdminStats";
-import RequestDetail from "../../pages/admin/requests/RequestDetail";
 import SuperAdminPage from "../../pages/admin/superadmin/SuperAdminPage";
 import AdminValidate from "../../pages/admin/requests/AdminValidate";
 import AdminAttention from "../../pages/admin/requests/AdminAttention";
@@ -37,8 +36,7 @@ import AdminSecurityLogsPage from "../../pages/admin/AdminSecurityLogsPage";
 import AdminMessagesPage from "../../pages/admin/AdminMessagesPage";
 import AdminChecklistTemplatesPage from "../../pages/admin/AdminChecklistTemplatesPage";
 import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
-import ProjectsListPage from "../../pages/admin/projects/ProjectsListPage";
-import ProjectDetail from "../../pages/admin/projects/ProjectDetail";
+import ProjectsWorkspace from "../../pages/admin/projects/ProjectsWorkspace";
 import { version } from "../../../package.json";
 
 // Documenti Firestore arricchiti con sotto-dati privati/pubblici a forma
@@ -46,6 +44,16 @@ import { version } from "../../../package.json";
 // profile): nessuno schema fisso, coerente con l'`any[]` che i consumer
 // (AdminAll, AdminTriage, AdminVolunteers, ...) si aspettano ancora oggi.
 type AdminRecord = Record<string, unknown> & { id: string; status?: string };
+
+function LegacyProjectRedirect() {
+  const { id } = useParams();
+  return <Navigate to={id ? `/admin/projects/${id}` : "/admin/projects"} replace />;
+}
+
+function LegacyRequestRedirect() {
+  const { id } = useParams();
+  return <Navigate to={id ? `/admin/requests/${id}` : "/admin/requests"} replace />;
+}
 
 export default function AdminLayout() {
   const [user, setUser] = useState<User | null>(null);
@@ -56,6 +64,20 @@ export default function AdminLayout() {
   const [volunteersLoading, setVolunteersLoading] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const navTo = useCallback(
+    (path: string) => {
+      navigate(path);
+      setSidebarVisible(false);
+    },
+    [navigate]
+  );
+
+  const menuLabel = useCallback(
+    (label: string, isActive: boolean) => (isActive ? `• ${label}` : label),
+    []
+  );
 
   const loadVolunteers = useCallback(async () => {
     setVolunteersLoading(true);
@@ -151,111 +173,145 @@ useEffect(() => {
     navigate("/login", { replace: true });
   };
 
-  if (loading || volunteersLoading) return <div>Loading...</div>;
+  const isBootstrapping = loading || volunteersLoading;
 
   // ===== CLASSIFICAZIONE RICHIESTE =====
-  // Segregazione: menu operativi = solo live; Archiviate = solo archived.
-  const liveRequests = requests.filter((r) => r.archived !== true);
-  const archivedRequests = requests.filter((r) => r.archived === true);
+  // Memoize per evitare che il cambio route (es. /requests -> /requests/:id)
+  // ricrei ogni array e forzi redraw completo della tabella master.
+  const liveRequests = useMemo(
+    () => requests.filter((r) => r.archived !== true),
+    [requests]
+  );
+  const archivedRequests = useMemo(
+    () => requests.filter((r) => r.archived === true),
+    [requests]
+  );
 
   // Richieste da validare: status "inviata" — non ancora visibili ai volontari
-  const validateRequests = liveRequests.filter((r) => r.status === "inviata");
+  const validateRequests = useMemo(
+    () => liveRequests.filter((r) => r.status === "inviata"),
+    [liveRequests]
+  );
 
-  const triageRequests = liveRequests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"].includes(r.status ?? "")
+  const triageRequests = useMemo(
+    () => liveRequests.filter((r) =>
+      PUBLIC_STATUS_GROUPS_FROM_STATUS["da gestire"].includes(r.status ?? "")
+    ),
+    [liveRequests]
   );
 
   // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
-  const pendingRequests = liveRequests.filter(
-    (r) => r.status === "attesa volontario"
+  const pendingRequests = useMemo(
+    () => liveRequests.filter(
+      (r) => r.status === "attesa volontario"
+    ),
+    [liveRequests]
   );
 
-  const productionRequests = liveRequests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status ?? "")
+  const productionRequests = useMemo(
+    () => liveRequests.filter((r) =>
+      PUBLIC_STATUS_GROUPS_FROM_STATUS["fabbricazione in corso"].includes(r.status ?? "")
+    ),
+    [liveRequests]
   );
 
   // Filtro letterale invariato, non derivato dal raggruppamento pubblico (EA-150)
-  const shippingRequests = liveRequests.filter((r) =>
-    ["pronta per spedizione", "spedita"].includes(r.status ?? "")
+  const shippingRequests = useMemo(
+    () => liveRequests.filter((r) =>
+      ["pronta per spedizione", "spedita"].includes(r.status ?? "")
+    ),
+    [liveRequests]
   );
 
-  const completedRequests = liveRequests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status ?? "")
+  const completedRequests = useMemo(
+    () => liveRequests.filter((r) =>
+      PUBLIC_STATUS_GROUPS_FROM_STATUS["completati"].includes(r.status ?? "")
+    ),
+    [liveRequests]
   );
 
-  const cancelledRequests = liveRequests.filter((r) =>
-    PUBLIC_STATUS_GROUPS_FROM_STATUS["annullate / non completabili"].includes(r.status ?? "")
+  const cancelledRequests = useMemo(
+    () => liveRequests.filter((r) =>
+      PUBLIC_STATUS_GROUPS_FROM_STATUS["annullate / non completabili"].includes(r.status ?? "")
+    ),
+    [liveRequests]
   );
 
-  const attentionRequests = liveRequests.filter((r) => r.requiresAttention === true);
+  const attentionRequests = useMemo(
+    () => liveRequests.filter((r) => r.requiresAttention === true),
+    [liveRequests]
+  );
 
   // Filtra i volontari non attivi
-  const pendingVolunteers = volunteers.filter(v => !v.active);
+  const pendingVolunteers = useMemo(
+    () => volunteers.filter((v) => !v.active),
+    [volunteers]
+  );
 
   const panelMenuItems = [
     {
       label: "Dashboard",
       icon: "pi pi-home",
-      command: () => navigate("/admin/dashboard"),
+      command: () => navTo("/admin/dashboard"),
     },
     {
       label: "To Do List",
       icon: "pi pi-check-square",
-      command: () => navigate("/admin/my-checklist-items"),
+      command: () => navTo("/admin/my-checklist-items"),
     },
     {
       label: "Richieste",
       icon: "pi pi-folder-open", // folder open per richieste
       items: [
         {
-          label: `Tutte (${liveRequests.length})`,
+          label: menuLabel(`Tutte (${liveRequests.length})`, location.pathname === "/admin" || location.pathname.startsWith("/admin/requests")),
           icon: "pi pi-list", // elenco
-          command: () => navigate("/admin"),
+          command: () => navTo("/admin/requests"),
         },
         {
           label: `Da validare (${validateRequests.length})`,
           icon: "pi pi-clock",
-          command: () => navigate("/admin/requests/validate"),
+          command: () => navTo("/admin/requests/validate"),
         },
         {
           label: `Da gestire (${triageRequests.length})`,
           icon: "pi pi-inbox",
-          command: () => navigate("/admin/requests/triage"),
+          command: () => navTo("/admin/requests/triage"),
         },
         {
           label: `In attesa volontario (${pendingRequests.length})`,
           icon: "pi pi-user",
-          command: () => navigate("/admin/requests/pending"),
+          command: () => navTo("/admin/requests/pending"),
         },
         {
           label: `In produzione (${productionRequests.length})`,
           icon: "pi pi-cog",
-          command: () => navigate("/admin/requests/production"),
+          command: () => navTo("/admin/requests/production"),
         },
         {
           label: `Spedite (${shippingRequests.length})`,
           icon: "pi pi-send", // spedizione
-          command: () => navigate("/admin/requests/shipping"),
+          command: () => navTo("/admin/requests/shipping"),
         },
         {
           label: `Completate (${completedRequests.length})`,
           icon: "pi pi-check-circle", // completate
-          command: () => navigate("/admin/requests/completed"),
+          command: () => navTo("/admin/requests/completed"),
         },
         {
           label: `Annullate / KO (${cancelledRequests.length})`,
           icon: "pi pi-ban", // annullate
-          command: () => navigate("/admin/requests/cancelled"),
+          command: () => navTo("/admin/requests/cancelled"),
         },
         {
           label: `Archiviate (${archivedRequests.length})`,
           icon: "pi pi-inbox",
-          command: () => navigate("/admin/requests/archived"),
+          command: () => navTo("/admin/requests/archived"),
         },
         {
           label: `Richiede attenzione (${attentionRequests.length})`,
           icon: "pi pi-exclamation-triangle",
-          command: () => navigate("/admin/requests/attention"),
+          command: () => navTo("/admin/requests/attention"),
         },
       ],
     },
@@ -266,64 +322,64 @@ useEffect(() => {
         {
           label: `Elenco (${volunteers.length})`,
           icon: "pi pi-address-book", // elenco volontari
-          command: () => navigate("/admin/volunteers/all"),
+          command: () => navTo("/admin/volunteers/all"),
         },
         {
           label: `Attesa attivazione (${pendingVolunteers.length})`,
           icon: "pi pi-user-plus", // attesa attivazione
-          command: () => navigate("/admin/volunteers/pending"),
+          command: () => navTo("/admin/volunteers/pending"),
         },
         {
           label: `Contatti`,
           icon: "pi pi-address-book", // elenco contatti
-          command: () => navigate("/admin/volunteers/contacts"),
+          command: () => navTo("/admin/volunteers/contacts"),
         },
         {
           label: "Manutenzione Volontari",
           icon: "pi pi-wrench", // manutenzione volontari
-          command: () => navigate("/admin/volunteers/maintenance"),
+          command: () => navTo("/admin/volunteers/maintenance"),
         },
         {
           label: "Dashboard volontari",
           icon: "pi pi-id-card", // dashboard volontari
-          command: () => navigate("/volunteer"),
+          command: () => navTo("/volunteer"),
         },        
       ],
     },
     {
       label: "Richieste spedizioni",
       icon: "pi pi-truck",
-      command: () => navigate("/admin/shipments"),
+      command: () => navTo("/admin/shipments"),
     },
     {
-      label: "Progetti speciali e iniziative",
+      label: menuLabel("Progetti, iniziative, eventi", location.pathname.startsWith("/admin/projects")),
       icon: "pi pi-sitemap",
-      command: () => navigate("/admin/projects"),
+      command: () => navTo("/admin/projects"),
     },
     {
       label: "Comunicazioni",
       icon: "pi pi-comments",
-      command: () => navigate("/admin/messages"),
+      command: () => navTo("/admin/messages"),
     },
     {
       label: "Catalogo template checklist",
       icon: "pi pi-list-check",
-      command: () => navigate("/admin/checklist-templates"),
+      command: () => navTo("/admin/checklist-templates"),
     },
     {
       label: "Log Email",
       icon: "pi pi-envelope",
-      command: () => navigate("/admin/email-logs"),
+      command: () => navTo("/admin/email-logs"),
     },
     {
       label: "Security Logs",
       icon: "pi pi-shield",
-      command: () => navigate("/admin/security-logs"),
+      command: () => navTo("/admin/security-logs"),
     },
     {
       label: "Statistiche",
       icon: "pi pi-chart-bar", // statistiche
-      command: () => navigate("/admin/stats"),
+      command: () => navTo("/admin/stats"),
     },
   ];
 
@@ -450,23 +506,38 @@ useEffect(() => {
             overflow: "auto",
           }}
         >
-          <Routes>
-            <Route path="requests" element={<AdminAll requests={liveRequests} />} />
-            <Route path="requests/validate" element={<AdminValidate requests={validateRequests} />} />
-            <Route path="requests/triage" element={<AdminTriage requests={triageRequests} />} />
-            <Route path="requests/pending" element={<AdminPending requests={pendingRequests} />} />
-            <Route path="requests/production" element={<AdminProduction requests={productionRequests} />} />
-            <Route path="requests/shipping" element={<AdminShipping requests={shippingRequests} />} />
-            <Route path="requests/completed" element={<AdminCompleted requests={completedRequests} />} />
-            <Route path="requests/cancelled" element={<AdminCancelled requests={cancelledRequests} />} />
-            <Route path="requests/archived" element={<AdminArchived requests={archivedRequests} />} />
-            <Route path="requests/attention" element={<AdminAttention requests={attentionRequests} />} />
+          {isBootstrapping ? (
+            <div
+              style={{
+                minHeight: 360,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#6b7280",
+                fontWeight: 600,
+              }}
+            >
+              Caricamento...
+            </div>
+          ) : (
+            <Routes>
+              <Route path="requests/:id?" element={<AdminAll requests={liveRequests} />} />
+            <Route path="requests/validate/:id?" element={<AdminValidate requests={validateRequests} />} />
+            <Route path="requests/triage/:id?" element={<AdminTriage requests={triageRequests} />} />
+            <Route path="requests/pending/:id?" element={<AdminPending requests={pendingRequests} />} />
+            <Route path="requests/production/:id?" element={<AdminProduction requests={productionRequests} />} />
+            <Route path="requests/shipping/:id?" element={<AdminShipping requests={shippingRequests} />} />
+            <Route path="requests/completed/:id?" element={<AdminCompleted requests={completedRequests} />} />
+            <Route path="requests/cancelled/:id?" element={<AdminCancelled requests={cancelledRequests} />} />
+            <Route path="requests/archived/:id?" element={<AdminArchived requests={archivedRequests} />} />
+            <Route path="requests/attention/:id?" element={<AdminAttention requests={attentionRequests} />} />
             <Route path="superadmin" element={<SuperAdminPage />} />
             <Route
               path="my-checklist-items"
-              element={<MyChecklistItems originBasePath="/admin/request" projectBasePath="/admin/project" />}
+              element={<MyChecklistItems originBasePath="/admin/requests" projectBasePath="/admin/projects" />}
             />
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
+            <Route path="volunteers/all/:uid" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
             <Route path="volunteers/contacts" element={<ContactsList />} />
             <Route path="volunteers/maintenance" element={<VolunteerMaintenance />} />
@@ -476,12 +547,14 @@ useEffect(() => {
             <Route path="email-logs" element={<AdminEmailLogsPage />} />
             <Route path="security-logs" element={<AdminSecurityLogsPage />} />
             <Route path="stats" element={<AdminStats />} />
-            <Route path="request/:id" element={<RequestDetail />} />
-            <Route path="projects" element={<ProjectsListPage />} />
-            <Route path="project/:id" element={<ProjectDetail />} />
+            <Route path="request/:id" element={<LegacyRequestRedirect />} />
+            <Route path="projects" element={<ProjectsWorkspace scope="admin" canManage />} />
+            <Route path="projects/:id" element={<ProjectsWorkspace scope="admin" canManage />} />
+            <Route path="project/:id" element={<LegacyProjectRedirect />} />
             <Route path="dashboard" element={<AdminDashboard requests={requests}/>} />
             <Route path="*" element={<Navigate to="/admin/requests" replace />} />
-          </Routes>
+            </Routes>
+          )}
         </div>
       </div>
 

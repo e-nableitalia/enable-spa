@@ -2,7 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import VolunteerRequestDetail from "./VolunteerRequestDetail";
 
-vi.mock("react-router-dom", () => ({ useParams: () => ({ id: "req1" }) }));
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useParams: () => ({ id: "req1" }),
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: "/volunteer/requests/req1", search: "", hash: "", state: null, key: "test" }),
+  };
+});
 vi.mock("../../firebase", () => ({ db: {}, functions: {} }));
 vi.mock("firebase/functions", () => ({ httpsCallable: () => vi.fn() }));
 

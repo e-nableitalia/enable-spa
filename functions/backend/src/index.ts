@@ -47,6 +47,7 @@ export { listAssignableChecklistUsers } from "./device-requests/listAssignableCh
 export { removeDeviceRequestChecklistItem } from "./device-requests/removeDeviceRequestChecklistItem";
 export { createChecklistShareLink } from "./device-requests/createChecklistShareLink";
 export { getChecklistShareStatus } from "./device-requests/getChecklistShareStatus";
+export { updateDeviceRequestChecklistTitle } from "./device-requests/updateDeviceRequestChecklistTitle";
 export { sendDocumentsEmail } from "./device-requests/sendDocumentsEmail";
 export { uploadAttachment } from "./attachments/uploadAttachment";
 export { listAttachments } from "./attachments/listAttachments";
@@ -72,6 +73,14 @@ export { removeProjectChecklistItem } from "./projects/removeProjectChecklistIte
 export { getProjectChecklist } from "./projects/getProjectChecklist";
 export { getProjectChecklistCompleteness } from "./projects/getProjectChecklistCompleteness";
 export { listAssignableProjectUsers } from "./projects/listAssignableProjectUsers";
+export { createProjectChecklistShareLink } from "./projects/createProjectChecklistShareLink";
+export { getProjectChecklistShareStatus } from "./projects/getProjectChecklistShareStatus";
+export { updateProjectChecklistMetadata } from "./projects/updateProjectChecklistMetadata";
+export { uploadProjectAttachment } from "./projects/uploadProjectAttachment";
+export { listProjectAttachments } from "./projects/listProjectAttachments";
+export { downloadProjectAttachment } from "./projects/downloadProjectAttachment";
+export { updateProjectAttachmentDescription } from "./projects/updateProjectAttachmentDescription";
+export { deleteProjectAttachment } from "./projects/deleteProjectAttachment";
 export { deployEmailTemplates } from "./emailTemplates/deployEmailTemplates";
 export { triggerFirestoreBackup } from "./backup/triggerFirestoreBackup";
 
