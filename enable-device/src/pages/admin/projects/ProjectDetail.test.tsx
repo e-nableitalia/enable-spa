@@ -5,6 +5,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ProjectDetail from "./ProjectDetail";
 
 vi.mock("../../../firebase", () => ({ db: {}, functions: {} }));
+vi.mock("../../../components/attachments/ProjectAttachments", () => ({
+  default: (props: { projectId: string; readOnly?: boolean }) => (
+    <div data-testid="project-attachments" data-project-id={props.projectId} data-read-only={props.readOnly ? "yes" : "no"} />
+  ),
+}));
 
 const callable = vi.fn();
 vi.mock("firebase/functions", () => ({
@@ -213,5 +218,21 @@ describe("ProjectDetail", () => {
     expect((await screen.findAllByText("Progetto readonly")).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Modifica" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Elimina" })).not.toBeInTheDocument();
+  });
+
+  it("in scope volunteer mantiene Allegati editabili su progetti new/active", async () => {
+    mockProject({ title: "Progetto allegati", status: "active" });
+    renderDetail("p1", "volunteer", false);
+
+    expect((await screen.findAllByText("Progetto allegati")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("project-attachments")).toHaveAttribute("data-read-only", "no");
+  });
+
+  it("rende Allegati in sola lettura quando il progetto non è modificabile", async () => {
+    mockProject({ title: "Progetto chiuso", status: "closed" });
+    renderDetail("p1", "volunteer", false);
+
+    expect((await screen.findAllByText("Progetto chiuso")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("project-attachments")).toHaveAttribute("data-read-only", "yes");
   });
 });
