@@ -6,7 +6,14 @@ import { logSecurityEvent } from "../security/securityLog";
 import { resolveDeviceRequestChecklistAccess } from "./deviceRequestChecklistAccess";
 
 const REGION = "europe-west1";
-const SHARE_BASE_URL = "https://app.e-nableitalia.it";
+
+function resolveShareBaseUrl(): string {
+  const projectId = process.env.GCLOUD_PROJECT ?? process.env.GCP_PROJECT ?? "";
+  if (projectId === "enableitalia-staging") {
+    return "https://enableitalia-staging.web.app";
+  }
+  return "https://app.e-nableitalia.it";
+}
 
 /**
  * Cloud Function callable del layer di integrazione device-requests:
@@ -90,6 +97,6 @@ export const createChecklistShareLink = onCall(
       context: { function: "createChecklistShareLink", invokeId, requestId },
     });
 
-    return { token, url: `${SHARE_BASE_URL}/checklist-share/${token}` };
+    return { token, url: `${resolveShareBaseUrl()}/checklist-share/${token}` };
   }
 );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
 import { db, functions } from "../../firebase";
@@ -128,8 +129,11 @@ export default function ProjectChecklistPanel({
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [newItem, setNewItem] = useState<NewItemForm>(EMPTY_NEW_ITEM);
   const [addingItem, setAddingItem] = useState(false);
+  const [importingItems, setImportingItems] = useState(false);
+  const [importText, setImportText] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Partial<ChecklistItem>>>({});
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [generatingShareLink, setGeneratingShareLink] = useState(false);
@@ -331,6 +335,77 @@ export default function ProjectChecklistPanel({
     }
   };
 
+  const parseImportedLines = (raw: string): string[] =>
+    raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setImportText((prev) => {
+        if (!prev.trim()) return text;
+        return `${prev}\n${text}`;
+      });
+    } catch {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: "Impossibile leggere il file selezionato.",
+        life: 4000,
+      });
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const importItems = async () => {
+    const lines = parseImportedLines(importText);
+    if (lines.length === 0) {
+      toast.current?.show({
+        severity: "warn",
+        summary: "Nessun item da importare",
+        detail: "Inserisci almeno una riga non vuota.",
+        life: 3000,
+      });
+      return;
+    }
+
+    setImportingItems(true);
+    try {
+      const fn = httpsCallable(functions, "addProjectChecklistItem");
+      for (const title of lines) {
+        await fn({
+          projectId,
+          checklistId,
+          title,
+          type: "boolean",
+        });
+      }
+      toast.current?.show({
+        severity: "success",
+        summary: "Import completato",
+        detail: `${lines.length} item importati come Sì/No.`,
+        life: 3000,
+      });
+      setShowImportDialog(false);
+      setImportText("");
+      await load();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante l'import degli item.",
+        life: 5000,
+      });
+    } finally {
+      setImportingItems(false);
+    }
+  };
+
   const generateShareLink = async () => {
     setGeneratingShareLink(true);
     try {
@@ -393,6 +468,15 @@ export default function ProjectChecklistPanel({
                 size="small"
                 className="p-button-text"
                 onClick={() => setShowAddDialog(true)}
+              />
+            )}
+            {!readOnly && (
+              <Button
+                label="Importa item"
+                icon="pi pi-upload"
+                size="small"
+                className="p-button-text"
+                onClick={() => setShowImportDialog(true)}
               />
             )}
             <Button
@@ -597,6 +681,57 @@ export default function ProjectChecklistPanel({
               style={{ width: "100%" }}
             />
           </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        header="Importa item da testo o file"
+        visible={showImportDialog}
+        onHide={() => setShowImportDialog(false)}
+        style={{ width: 520 }}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setShowImportDialog(false)}
+              disabled={importingItems}
+            />
+            <Button
+              label="Importa"
+              icon="pi pi-upload"
+              loading={importingItems}
+              disabled={parseImportedLines(importText).length === 0}
+              onClick={importItems}
+            />
+          </div>
+        }
+      >
+        <p style={{ marginTop: 0 }}>
+          Ogni riga non vuota verrà importata come un item di tipo Sì/No.
+        </p>
+        <div style={{ marginBottom: 12 }}>
+          <label htmlFor="projectChecklistImportFile" style={{ display: "block", marginBottom: 6 }}>
+            File locale (.txt)
+          </label>
+          <input
+            id="projectChecklistImportFile"
+            type="file"
+            accept=".txt,text/plain"
+            onChange={handleImportFileChange}
+          />
+        </div>
+        <div>
+          <label htmlFor="projectChecklistImportText" style={{ display: "block", marginBottom: 6 }}>
+            Oppure incolla il testo (una riga per item)
+          </label>
+          <InputTextarea
+            id="projectChecklistImportText"
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            rows={10}
+            style={{ width: "100%" }}
+          />
         </div>
       </Dialog>
 

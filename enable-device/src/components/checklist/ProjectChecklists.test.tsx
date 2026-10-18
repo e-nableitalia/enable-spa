@@ -179,7 +179,7 @@ describe("ProjectChecklists - vista a tab delle checklist di un progetto", () =>
     );
 
     await screen.findAllByText("Titolo c1");
-    await user.click(screen.getByRole("button", { name: "Elimina checklist Titolo c1" }));
+    await user.click(screen.getByRole("button", { name: "Elimina checklist Fase 1" }));
     await user.click(await screen.findByRole("button", { name: "Elimina" }));
 
     expect(callable).toHaveBeenCalledWith("deleteProjectChecklist", { projectId: "p1", checklistId: "c1" });

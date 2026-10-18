@@ -14,6 +14,7 @@ import { Tag } from "primereact/tag";
 import { Toast } from "primereact/toast";
 import RequestTimeline from "../../../components/timeline/RequestTimeline";
 import ProjectChecklists, { type ProjectChecklistRef } from "../../../components/checklist/ProjectChecklists";
+import ProjectAttachments from "../../../components/attachments/ProjectAttachments";
 
 const PROJECT_STATUSES = ["new", "active", "standby", "archived", "closed"] as const;
 const CONTENT_WRITABLE_STATUSES = new Set(["new", "active"]);
@@ -90,6 +91,7 @@ export default function ProjectDetail({ scope, canManage = false, compact = fals
   const [events, setEvents] = useState<ProjectEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatorName, setCreatorName] = useState("");
+  const [timelineCollapsed, setTimelineCollapsed] = useState(false);
 
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -361,7 +363,13 @@ export default function ProjectDetail({ scope, canManage = false, compact = fals
         </div>
       </Panel>
 
-      <Panel header="Cronologia" style={{ marginBottom: 16 }}>
+      <Panel
+        header="Cronologia"
+        style={{ marginBottom: 16 }}
+        toggleable
+        collapsed={timelineCollapsed}
+        onToggle={(e) => setTimelineCollapsed(e.value)}
+      >
         {events.length > 0 ? (
           <RequestTimeline events={events} />
         ) : (
@@ -378,6 +386,13 @@ export default function ProjectDetail({ scope, canManage = false, compact = fals
           isAdmin={canManage}
           readOnly={!canWriteContent}
           tabQueryKey="checklist"
+        />
+      </Panel>
+
+      <Panel header="Allegati" style={{ marginTop: 16 }}>
+        <ProjectAttachments
+          projectId={id as string}
+          readOnly={!contentWritable}
         />
       </Panel>
 

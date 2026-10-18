@@ -93,8 +93,11 @@ function buildRequest(data: Record<string, unknown>, uid: string | null = "admin
 }
 
 describe("createProjectChecklistShareLink", () => {
+  const originalProjectEnv = process.env.GCLOUD_PROJECT;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.GCLOUD_PROJECT = originalProjectEnv;
     shareLinksStore = {};
 
     usersStore = {
@@ -168,5 +171,17 @@ describe("createProjectChecklistShareLink", () => {
         buildRequest({ projectId: "project-1", checklistId: "other-checklist" }, "admin-1")
       )
     ).rejects.toMatchObject(new HttpsError("not-found", "Checklist not linked to this project"));
+  });
+
+  it("returns staging base URL when running on enableitalia-staging", async () => {
+    process.env.GCLOUD_PROJECT = "enableitalia-staging";
+
+    const result = await createProjectChecklistShareLink.run(
+      buildRequest({ projectId: "project-1", checklistId: CHECKLIST_ID }, "admin-1")
+    );
+
+    expect(result.url).toBe(
+      `https://enableitalia-staging.web.app/project-checklist-share/${GENERATED_TOKEN}`
+    );
   });
 });

@@ -20,9 +20,7 @@ import VolunteerProfile from "../../pages/volunteer/VolunteerProfile";
 import VolunteerAvailability from "../../pages/volunteer/VolunteerAvailability";
 import MyPrinters from "../../pages/volunteer/MyPrinters";
 import ShipmentRequestsPage from "../../pages/shipments/ShipmentRequestsPage";
-import VolunteerRequestDetail from "../../pages/volunteer/VolunteerRequestDetail";
-import ManageableRequestsPage from "../../pages/volunteer/ManageableRequestsPage";
-import ManageableRequestDetail from "../../pages/volunteer/ManageableRequestDetail";
+import ManageableRequestsWorkspace from "../../pages/volunteer/ManageableRequestsWorkspace";
 import MyChecklistItems from "../../pages/volunteer/MyChecklistItems";
 import ProjectsWorkspace from "../../pages/admin/projects/ProjectsWorkspace";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
@@ -139,14 +137,45 @@ export default function VolunteerLayout() {
             command: () => navTo("/volunteer")
         },
         {
-            label: "Richieste da gestire",
-            icon: "pi pi-list",
-            command: () => navTo("/volunteer/manageable-requests")
-        },
-        {
-            label: "Le mie richieste",
-            icon: "pi pi-inbox",
-            command: () => navTo("/volunteer/my-requests")
+            label: "Richieste",
+            icon: "pi pi-folder-open",
+            items: [
+                {
+                    label: location.pathname.startsWith("/volunteer/manageable-requests")
+                        ? "• Da gestire"
+                        : "Da gestire",
+                    icon: "pi pi-list",
+                    command: () => navTo("/volunteer/manageable-requests")
+                },
+                {
+                    label: location.pathname.startsWith("/volunteer/my-requests")
+                        ? "• Le mie richieste"
+                        : "Le mie richieste",
+                    icon: "pi pi-inbox",
+                    command: () => navTo("/volunteer/my-requests")
+                },
+                {
+                    label: location.pathname.startsWith("/volunteer/production")
+                        ? "• In produzione"
+                        : "In produzione",
+                    icon: "pi pi-cog",
+                    command: () => navTo("/volunteer/production")
+                },
+                {
+                    label: location.pathname.startsWith("/volunteer/shipping")
+                        ? "• Spedizioni"
+                        : "Spedizioni",
+                    icon: "pi pi-send",
+                    command: () => navTo("/volunteer/shipping")
+                },
+                {
+                    label: location.pathname.startsWith("/volunteer/archive")
+                        ? "• Archiviate"
+                        : "Archiviate",
+                    icon: "pi pi-folder",
+                    command: () => navTo("/volunteer/archive")
+                },
+            ]
         },
         {
             label: "To Do List",
@@ -154,24 +183,9 @@ export default function VolunteerLayout() {
             command: () => navTo("/volunteer/my-checklist-items")
         },
         {
-            label: "In produzione",
-            icon: "pi pi-cog",
-            command: () => navTo("/volunteer/production")
-        },
-        {
-            label: "Spedizioni",
-            icon: "pi pi-send",
-            command: () => navTo("/volunteer/shipping")
-        },
-        {
-            label: "Archiviate",
-            icon: "pi pi-folder",
-            command: () => navTo("/volunteer/archive")
-        },
-        {
             label: location.pathname.startsWith("/volunteer/projects")
-                ? "• Progetti speciali e iniziative"
-                : "Progetti speciali e iniziative",
+                ? "• Progetti, iniziative, eventi"
+                : "Progetti, iniziative, eventi",
             icon: "pi pi-sitemap",
             command: () => navTo("/volunteer/projects")
         },
@@ -378,13 +392,11 @@ export default function VolunteerLayout() {
                 >
                     <Routes>
                         <Route index element={<VolunteerDashboard />} />
-                        <Route path="my-requests" element={<MyRequests requests={liveRequests} />} />
-                        <Route path="manageable-requests" element={<ManageableRequestsPage />} />
-                        <Route path="manageable-requests/:id" element={<ManageableRequestDetail />} />
-                        <Route path="my-requests/:id" element={<VolunteerRequestDetail />} />
-                        <Route path="production" element={<Production requests={productionRequests} />} />
-                        <Route path="shipping" element={<Shipping requests={shippingRequests} />} />
-                        <Route path="archive" element={<Archive requests={archivedRequests} />} />
+                        <Route path="my-requests/:id?" element={<MyRequests requests={liveRequests} />} />
+                        <Route path="manageable-requests/:id?" element={<ManageableRequestsWorkspace />} />
+                        <Route path="production/:id?" element={<Production requests={productionRequests} />} />
+                        <Route path="shipping/:id?" element={<Shipping requests={shippingRequests} />} />
+                        <Route path="archive/:id?" element={<Archive requests={archivedRequests} />} />
                         <Route path="profile" element={<VolunteerProfile />} />
                         <Route path="availability" element={<VolunteerAvailability />} />
                         <Route path="my-printers" element={<MyPrinters />} />

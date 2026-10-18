@@ -162,7 +162,7 @@ export default function ProjectsListPage({
       <Toast ref={toast} />
       {!compact && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2>Progetti speciali e iniziative</h2>
+          <h2>Progetti, iniziative, eventi</h2>
           {canManage && <Button label="Crea progetto" icon="pi pi-plus" onClick={openCreateDialog} />}
         </div>
       )}
