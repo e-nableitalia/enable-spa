@@ -45,7 +45,7 @@ export const updateChecklistItem = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const { checklistId, itemId, title, type, status, assignee, quantity, notes, completed } = request.data as {
+      const { checklistId, itemId, title, type, status, assignee, quantity, notes, completed, url } = request.data as {
         checklistId?: string;
         itemId?: string;
         title?: string;
@@ -55,6 +55,7 @@ export const updateChecklistItem = onCall(
         quantity?: number | null;
         notes?: string | null;
         completed?: boolean;
+        url?: string | null;
       };
 
       if (!checklistId || typeof checklistId !== "string") {
@@ -71,8 +72,9 @@ export const updateChecklistItem = onCall(
       const hasQuantity = quantity !== undefined;
       const hasNotes = notes !== undefined;
       const hasCompleted = completed !== undefined;
+      const hasUrl = url !== undefined;
 
-      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes && !hasCompleted) {
+      if (!hasTitle && !hasType && !hasStatus && !hasAssignee && !hasQuantity && !hasNotes && !hasCompleted && !hasUrl) {
         throw new HttpsError("invalid-argument", "At least one field to update must be provided");
       }
 
@@ -80,7 +82,7 @@ export const updateChecklistItem = onCall(
         throw new HttpsError("invalid-argument", "Item title must be a non-empty string");
       }
       if (hasType && !isChecklistItemType(type)) {
-        throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
+        throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')");
       }
       if (hasStatus && !isChecklistItemStatus(status)) {
         throw new HttpsError("invalid-argument", "Invalid item status");
@@ -96,6 +98,9 @@ export const updateChecklistItem = onCall(
       }
       if (hasCompleted && typeof completed !== "boolean") {
         throw new HttpsError("invalid-argument", "Item completed must be a boolean");
+      }
+      if (hasUrl && url !== null && typeof url !== "string") {
+        throw new HttpsError("invalid-argument", "Item url must be a string");
       }
 
       const db = getFirestore();
@@ -128,6 +133,22 @@ export const updateChecklistItem = onCall(
         status: hasStatus ? (status as ChecklistItemStatus) : beforeState.status,
         completed: hasCompleted ? (completed as boolean) : beforeState.completed,
       };
+      const nextType = hasType ? (type as ChecklistItemType) : (beforeState.type as ChecklistItemType | undefined);
+      const nextQuantity = hasQuantity ? (quantity ?? null) : beforeState.quantity;
+      const normalizedUrl = typeof url === "string" ? url.trim() : url;
+      if (nextType === "purchase" && (nextQuantity === null || nextQuantity === undefined || typeof nextQuantity !== "number" || nextQuantity <= 0)) {
+        throw new HttpsError("invalid-argument", "Purchase item quantity must be a positive number");
+      }
+      if (nextType === "purchase" && typeof normalizedUrl === "string" && normalizedUrl !== "") {
+        try {
+          const parsed = new URL(normalizedUrl);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            throw new Error("invalid protocol");
+          }
+        } catch {
+          throw new HttpsError("invalid-argument", "Purchase item url must be a valid http/https URL");
+        }
+      }
 
       const updatePayload: Record<string, unknown> = {
         updatedAt: FieldValue.serverTimestamp(),
@@ -149,6 +170,9 @@ export const updateChecklistItem = onCall(
       }
       if (hasNotes) {
         updatePayload.notes = notes ?? "";
+      }
+      if (hasUrl) {
+        updatePayload.url = typeof normalizedUrl === "string" && normalizedUrl ? normalizedUrl : null;
       }
       if (!isChecklistItemComplete(beforeState) && isChecklistItemComplete(afterState)) {
         updatePayload.completionDate = FieldValue.serverTimestamp();

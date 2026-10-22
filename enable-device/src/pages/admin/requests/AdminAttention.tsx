@@ -1,10 +1,11 @@
-import AdminRequestTable from "../../../components/requests/AdminRequestTable";
+import AdminRequestsWorkspace from "./AdminRequestsWorkspace";
 
 export default function AdminAttention({ requests }: { requests: any[] }) {
   return (
-    <div style={{ padding: 20 }}>
-      <h2>⚠️ Richieste che richiedono attenzione</h2>
-      <AdminRequestTable requests={requests} />
-    </div>
+    <AdminRequestsWorkspace
+      title="⚠️ Richieste che richiedono attenzione"
+      requests={requests}
+      detailBasePath="/admin/requests/attention"
+    />
   );
 }

@@ -134,6 +134,25 @@ describe("getProjectChecklistShareStatus", () => {
     expect(result).toEqual({ percentComplete: 100, items: [], projectTitle: null });
   });
 
+  it("includes quantity/url only for purchase items", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-2"] } };
+    checklistItemsStore = {
+      "item-1": { title: "Cuscinetto 608ZZ", type: "purchase", quantity: 2, url: "https://shop.example/608zz", status: "Assegnare" },
+      "item-2": { title: "Task interno", type: "generic", status: "Assegnare" },
+    };
+
+    const result = await getProjectChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({
+      percentComplete: 0,
+      projectTitle: null,
+      items: [
+        { title: "Cuscinetto 608ZZ", completed: false, quantity: 2, url: "https://shop.example/608zz" },
+        { title: "Task interno", completed: false },
+      ],
+    });
+  });
+
   it("throws not-found for unknown tokens", async () => {
     await expect(
       getProjectChecklistShareStatus.run(buildRequest({ token: "unknown-token" }))

@@ -46,18 +46,17 @@ describe("updateProjectChecklistItem", () => {
     expect(result).toEqual({ success: true });
   });
 
-  it("rejects an inactive volunteer as assignee", async () => {
-    await expect(
-      updateProjectChecklistItem.run(
-        buildRequest(
-          { projectId: "proj-active", checklistId: "checklist-1", itemId: "item-1", assignee: "volunteer-inactive" },
-          "admin-1"
-        )
+  it("accepts free-text assignee values", async () => {
+    const result = await updateProjectChecklistItem.run(
+      buildRequest(
+        { projectId: "proj-active", checklistId: "checklist-1", itemId: "item-1", assignee: "volunteer-inactive" },
+        "admin-1"
       )
-    ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Assignee must be the Firebase uid of an admin or an active volunteer")
     );
-    expect(updateChecklistItemRunMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: true });
+    expect(updateChecklistItemRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ assignee: "volunteer-inactive" }) })
+    );
   });
 
   it("blocks update on standby/archived/closed projects", async () => {

@@ -66,7 +66,7 @@ const cases: Array<[string, string, number]> = [
 ];
 
 describe("AdminLayout - voce di menu 'To Do List' (riuso di MyChecklistItems gia' introdotta per il volontario, EA-153/EA-154/EA-156)", () => {
-  it("l'admin vede la voce 'To Do List' nel menu e la usa per raggiungere la pagina (la navigazione con originBasePath=/admin/request e' verificata in MyChecklistItems.test.tsx)", async () => {
+  it("l'admin vede la voce 'To Do List' nel menu e la usa per raggiungere la pagina (la navigazione con originBasePath=/admin/requests e' verificata in MyChecklistItems.test.tsx)", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/dashboard"]}>
         <Routes>

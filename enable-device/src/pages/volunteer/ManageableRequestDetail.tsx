@@ -41,8 +41,19 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export default function ManageableRequestDetail() {
-  const { id } = useParams();
+interface Props {
+  compact?: boolean;
+  requestId?: string;
+  listPath?: string;
+}
+
+export default function ManageableRequestDetail({
+  compact = false,
+  requestId,
+  listPath = "/volunteer/manageable-requests",
+}: Props) {
+  const { id: routeId } = useParams();
+  const id = requestId ?? routeId;
   const navigate = useNavigate();
   const [request, setRequest] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
@@ -118,7 +129,7 @@ export default function ManageableRequestDetail() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: "center", marginTop: 80 }}>
+      <div style={{ textAlign: "center", marginTop: compact ? 40 : 80 }}>
         <span className="pi pi-spin pi-spinner" style={{ fontSize: 32 }} />
       </div>
     );
@@ -126,22 +137,26 @@ export default function ManageableRequestDetail() {
 
   if (!request) {
     return (
-      <div style={{ padding: 32 }}>
+      <div style={{ padding: compact ? 16 : 32 }}>
         <p>Richiesta non trovata.</p>
-        <Button label="Torna all'elenco" icon="pi pi-arrow-left" onClick={() => navigate("/volunteer/manageable-requests")} />
+        {!compact && (
+          <Button label="Torna all'elenco" icon="pi pi-arrow-left" onClick={() => navigate(listPath)} />
+        )}
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 16px" }}>
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: compact ? "12px" : "0 16px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-        <Button
-          icon="pi pi-arrow-left"
-          className="p-button-text"
-          onClick={() => navigate("/volunteer/manageable-requests")}
-          tooltip="Torna all'elenco"
-        />
+        {!compact && (
+          <Button
+            icon="pi pi-arrow-left"
+            className="p-button-text"
+            onClick={() => navigate(listPath)}
+            tooltip="Torna all'elenco"
+          />
+        )}
         <h2 style={{ margin: 0 }}>
           Richiesta #{request.requestNumber ?? id}
         </h2>

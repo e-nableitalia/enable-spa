@@ -11,6 +11,7 @@ interface Props {
   roleUpdateLoadingUid: string | null;
   onToggleRole: (uid: string, currentRole: UserRole, name: string) => void;
   onShowDetail: (row: VolunteerAdminRow) => void;
+  selectedVolunteerUid?: string | null;
 }
 
 function boolTag(value: boolean) {
@@ -82,6 +83,7 @@ export default function VolunteerAdminList({
   roleUpdateLoadingUid,
   onToggleRole,
   onShowDetail,
+  selectedVolunteerUid = null,
 }: Readonly<Props>) {
   const mainInterestBody = (row: VolunteerAdminRow) => arrayTagPreview(row.mainInterest);
   const hasActivePrinterBody = (row: VolunteerAdminRow) => boolTag(row.hasActivePrinter);
@@ -103,6 +105,9 @@ export default function VolunteerAdminList({
       emptyMessage="Nessun volontario trovato"
       sortField="lastName"
       sortOrder={1}
+      rowClassName={(row: VolunteerAdminRow) =>
+        selectedVolunteerUid && row.uid === selectedVolunteerUid ? "p-highlight" : ""
+      }
     >
       <Column header="Dettaglio" body={detailBody} style={{ width: "100px" }} />
       <Column field="firstName" header="Nome" sortable />

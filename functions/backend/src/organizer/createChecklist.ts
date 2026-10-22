@@ -16,6 +16,7 @@ interface NormalizedInitialItem {
   type: ChecklistItemType;
   assignee: string | null;
   quantity: number | null;
+  url: string | null;
   notes: string;
   status: ChecklistItemStatus;
   completed: boolean;
@@ -29,7 +30,7 @@ export interface ChecklistOrigin {
 /**
  * Normalizza un item iniziale ricevuto dal consumer in un `ChecklistItem`
  * completo. Un item iniziale deve essere un oggetto con `title`, `type` e,
- * opzionalmente, `quantity`/`notes` (lo shorthand a stringa semplice è
+ * opzionalmente, `quantity`/`notes`/`url` (lo shorthand a stringa semplice è
  * stato rimosso: da quando `type` è obbligatorio non poteva più produrre
  * un item valido - EA-143, finding F-6).
  *
@@ -49,6 +50,7 @@ function normalizeInitialItem(input: unknown): NormalizedInitialItem {
   let title: unknown;
   let type: unknown;
   let quantity: unknown;
+  let url: unknown;
   let notes: unknown;
 
   if (typeof input === "object" && input !== null) {
@@ -56,6 +58,7 @@ function normalizeInitialItem(input: unknown): NormalizedInitialItem {
     title = raw.title;
     type = raw.type;
     quantity = raw.quantity;
+    url = raw.url;
     notes = raw.notes;
   } else {
     throw new HttpsError("invalid-argument", "Each item must be a string or an object with a title");
@@ -66,11 +69,27 @@ function normalizeInitialItem(input: unknown): NormalizedInitialItem {
   }
 
   if (!isChecklistItemType(type)) {
-    throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
+    throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')");
   }
 
   if (quantity !== undefined && quantity !== null && typeof quantity !== "number") {
     throw new HttpsError("invalid-argument", "Item quantity must be a number");
+  }
+  if (url !== undefined && url !== null && typeof url !== "string") {
+    throw new HttpsError("invalid-argument", "Item url must be a string");
+  }
+  if (type === "purchase" && (quantity === undefined || quantity === null || typeof quantity !== "number" || quantity <= 0)) {
+    throw new HttpsError("invalid-argument", "Purchase item quantity must be a positive number");
+  }
+  if (type === "purchase" && typeof url === "string" && url.trim() !== "") {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("invalid protocol");
+      }
+    } catch {
+      throw new HttpsError("invalid-argument", "Purchase item url must be a valid http/https URL");
+    }
   }
 
   if (notes !== undefined && typeof notes !== "string") {
@@ -82,6 +101,7 @@ function normalizeInitialItem(input: unknown): NormalizedInitialItem {
     type,
     assignee: null,
     quantity: (quantity as number | undefined) ?? null,
+    url: typeof url === "string" && url.trim() ? url.trim() : null,
     notes: (notes as string | undefined) ?? "",
     status: CHECKLIST_ITEM_STATUSES[0],
     completed: false,
@@ -125,7 +145,7 @@ export function normalizeOrigin(input: unknown): ChecklistOrigin | undefined {
  * - `title`: titolo della checklist.
  * - `items` (opzionale): elenco di item iniziali con cui popolare la
  *   checklist; se omesso la checklist viene creata senza item. Ogni item
- *   richiede un `type` esplicito ('boolean' | 'generic' | 'numeric').
+ *   richiede un `type` esplicito ('boolean' | 'generic' | 'numeric' | 'purchase').
  * - `origin` (opzionale): `{ type, id }` dell'entità proprietaria della
  *   checklist (es. una `deviceRequest`), per navigabilità bidirezionale
  *   (EA-137). Se omesso, il documento non contiene il campo.

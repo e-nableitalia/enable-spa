@@ -14,9 +14,17 @@ interface Props {
   requests: any[];
   onOpen: (id: string) => void;
   sessionKey?: string;
+  compact?: boolean;
+  selectedRequestId?: string | null;
 }
 
-export default function RequestTable({ requests, onOpen, sessionKey = "requestTableFilters" }: Props) {
+export default function RequestTable({
+  requests,
+  onOpen,
+  sessionKey = "requestTableFilters",
+  compact = false,
+  selectedRequestId = null,
+}: Props) {
 
   console.log("Rendering RequestTable with requests:", requests);
 
@@ -182,20 +190,22 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <MultiSelect
-          value={visibleCols}
-          options={TOGGLEABLE_COLS}
-          optionLabel="label"
-          optionValue="key"
-          onChange={(e) => handleVisibleCols(e.value)}
-          placeholder="Colonne visibili"
-          maxSelectedLabels={0}
-          selectedItemsLabel="{0} colonne visibili"
-          display="chip"
-          style={{ minWidth: 200 }}
-        />
-      </div>
+      {!compact && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <MultiSelect
+            value={visibleCols}
+            options={TOGGLEABLE_COLS}
+            optionLabel="label"
+            optionValue="key"
+            onChange={(e) => handleVisibleCols(e.value)}
+            placeholder="Colonne visibili"
+            maxSelectedLabels={0}
+            selectedItemsLabel="{0} colonne visibili"
+            display="chip"
+            style={{ minWidth: 200 }}
+          />
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
         <span className="p-input-icon-left" style={{ flex: "1 1 160px" }}>
           <i className="pi pi-search" style={{ left: "0.75rem" }} />
@@ -248,12 +258,17 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
         sortField={sortField}
         sortOrder={sortOrder}
         onSort={handleSort}
+        onRowClick={compact ? (e) => onOpen((e.data as any).id) : undefined}
+        rowClassName={(rowData) =>
+          compact && selectedRequestId && (rowData as any).id === selectedRequestId ? "p-highlight" : ""
+        }
+        size={compact ? "small" : undefined}
       >
-        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: "100px" }} />}
-        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: "110px" }} />}
-        {col("age") && <Column field="age" header="Età" sortable style={{ width: "60px" }} />}
-        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "90px" }} />}
-        {col("deviceType") && (
+        {(col("firstName") || compact) && <Column field="firstName" header="Nome" sortable style={{ width: compact ? "120px" : "100px" }} />}
+        {(col("lastName") || compact) && <Column field="lastName" header="Cognome" sortable style={{ width: compact ? "130px" : "110px" }} />}
+        {col("age") && !compact && <Column field="age" header="Età" sortable style={{ width: "60px" }} />}
+        {col("province") && !compact && <Column field="province" header="Provincia" sortable style={{ width: "90px" }} />}
+        {(col("deviceType") || compact) && (
           <Column
             field="deviceType"
             header="Device"
@@ -262,10 +277,10 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
             filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
             showFilterMenu={false}
             filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "130px" }}
+            style={{ width: compact ? "130px" : "130px" }}
           />
         )}
-        {col("status") && (
+        {(col("status") || compact) && (
           <Column
             field="status"
             header="Stato"
@@ -275,10 +290,10 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
             filterElement={makeMultiSelectFilter("status", statusOptions, "Filtra stato")}
             showFilterMenu={false}
             filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "130px" }}
+            style={{ width: compact ? "150px" : "130px" }}
           />
         )}
-        {col("publicStatus") && (
+        {(col("publicStatus") || compact) && (
           <Column
             header="Stato Pubblico"
             sortable
@@ -288,10 +303,10 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
             filterElement={makeMultiSelectFilter("publicStatus", publicStatusOptions, "Filtra stato pubblico")}
             showFilterMenu={false}
             filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "150px" }}
+            style={{ width: compact ? "160px" : "150px" }}
           />
         )}
-        {col("createdAt") && (
+        {col("createdAt") && !compact && (
           <Column
             header="Creata"
             sortable
@@ -303,7 +318,7 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
             style={{ width: "110px" }}
           />
         )}
-        {col("updatedAt") && (
+        {(col("updatedAt") || compact) && (
           <Column
             header="Modificata"
             sortable
@@ -312,10 +327,10 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
             field="updatedAt"
             dataType="date"
             filterElement={dateFilterTemplate}
-            style={{ width: "120px" }}
+            style={{ width: compact ? "150px" : "120px" }}
           />
         )}
-        <Column body={actionTemplate} style={{ width: "90px" }} />
+        {!compact && <Column body={actionTemplate} style={{ width: "90px" }} />}
       </DataTable>
     </div>
   );

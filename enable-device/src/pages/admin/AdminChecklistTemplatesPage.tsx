@@ -16,7 +16,7 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 
 // ---- Types ----
 
-const CHECKLIST_ITEM_TYPES = ["boolean", "generic", "numeric"];
+const CHECKLIST_ITEM_TYPES = ["boolean", "generic", "numeric", "purchase"];
 
 interface TemplateItemForm {
   title: string;

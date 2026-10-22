@@ -7,7 +7,7 @@ import { Dropdown } from "primereact/dropdown";
 import { Toolbar } from "primereact/toolbar";
 import { InputText } from "primereact/inputtext";
 import { Tooltip } from "primereact/tooltip";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { db, functions } from "../../firebase";
 import { doc, getDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -21,10 +21,21 @@ import type { DataTableFilterMeta } from "primereact/datatable";
 
 interface AdminRequestTableProps {
   requests: any[];
+  detailBasePath?: string;
+  compact?: boolean;
+  onOpenRequest?: (id: string) => void;
+  selectedRequestId?: string | null;
 }
 
-export default function AdminRequestTable({ requests }: AdminRequestTableProps) {
+export default function AdminRequestTable({
+  requests,
+  detailBasePath = "/admin/requests",
+  compact = false,
+  onOpenRequest,
+  selectedRequestId = null,
+}: AdminRequestTableProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useRef<Toast>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -62,7 +73,13 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
   }, [requests]);
 
   const handleOpen = (id: string) => {
-    navigate(`/admin/request/${id}`);
+    if (onOpenRequest) {
+      onOpenRequest(id);
+      return;
+    }
+    navigate(`${detailBasePath}/${id}`, {
+      state: { from: `${location.pathname}${location.search}` },
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -106,13 +123,15 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
 
   const actionTemplate = (row: any) => (
     <div style={{ display: "flex", flexDirection: "row", gap: "0.5rem" }}>
-      <Button
-        icon="pi pi-trash"
-        className="p-button-danger"
-        onClick={() => handleDelete(row.id)}
-        rounded
-        text
-      />
+      {!compact && (
+        <Button
+          icon="pi pi-trash"
+          className="p-button-danger"
+          onClick={() => handleDelete(row.id)}
+          rounded
+          text
+        />
+      )}
     </div>
   );
 
@@ -437,38 +456,40 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           />
         </div>
       </Dialog>
-      <Toolbar
-        style={{ marginBottom: 8 }}
-        start={
-          <span style={{ fontSize: 14 }}>
-            {selectedRows.length > 0
-              ? `${selectedRows.length} richieste selezionate`
-              : "Nessuna richiesta selezionata"}
-          </span>
-        }
-        end={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <MultiSelect
-              value={visibleCols}
-              options={TOGGLEABLE_COLS}
-              optionLabel="label"
-              optionValue="key"
-              onChange={(e) => handleVisibleCols(e.value)}
-              placeholder="Colonne visibili"
-              maxSelectedLabels={0}
-              selectedItemsLabel="{0} colonne visibili"
-              display="chip"
-              style={{ minWidth: 200 }}
-            />
-            <Button
-              label="Bulk Change"
-              icon="pi pi-pencil"
-              onClick={() => setShowBulkDialog(true)}
-              disabled={selectedRows.length === 0}
-            />
-          </div>
-        }
-      />
+      {!compact && (
+        <Toolbar
+          style={{ marginBottom: 8 }}
+          start={
+            <span style={{ fontSize: 14 }}>
+              {selectedRows.length > 0
+                ? `${selectedRows.length} richieste selezionate`
+                : "Nessuna richiesta selezionata"}
+            </span>
+          }
+          end={
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <MultiSelect
+                value={visibleCols}
+                options={TOGGLEABLE_COLS}
+                optionLabel="label"
+                optionValue="key"
+                onChange={(e) => handleVisibleCols(e.value)}
+                placeholder="Colonne visibili"
+                maxSelectedLabels={0}
+                selectedItemsLabel="{0} colonne visibili"
+                display="chip"
+                style={{ minWidth: 200 }}
+              />
+              <Button
+                label="Bulk Change"
+                icon="pi pi-pencil"
+                onClick={() => setShowBulkDialog(true)}
+                disabled={selectedRows.length === 0}
+              />
+            </div>
+          }
+        />
+      )}
       {/* Search bar testo libero */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
         <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
@@ -480,7 +501,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             style={{ paddingLeft: "2rem", width: "100%" }}
           />
         </span>
-        {([
+        {!compact && ([
           { field: "requestNumber",          placeholder: "Seq" },
           { field: "firstName",              placeholder: "Nome" },
           { field: "lastName",               placeholder: "Cognome" },
@@ -496,7 +517,8 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             />
           </span>
         ))}
-        <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
+        {!compact && (
+          <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
           <i className="pi pi-search" style={{ left: "0.75rem" }} />
           <InputText
             value={(filters.age as any)?.value ?? ""}
@@ -505,8 +527,9 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             type="number"
             style={{ paddingLeft: "2rem", width: "100%" }}
           />
-        </span>
-        {([
+          </span>
+        )}
+        {!compact && ([
           { field: "province",               placeholder: "Provincia" },
           { field: "assignedVolunteersText", placeholder: "Volontari" },
         ] as { field: string; placeholder: string }[]).map(({ field, placeholder }) => (
@@ -534,13 +557,20 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
         sortField={sortField}
         sortOrder={sortOrder}
         onSort={handleSort}
-        selection={selectedRows}
-        onSelectionChange={e => setSelectedRows(e.value as RequestRow[])}
+        selection={compact ? undefined : selectedRows}
+        onSelectionChange={compact ? undefined : (e => setSelectedRows(e.value as RequestRow[]))}
+        onRowClick={compact ? (e) => handleOpen((e.data as RequestRow).id) : undefined}
         dataKey="id"
         scrollable
         scrollHeight="flex"
+        size={compact ? "small" : undefined}
+        rowClassName={(rowData) =>
+          compact && selectedRequestId && (rowData as RequestRow).id === selectedRequestId
+            ? "p-highlight"
+            : ""
+        }
       >
-        <Column selectionMode="multiple" style={{ width: "3rem" }} />
+        {!compact && <Column selectionMode="multiple" style={{ width: "3rem" }} />}
         <Column
           body={(row) => (
         <div style={{ display: "flex", flexDirection: "row", gap: "0.5rem" }}>
@@ -552,27 +582,29 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             rounded
             text
           />
-          <Button
-            icon="pi pi-copy"
-            tooltip="Copia ID"
-            tooltipOptions={{ position: "top" }}
-            rounded
-            text
-            onClick={async () => {
-              await navigator.clipboard.writeText(row.id);
-              toast.current?.show({
-                severity: "info",
-                summary: "ID copiato",
-                detail: `ID ${row.id} copiato negli appunti.`,
-                life: 2000,
-              });
-            }}
-          />
+          {!compact && (
+            <Button
+              icon="pi pi-copy"
+              tooltip="Copia ID"
+              tooltipOptions={{ position: "top" }}
+              rounded
+              text
+              onClick={async () => {
+                await navigator.clipboard.writeText(row.id);
+                toast.current?.show({
+                  severity: "info",
+                  summary: "ID copiato",
+                  detail: `ID ${row.id} copiato negli appunti.`,
+                  life: 2000,
+                });
+              }}
+            />
+          )}
         </div>
           )}
           style={{ width: "100px" }}
         />
-        <Column field="seqId" header="ID" sortable style={{ width: "55px" }} />
+        <Column field="seqId" header="ID" sortable style={{ width: "65px" }} />
         <Column
           field="requiresAttention"
           header="⚠️ Attenzione"
@@ -603,11 +635,11 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           }
           style={{ width: "90px", textAlign: "center" }}
         />
-        {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: "65px" }} />}
-        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: "90px" }} />}
-        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: "100px" }} />}
-        {col("recipient") && <Column field="recipient" header="Destinatario" sortable style={{ width: "110px" }} />}
-        {col("age") && <Column field="age" header="Età" sortable style={{ width: "55px" }} />}
+        {col("requestNumber") && !compact && <Column field="requestNumber" header="Seq" sortable style={{ width: "65px" }} />}
+        {(col("firstName") || compact) && <Column field="firstName" header="Nome" sortable style={{ width: compact ? "120px" : "90px" }} />}
+        {(col("lastName") || compact) && <Column field="lastName" header="Cognome" sortable style={{ width: compact ? "130px" : "100px" }} />}
+        {col("recipient") && !compact && <Column field="recipient" header="Destinatario" sortable style={{ width: "110px" }} />}
+        {col("age") && !compact && <Column field="age" header="Età" sortable style={{ width: "55px" }} />}
         {col("gender") && (
           <Column
             field="gender"
@@ -620,7 +652,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             style={{ width: "90px" }}
           />
         )}
-        {col("amputationType") && (
+        {col("amputationType") && !compact && (
           <Column
             field="amputationType"
             header="Tipo amputazione"
@@ -635,7 +667,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             style={{ width: "120px" }}
           />
         )}
-        {col("deviceType") && (
+        {(col("deviceType") || compact) && (
           <Column
             field="deviceType"
             header="Device"
@@ -644,10 +676,10 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
             showFilterMenu={false}
             filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "110px" }}
+            style={{ width: compact ? "130px" : "110px" }}
           />
         )}
-        {col("status") && (
+        {(col("status") || compact) && (
           <Column
             field="status"
             header="Stato"
@@ -658,10 +690,10 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             filterField="status"
             filterMatchMode={FilterMatchMode.IN}
             body={statusTemplate}
-            style={{ width: "130px" }}
+            style={{ width: compact ? "150px" : "130px" }}
           />
         )}
-        {col("publicStatus") && (
+        {(col("publicStatus") || compact) && (
           <Column
             header="Stato Pubblico"
             body={publicStatusTemplate}
@@ -686,11 +718,11 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             )}
             showFilterMenu={false}
             filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "140px" }}
+            style={{ width: compact ? "160px" : "140px" }}
           />
         )}
-        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "75px" }} />}
-        {col("assignedVolunteersText") && (
+        {col("province") && !compact && <Column field="province" header="Provincia" sortable style={{ width: "75px" }} />}
+        {col("assignedVolunteersText") && !compact && (
           <Column
             field="assignedVolunteersText"
             header="Volontari"
@@ -699,7 +731,7 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             style={{ width: "130px" }}
           />
         )}
-        <Column
+        {!compact && <Column
           field="createdAt"
           header="Creato il"
           body={(row) => dateTemplate(row, "createdAt")}
@@ -708,8 +740,8 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
           filterElement={dateFilterTemplate}
           sortable
           style={{ width: "110px" }}
-        />
-        {col("updatedAt") && (
+        />}
+        {(col("updatedAt") || compact) && (
           <Column
             field="updatedAt"
             header="Aggiornato il"
@@ -718,10 +750,10 @@ export default function AdminRequestTable({ requests }: AdminRequestTableProps) 
             dataType="date"
             filterElement={dateFilterTemplate}
             sortable
-            style={{ width: "120px" }}
+            style={{ width: compact ? "150px" : "120px" }}
           />
         )}
-        <Column body={actionTemplate} style={{ width: "80px" }} />
+        {!compact && <Column body={actionTemplate} style={{ width: "80px" }} />}
       </DataTable>
       {/* Tooltip component for PrimeReact */}
       <span style={{ display: "none" }}>

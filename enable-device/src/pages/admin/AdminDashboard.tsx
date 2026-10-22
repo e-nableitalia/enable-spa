@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
 
 import { doc, getDoc } from "firebase/firestore";
@@ -168,6 +169,8 @@ export default function AdminDashboard({
 }: {
   requests: Request[];
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [cards, setCards] = useState<KanbanCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -446,12 +449,18 @@ export default function AdminDashboard({
                     {column.cards.map((card) => (
                       <div key={card.id} style={{ padding: 6 }}>
                         <Card
-                style={{
-                  borderRadius: 12,
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-                  border: "none",
-                  maxWidth: "100%",
-                }}
+                          style={{
+                            borderRadius: 12,
+                            boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                            border: "none",
+                            maxWidth: "100%",
+                            cursor: "pointer",
+                          }}
+                          onClick={() =>
+                            navigate(`/admin/requests/${card.id}`, {
+                              state: { from: location.pathname },
+                            })
+                          }
                         >
                           <div style={{ fontWeight: 600, marginBottom: 8 }}>
                             {card.title}

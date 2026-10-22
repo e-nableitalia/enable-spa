@@ -10,12 +10,16 @@ const REGION = "europe-west1";
 
 interface ShareChecklistItemLike extends ChecklistItemLike {
   title?: string;
+  quantity?: number | null;
+  url?: string | null;
+  type?: string | null;
 }
 
 /**
  * Cloud Function callable pubblica: risolve un token di condivisione
  * checklist progetto e restituisce solo avanzamento percentuale + elenco
- * semplificato item (title/completed), senza dettagli interni.
+ * semplificato item. Include quantity/url quando presenti per il
+ * rendering pubblico "quantita' + titolo con hyperlink".
  */
 export const getProjectChecklistShareStatus = onCall(
   { region: REGION },
@@ -63,10 +67,24 @@ export const getProjectChecklistShareStatus = onCall(
       const totalItems = items.length;
       const completedItems = items.filter(isChecklistItemComplete).length;
       const percentComplete = totalItems === 0 ? 100 : Math.round((completedItems / totalItems) * 100);
-      const itemsSummary = items.map((item) => ({
-        title: typeof item.title === "string" ? item.title : "",
-        completed: isChecklistItemComplete(item),
-      }));
+      const itemsSummary = items.map((item) => {
+        const summary: {
+          title: string;
+          completed: boolean;
+          quantity?: number;
+          url?: string;
+        } = {
+          title: typeof item.title === "string" ? item.title : "",
+          completed: isChecklistItemComplete(item),
+        };
+        if (typeof item.quantity === "number") {
+          summary.quantity = item.quantity;
+        }
+        if (typeof item.url === "string" && item.url.trim()) {
+          summary.url = item.url.trim();
+        }
+        return summary;
+      });
 
       await logSecurityEvent({
         type: "system",

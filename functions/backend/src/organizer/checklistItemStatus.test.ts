@@ -31,14 +31,14 @@ describe("isChecklistItemStatus", () => {
 });
 
 describe("CHECKLIST_ITEM_TYPES", () => {
-  // Scenario 2: il modulo condiviso espone i 3 type ammessi dal futuro discriminante
-  it("exposes exactly 'boolean' | 'generic' | 'numeric'", () => {
-    expect(CHECKLIST_ITEM_TYPES).toEqual(["boolean", "generic", "numeric"]);
+  // Scenario 2: il modulo condiviso espone i type ammessi dal discriminante
+  it("exposes exactly 'boolean' | 'generic' | 'numeric' | 'purchase'", () => {
+    expect(CHECKLIST_ITEM_TYPES).toEqual(["boolean", "generic", "numeric", "purchase"]);
   });
 });
 
 describe("isChecklistItemType", () => {
-  // Scenario 2: la funzione di validazione del type è riusabile e accetta i 3 valori ammessi
+  // Scenario 2: la funzione di validazione del type è riusabile e accetta i valori ammessi
   it.each(CHECKLIST_ITEM_TYPES)("returns true for the allowed type '%s'", (type) => {
     expect(isChecklistItemType(type)).toBe(true);
   });
