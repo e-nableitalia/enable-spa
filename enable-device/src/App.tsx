@@ -9,6 +9,7 @@ const CompleteRegistration = lazy(() => import("./pages/CompleteRegistration"));
 const SetPassword         = lazy(() => import("./pages/SetPassword"));
 const Home                = lazy(() => import("./pages/Home"));
 const RequestDevice       = lazy(() => import("./pages/RequestDevice"));
+const ContactRequest      = lazy(() => import("./pages/ContactRequest"));
 const VolunteerConsentPage = lazy(() => import("./pages/VolunteerConsentPage"));
 const ChecklistShareStatus = lazy(() => import("./pages/ChecklistShareStatus"));
 const ProjectChecklistShareStatus = lazy(() => import("./pages/ProjectChecklistShareStatus"));
@@ -28,6 +29,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/request-device" element={<RequestDevice />} />
+          <Route path="/contatti" element={<ContactRequest />} />
           <Route path="/admin/*" element={<AdminLayout />} />
           <Route path="/volunteer/*" element={<VolunteerLayout />} />
           <Route path="/register" element={<Register />} />
