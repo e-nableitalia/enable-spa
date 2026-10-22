@@ -167,6 +167,7 @@
 .pub-check { display: flex; align-items: flex-start; gap: 10px; }
 .pub-check label { font-weight: 400; font-size: 0.95rem; color: var(--pub-muted); }
 .pub-legal { font-size: 0.9rem !important; line-height: 1.6; }
+.pub-hint { margin: 0; font-size: 0.9rem; color: var(--pub-muted); }
 
 .pub-success {
   margin-top: 40px;

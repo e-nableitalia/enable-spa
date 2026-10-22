@@ -7,7 +7,7 @@ import { Dialog } from "primereact/dialog";
 import { Sidebar } from "primereact/sidebar";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import type { User } from "firebase/auth";
-import { collection, query, orderBy, onSnapshot, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, getDocs, doc, getDoc, where } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
 import AdminAll from "../../pages/admin/requests/AdminAll";
@@ -62,6 +62,7 @@ export default function AdminLayout() {
   const [showInfo, setShowInfo] = useState(false);
   const [volunteers, setVolunteers] = useState<AdminRecord[]>([]);
   const [volunteersLoading, setVolunteersLoading] = useState(true);
+  const [newContactsCount, setNewContactsCount] = useState(0);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -103,6 +104,7 @@ export default function AdminLayout() {
 
 useEffect(() => {
   let unsubRequests: (() => void) | null = null;
+  let unsubNewContacts: (() => void) | null = null;
 
   const unsubAuth = onAuthStateChanged(auth, async (u) => {
     if (!u) {
@@ -158,6 +160,12 @@ useEffect(() => {
       setLoading(false);
     });
 
+    // Contatti nuovi dalla form pubblica /contatti, per il contatore nel menu
+    unsubNewContacts = onSnapshot(
+      query(collection(db, "contacts"), where("status", "==", "new")),
+      (snapshot) => setNewContactsCount(snapshot.docs.filter((d) => d.data().deleted !== true).length)
+    );
+
     // Volunteers fetch
     await loadVolunteers();
   });
@@ -165,6 +173,7 @@ useEffect(() => {
   return () => {
     unsubAuth();
     if (unsubRequests) unsubRequests();
+    if (unsubNewContacts) unsubNewContacts();
   };
 }, [navigate, loadVolunteers]);
 
@@ -330,11 +339,6 @@ useEffect(() => {
           command: () => navTo("/admin/volunteers/pending"),
         },
         {
-          label: `Contatti`,
-          icon: "pi pi-address-book", // elenco contatti
-          command: () => navTo("/admin/volunteers/contacts"),
-        },
-        {
           label: "Manutenzione Volontari",
           icon: "pi pi-wrench", // manutenzione volontari
           command: () => navTo("/admin/volunteers/maintenance"),
@@ -345,6 +349,11 @@ useEffect(() => {
           command: () => navTo("/volunteer"),
         },        
       ],
+    },
+    {
+      label: menuLabel(`Contatti (${newContactsCount} nuovi)`, location.pathname.startsWith("/admin/contacts")),
+      icon: "pi pi-envelope",
+      command: () => navTo("/admin/contacts"),
     },
     {
       label: "Richieste spedizioni",
@@ -539,7 +548,8 @@ useEffect(() => {
             <Route path="volunteers/all" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/all/:uid" element={<AdminVolunteers volunteers={volunteers} onRefresh={loadVolunteers} />} />
             <Route path="volunteers/pending" element={<PendingVolunteers volunteers={pendingVolunteers} />} />
-            <Route path="volunteers/contacts" element={<ContactsList />} />
+            <Route path="contacts" element={<ContactsList />} />
+            <Route path="volunteers/contacts" element={<Navigate to="/admin/contacts" replace />} />
             <Route path="volunteers/maintenance" element={<VolunteerMaintenance />} />
             <Route path="shipments" element={<ShipmentRequestsPage />} />
             <Route path="messages" element={<AdminMessagesPage />} />

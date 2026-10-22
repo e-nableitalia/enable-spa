@@ -44,6 +44,7 @@ vi.mock("firebase/firestore", () => ({
   collection: (_db: unknown, path: string) => ({ __path: path }),
   query: (ref: unknown) => ref,
   orderBy: () => undefined,
+  where: () => undefined,
   onSnapshot: (ref: { __path: string }, cb: (snap: { docs: typeof requestDocs }) => void) => {
     if (ref.__path === "deviceRequests") {
       cb({ docs: requestDocs });

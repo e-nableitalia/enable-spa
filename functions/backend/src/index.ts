@@ -3,6 +3,7 @@ import {initializeApp} from "firebase-admin/app";
 initializeApp();
 
 export {createDeviceRequest} from "./device/createDeviceRequest";
+export { createContactRequest } from "./contact/createContactRequest";
 export {createDeviceRequestInternal} from "./device/createDeviceRequestInternal";
 export {changeStatus} from "./device/changeStatus";
 export {archiveDeviceRequest, restoreDeviceRequest} from "./device/archiveDeviceRequest";
