@@ -26,3 +26,5 @@ cd functions/backend && npm test
 
 Lo script `test` di `functions/backend/package.json` lancia `jest`; i test del
 modulo sono in `shipmentRequests.test.ts` (helper in `testSupport.ts`).
+
+Vedi anche il ciclo di vita in `shipmentRequests.ts`.
