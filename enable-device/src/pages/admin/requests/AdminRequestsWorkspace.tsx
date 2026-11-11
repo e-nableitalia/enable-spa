@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import AdminRequestTable from "../../../components/requests/AdminRequestTable";
 import RequestDetail from "./RequestDetail";
+import { useRequestsViewMode } from "../../../components/requests/useRequestsViewMode";
+import RequestsViewModeToggle from "../../../components/requests/RequestsViewModeToggle";
 
 interface Props {
   title: string;
@@ -9,20 +11,6 @@ interface Props {
   detailBasePath: string;
   description?: string;
   descriptionVariant?: "default" | "warning";
-}
-
-function useIsDesktop(minWidth = 1200): boolean {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth >= minWidth : false
-  );
-
-  useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= minWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [minWidth]);
-
-  return isDesktop;
 }
 
 export default function AdminRequestsWorkspace({
@@ -33,9 +21,9 @@ export default function AdminRequestsWorkspace({
   descriptionVariant = "default",
 }: Props) {
   const { id } = useParams();
-  const isDesktop = useIsDesktop();
+  const { isDesktop, viewMode, setViewMode, splitView } = useRequestsViewMode();
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(id ?? null);
-  const hasDetail = Boolean(isDesktop ? selectedRequestId : id);
+  const hasDetail = Boolean(splitView ? selectedRequestId : id);
 
   useEffect(() => {
     if (id) {
@@ -46,7 +34,10 @@ export default function AdminRequestsWorkspace({
   const list = useMemo(
     () => (
       <div style={{ padding: 20 }}>
-        <h2>{title}</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ margin: "0 0 12px" }}>{title}</h2>
+          {isDesktop && <RequestsViewModeToggle mode={viewMode} onChange={setViewMode} />}
+        </div>
         {description && (
           <p
             style={{
@@ -65,16 +56,16 @@ export default function AdminRequestsWorkspace({
         <AdminRequestTable
           requests={requests}
           detailBasePath={detailBasePath}
-          compact={isDesktop}
-          onOpenRequest={isDesktop ? (requestId) => setSelectedRequestId(requestId) : undefined}
+          compact={splitView}
+          onOpenRequest={splitView ? (requestId) => setSelectedRequestId(requestId) : undefined}
           selectedRequestId={selectedRequestId}
         />
       </div>
     ),
-    [description, descriptionVariant, detailBasePath, isDesktop, requests, selectedRequestId, title]
+    [description, descriptionVariant, detailBasePath, isDesktop, requests, selectedRequestId, setViewMode, splitView, title, viewMode]
   );
 
-  if (!isDesktop) {
+  if (!splitView) {
     if (!hasDetail) return list;
     return <RequestDetail listPath={detailBasePath} />;
   }
@@ -104,10 +95,10 @@ export default function AdminRequestsWorkspace({
       >
         {hasDetail ? (
           <RequestDetail
-            key={isDesktop ? selectedRequestId ?? id : id}
+            key={selectedRequestId ?? id}
             compact
             listPath={detailBasePath}
-            requestId={isDesktop ? selectedRequestId ?? undefined : undefined}
+            requestId={selectedRequestId ?? undefined}
           />
         ) : (
           <div style={{ padding: 24, color: "#6b7280" }}>

@@ -7,10 +7,52 @@ import { useState, useRef } from "react";
 import { Toast } from "primereact/toast";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../firebase";
+import type { VolunteerData } from "../../../shared/types/volunteerData";
+import VolunteerAdminDetailDialog from "./VolunteerAdminDetailDialog";
+import {
+  fallbackVolunteerDataFromLegacy,
+  normalizeVolunteerForAdminRow,
+  type VolunteerAdminRow,
+} from "./volunteerAdminHelpers";
+
+interface ListVolunteerAdminDataResponse {
+  volunteers: VolunteerData[];
+}
 
 export default function PendingVolunteers({ volunteers }: { volunteers: any[] }) {
   const [selectedVolunteers, setSelectedVolunteers] = useState<any[]>([]);
   const toast = useRef<any>(null);
+  const [detailRow, setDetailRow] = useState<VolunteerAdminRow | null>(null);
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
+  // Dati estesi (profilo, competenze, stampanti) caricati una sola volta alla prima apertura
+  const extendedData = useRef<VolunteerData[] | null>(null);
+
+  const openDetail = async (row: any) => {
+    setDetailLoadingId(row.id);
+    try {
+      if (!extendedData.current) {
+        const fn = httpsCallable<undefined, ListVolunteerAdminDataResponse>(functions, "listVolunteerAdminData");
+        const result = await fn();
+        extendedData.current = result.data.volunteers ?? [];
+      }
+      const found = extendedData.current.find((v) => v.uid === row.id);
+      if (!found) throw new Error("Volontario non trovato nei dati estesi");
+      setDetailRow(normalizeVolunteerForAdminRow(found));
+    } catch (err) {
+      // Fallback: vista ridotta con i dati già presenti in lista
+      console.error("Errore caricamento dettaglio volontario:", err);
+      const [fallback] = fallbackVolunteerDataFromLegacy([row]);
+      setDetailRow(normalizeVolunteerForAdminRow(fallback));
+      toast.current?.show({
+        severity: "warn",
+        summary: "Dettaglio ridotto",
+        detail: "Impossibile caricare i dati estesi: mostro solo i dati disponibili in lista.",
+        life: 4000,
+      });
+    } finally {
+      setDetailLoadingId(null);
+    }
+  };
 
   const tableData = volunteers.map((u) => ({
     ...u,
@@ -71,6 +113,7 @@ export default function PendingVolunteers({ volunteers }: { volunteers: any[] })
   return (
     <div style={{ padding: 20 }}>
       <Toast ref={toast} />
+      <VolunteerAdminDetailDialog visible={detailRow !== null} volunteer={detailRow} onHide={() => setDetailRow(null)} />
       <h2>Volontari in attesa di attivazione</h2>
       <Toolbar left={leftToolbarTemplate} />
       <DataTable
@@ -84,6 +127,24 @@ export default function PendingVolunteers({ volunteers }: { volunteers: any[] })
         dataKey="id"
       >
         <Column selectionMode="multiple" headerStyle={{ width: '3em' }} />
+        <Column
+          header="Dettaglio"
+          style={{ width: "90px" }}
+          body={(row) => (
+            <Button
+              icon="pi pi-eye"
+              className="p-button-sm p-button-outlined"
+              tooltip="Apri dettaglio"
+              tooltipOptions={{ position: "top" }}
+              aria-label="Apri dettaglio"
+              loading={detailLoadingId === row.id}
+              onClick={(e) => {
+                e.stopPropagation(); // non alterare la selezione della riga
+                void openDetail(row);
+              }}
+            />
+          )}
+        />
         <Column field="firstName" header="Nome" filter />
         <Column field="lastName" header="Cognome" filter />
         <Column field="email" header="Email" filter />

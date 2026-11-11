@@ -2,26 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import RequestTable from "../../components/requests/RequestTable";
 import VolunteerRequestDetail from "./VolunteerRequestDetail";
+import { useRequestsViewMode } from "../../components/requests/useRequestsViewMode";
+import RequestsViewModeToggle from "../../components/requests/RequestsViewModeToggle";
 
 interface Props {
   title: string;
   requests: any[];
   detailBasePath: string;
   description?: string;
-}
-
-function useIsDesktop(minWidth = 1200): boolean {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth >= minWidth : false
-  );
-
-  useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= minWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [minWidth]);
-
-  return isDesktop;
 }
 
 export default function VolunteerRequestsWorkspace({
@@ -32,9 +20,9 @@ export default function VolunteerRequestsWorkspace({
 }: Props) {
   const navigate = useNavigate();
   const { id } = useParams();
-  const isDesktop = useIsDesktop();
+  const { isDesktop, viewMode, setViewMode, splitView } = useRequestsViewMode();
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(id ?? null);
-  const hasDetail = Boolean(isDesktop ? selectedRequestId : id);
+  const hasDetail = Boolean(splitView ? selectedRequestId : id);
 
   useEffect(() => {
     if (id) setSelectedRequestId(id);
@@ -43,23 +31,26 @@ export default function VolunteerRequestsWorkspace({
   const list = useMemo(
     () => (
       <div style={{ padding: 20 }}>
-        <h2>{title} ({requests.length})</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ margin: "0 0 12px" }}>{title} ({requests.length})</h2>
+          {isDesktop && <RequestsViewModeToggle mode={viewMode} onChange={setViewMode} />}
+        </div>
         {description && <p style={{ color: "#6b7280", marginTop: 0 }}>{description}</p>}
         <RequestTable
           requests={requests}
           onOpen={(requestId) =>
-            isDesktop ? setSelectedRequestId(requestId) : navigate(`${detailBasePath}/${requestId}`)
+            splitView ? setSelectedRequestId(requestId) : navigate(`${detailBasePath}/${requestId}`)
           }
           sessionKey={`volunteerRequestsTable:${detailBasePath}`}
-          compact={isDesktop}
+          compact={splitView}
           selectedRequestId={selectedRequestId}
         />
       </div>
     ),
-    [description, detailBasePath, isDesktop, navigate, requests, selectedRequestId, title]
+    [description, detailBasePath, isDesktop, navigate, requests, selectedRequestId, setViewMode, splitView, title, viewMode]
   );
 
-  if (!isDesktop) {
+  if (!splitView) {
     if (!hasDetail) return list;
     return <VolunteerRequestDetail listPath={detailBasePath} />;
   }
