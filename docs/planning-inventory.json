@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-11T22:35:53.528Z",
+  "generated_at": "2026-11-11T22:38:07.197Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -239,6 +239,55 @@
       "domains": [
         "process-organizer-core",
         "special-projects-initiatives"
+      ]
+    },
+    {
+      "id": "ea-161-device-requests-attachments-integration",
+      "type": "implementation_request",
+      "source_path": "requests/ea-161-device-requests-attachments-integration.md",
+      "created_at": "2026-11-11T22:38:01.440Z",
+      "updated_at": "2026-11-11T22:38:06.195Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "device-requests",
+        "attachments"
+      ]
+    },
+    {
+      "id": "ea-169-projects-full-implementation",
+      "type": "implementation_request",
+      "source_path": "requests/ea-169-projects-full-implementation.md",
+      "created_at": "2026-11-11T22:38:02.355Z",
+      "updated_at": "2026-11-11T22:38:06.557Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "special-projects-initiatives"
+      ]
+    },
+    {
+      "id": "ea-171-super-admin-implementation",
+      "type": "implementation_request",
+      "source_path": "requests/ea-171-super-admin-implementation.md",
+      "created_at": "2026-11-11T22:38:03.241Z",
+      "updated_at": "2026-11-11T22:38:06.962Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "super-admin"
+      ]
+    },
+    {
+      "id": "super-admin-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/super-admin-epic-draft.md",
+      "created_at": "2026-11-11T22:38:04.003Z",
+      "updated_at": "2026-11-11T22:38:07.197Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "super-admin"
       ]
     }
   ]
