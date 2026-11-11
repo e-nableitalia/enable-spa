@@ -31,10 +31,12 @@ export default function VolunteerRequestsWorkspace({
   const list = useMemo(
     () => (
       <div style={{ padding: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <h2 style={{ margin: "0 0 12px" }}>{title} ({requests.length})</h2>
-          {isDesktop && <RequestsViewModeToggle mode={viewMode} onChange={setViewMode} />}
-        </div>
+        <h2 style={{ margin: "0 0 8px" }}>{title} ({requests.length})</h2>
+        {isDesktop && (
+          <div style={{ marginBottom: 12 }}>
+            <RequestsViewModeToggle mode={viewMode} onChange={setViewMode} />
+          </div>
+        )}
         {description && <p style={{ color: "#6b7280", marginTop: 0 }}>{description}</p>}
         <RequestTable
           requests={requests}
