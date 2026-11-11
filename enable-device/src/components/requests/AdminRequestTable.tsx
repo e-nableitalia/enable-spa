@@ -2,10 +2,8 @@ import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
 import { Tag } from "primereact/tag";
-import { Calendar } from "primereact/calendar";
 import { Dropdown } from "primereact/dropdown";
 import { Toolbar } from "primereact/toolbar";
-import { InputText } from "primereact/inputtext";
 import { Tooltip } from "primereact/tooltip";
 import { useLocation, useNavigate } from "react-router-dom";
 import { db, functions } from "../../firebase";
@@ -14,10 +12,58 @@ import { httpsCallable } from "firebase/functions";
 import { useRef, useState, useEffect, useMemo } from "react";
 import { Toast } from "primereact/toast";
 import { Dialog } from "primereact/dialog";
-import { MultiSelect } from "primereact/multiselect";
 import { REQUEST_STATUSES, REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, shortAmputationType, getPublicStatusGroup } from "../../helpers/requestStatus";
-import { FilterMatchMode } from "primereact/api";
-import type { DataTableFilterMeta } from "primereact/datatable";
+import RequestFiltersPanel from "./RequestFiltersPanel";
+import { applyRequestFilters, useRequestListFilters, useVisibleColumns } from "./requestListFilters";
+
+// Chiavi di sessionStorage condivise da tutte le viste admin: i filtri e le colonne
+// restano quando si cambia pagina o vista delle richieste.
+const FILTERS_KEY = "adminRequestListFilters";
+const COLS_KEY = "adminRequestTableCols";
+
+const TOGGLEABLE_COLS = [
+  { key: "requestNumber",          label: "Seq" },
+  { key: "firstName",              label: "Nome" },
+  { key: "lastName",               label: "Cognome" },
+  { key: "recipient",              label: "Destinatario" },
+  { key: "age",                    label: "Età" },
+  { key: "gender",                 label: "Genere" },
+  { key: "amputationType",         label: "Tipo amputazione" },
+  { key: "deviceType",             label: "Device" },
+  { key: "status",                 label: "Stato" },
+  { key: "publicStatus",           label: "Stato Pubblico" },
+  { key: "province",               label: "Provincia" },
+  { key: "assignedVolunteersText", label: "Volontari" },
+  { key: "createdAt",              label: "Creato il" },
+  { key: "updatedAt",              label: "Aggiornato il" },
+];
+const ALL_COL_KEYS = TOGGLEABLE_COLS.map((c) => c.key);
+// Con il dettaglio affiancato la lista parte con meno colonne (modificabili dall'utente)
+const COMPACT_DEFAULT_COLS = ["firstName", "lastName", "deviceType", "status", "publicStatus", "updatedAt"];
+
+// Larghezze in px: usate sia per le colonne sia per il min-width della tabella (scroll orizzontale)
+const COLUMN_WIDTHS: Record<string, number> = {
+  select: 48,
+  open: 100,
+  openCompact: 60,
+  seqId: 65,
+  attention: 90,
+  rowActions: 80,
+  requestNumber: 65,
+  firstName: 120,
+  lastName: 130,
+  recipient: 120,
+  age: 60,
+  gender: 90,
+  amputationType: 130,
+  deviceType: 130,
+  status: 150,
+  publicStatus: 170,
+  province: 90,
+  assignedVolunteersText: 170,
+  createdAt: 150,
+  updatedAt: 150,
+};
 
 interface AdminRequestTableProps {
   requests: any[];
@@ -195,100 +241,17 @@ export default function AdminRequestTable({
     return date ? date.toLocaleString() : "-";
   };
 
-  const dateFilterTemplate = (options: any) => (
-    <Calendar
-      value={options.value}
-      onChange={(e) => options.filterCallback(e.value, options.index)}
-      dateFormat="dd/mm/yy"
-      placeholder="gg/mm/aaaa"
-      mask="99/99/9999"
-      showIcon
-    />
-  );
-
-  // Stato dei filtri — persistito in sessionStorage per sopravvivere alla navigazione
-  const SESSION_KEY = "adminRequestTableFilters";
-
-  const defaultFilters: DataTableFilterMeta = {
-    status: { value: null, matchMode: FilterMatchMode.IN },
-    firstName: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    lastName: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    age: { value: null, matchMode: FilterMatchMode.EQUALS },
-    gender: { value: null, matchMode: FilterMatchMode.IN },
-    amputationType: { value: null, matchMode: FilterMatchMode.IN },
-    deviceType: { value: null, matchMode: FilterMatchMode.IN },
-    publicStatus: { value: null, matchMode: FilterMatchMode.IN },
-    province: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    recipient: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    assignedVolunteersText: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    seqId: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    requestNumber: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    createdAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
-    updatedAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
-    requiresAttention: { value: null, matchMode: FilterMatchMode.EQUALS },
-  };
-
-  const loadFilters = (): DataTableFilterMeta => {
-    try {
-      const saved = sessionStorage.getItem(SESSION_KEY);
-      if (!saved) return defaultFilters;
-      const parsed = JSON.parse(saved);
-      // Ripristina i Date serializzati come stringa per i campi data
-      for (const field of ["createdAt", "updatedAt"] as const) {
-        const f = parsed[field];
-        if (f?.value) f.value = new Date(f.value);
-      }
-      return { ...defaultFilters, ...parsed };
-    } catch {
-      return defaultFilters;
-    }
-  };
-
-  const [filters, setFilters] = useState<DataTableFilterMeta>(loadFilters);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(filters));
-    } catch {
-      // sessionStorage non disponibile
-    }
-  }, [filters]);
-
   const SORT_KEY = "adminRequestTableSort";
-  const COLS_KEY = "adminRequestTableCols";
 
-  const TOGGLEABLE_COLS = [
-    { key: "requestNumber",          label: "Seq" },
-    { key: "firstName",              label: "Nome" },
-    { key: "lastName",               label: "Cognome" },
-    { key: "recipient",              label: "Destinatario" },
-    { key: "age",                    label: "Età" },
-    { key: "gender",                 label: "Genere" },
-    { key: "amputationType",         label: "Tipo amputazione" },
-    { key: "deviceType",             label: "Device" },
-    { key: "status",                 label: "Stato" },
-    { key: "publicStatus",           label: "Stato Pubblico" },
-    { key: "province",               label: "Provincia" },
-    { key: "assignedVolunteersText", label: "Volontari" },
-    { key: "updatedAt",              label: "Aggiornato il" },
-  ];
-
-  const loadVisibleCols = (): string[] => {
-    try {
-      const saved = sessionStorage.getItem(COLS_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch { /* ignore */ }
-    return TOGGLEABLE_COLS.map((c) => c.key);
-  };
-
-  const [visibleCols, setVisibleCols] = useState<string[]>(loadVisibleCols);
-
-  const handleVisibleCols = (keys: string[]) => {
-    setVisibleCols(keys);
-    try { sessionStorage.setItem(COLS_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
-  };
-
+  // Filtri e colonne condivisi tra tutte le viste admin (persistiti in sessionStorage)
+  const { filters, setFilter, reset } = useRequestListFilters(FILTERS_KEY);
+  const [visibleCols, setVisibleCols] = useVisibleColumns(
+    COLS_KEY,
+    ALL_COL_KEYS,
+    compact ? COMPACT_DEFAULT_COLS : ALL_COL_KEYS
+  );
   const col = (key: string) => visibleCols.includes(key);
+
   const loadSort = (): { field: string; order: 1 | -1 } => {
     try {
       const saved = sessionStorage.getItem(SORT_KEY);
@@ -309,24 +272,6 @@ export default function AdminRequestTable({
     } catch { /* ignore */ }
   };
 
-  // Multiselect filter template for status
-  const statusFilterTemplate = (options: any) => (
-    <MultiSelect
-      value={options.value || []}
-      options={REQUEST_STATUSES.map(s => ({ label: s, value: s }))}
-      onChange={(e) => {
-        // Aggiorna i filtri con il valore selezionato
-        setFilters((prev: any) => ({
-          ...prev,
-          status: { value: e.value, matchMode: FilterMatchMode.IN }
-        }));
-        options.filterCallback(e.value, options.index);
-      }}
-      placeholder="Filtra stati"
-      display="chip"
-      style={{ minWidth: 180 }}
-    />
-  );
 
   const MAX_VOLUNTEER_CHIPS = 2;
 
@@ -380,26 +325,14 @@ export default function AdminRequestTable({
     return unique.slice().sort((a: string, b: string) => a.localeCompare(b)).map((v: string) => ({ label: v, value: v }));
   }, [requests]);
 
-  const makeMultiSelectFilter = (field: string, opts: { label: string; value: string }[], placeholder: string) =>
-    (options: any) => (
-      <MultiSelect
-        value={options.value || []}
-        options={opts}
-        onChange={(e) => {
-          setFilters((prev) => ({
-            ...prev,
-            [field]: { value: e.value, matchMode: FilterMatchMode.IN },
-          }));
-          options.filterCallback(e.value, options.index);
-        }}
-        placeholder={placeholder}
-        display="chip"
-        style={{ minWidth: 140 }}
-      />
-    );
 
-  const setTextFilter = (field: string, value: string, matchMode = FilterMatchMode.CONTAINS) =>
-    setFilters((prev) => ({ ...prev, [field]: { value: value || null, matchMode } }));
+  const filteredData = applyRequestFilters(tableData, filters);
+
+  const tableMinWidth =
+    (compact ? COLUMN_WIDTHS.openCompact : COLUMN_WIDTHS.open + COLUMN_WIDTHS.select + COLUMN_WIDTHS.rowActions) +
+    COLUMN_WIDTHS.seqId +
+    COLUMN_WIDTHS.attention +
+    visibleCols.reduce((sum, k) => sum + (COLUMN_WIDTHS[k] ?? 0), 0);
 
   return (
     <>
@@ -467,93 +400,37 @@ export default function AdminRequestTable({
             </span>
           }
           end={
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <MultiSelect
-                value={visibleCols}
-                options={TOGGLEABLE_COLS}
-                optionLabel="label"
-                optionValue="key"
-                onChange={(e) => handleVisibleCols(e.value)}
-                placeholder="Colonne visibili"
-                maxSelectedLabels={0}
-                selectedItemsLabel="{0} colonne visibili"
-                display="chip"
-                style={{ minWidth: 200 }}
-              />
-              <Button
-                label="Bulk Change"
-                icon="pi pi-pencil"
-                onClick={() => setShowBulkDialog(true)}
-                disabled={selectedRows.length === 0}
-              />
-            </div>
+            <Button
+              label="Bulk Change"
+              icon="pi pi-pencil"
+              onClick={() => setShowBulkDialog(true)}
+              disabled={selectedRows.length === 0}
+            />
           }
         />
       )}
-      {/* Search bar testo libero */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
-        <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
-          <i className="pi pi-search" style={{ left: "0.75rem" }} />
-          <InputText
-            value={(filters.seqId as any)?.value ?? ""}
-            onChange={(e) => setTextFilter("seqId", e.target.value)}
-            placeholder="ID"
-            style={{ paddingLeft: "2rem", width: "100%" }}
-          />
-        </span>
-        {!compact && ([
-          { field: "requestNumber",          placeholder: "Seq" },
-          { field: "firstName",              placeholder: "Nome" },
-          { field: "lastName",               placeholder: "Cognome" },
-          { field: "recipient",              placeholder: "Destinatario" },
-        ] as { field: string; placeholder: string }[]).map(({ field, placeholder }) => (
-          <span key={field} className="p-input-icon-left" style={{ flex: "1 1 130px" }}>
-            <i className="pi pi-search" style={{ left: "0.75rem" }} />
-            <InputText
-              value={(filters[field] as any)?.value ?? ""}
-              onChange={(e) => setTextFilter(field, e.target.value)}
-              placeholder={placeholder}
-              style={{ paddingLeft: "2rem", width: "100%" }}
-            />
-          </span>
-        ))}
-        {!compact && (
-          <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
-          <i className="pi pi-search" style={{ left: "0.75rem" }} />
-          <InputText
-            value={(filters.age as any)?.value ?? ""}
-            onChange={(e) => setFilters((prev) => ({ ...prev, age: { value: e.target.value ? Number(e.target.value) : null, matchMode: FilterMatchMode.EQUALS } }))}
-            placeholder="Età"
-            type="number"
-            style={{ paddingLeft: "2rem", width: "100%" }}
-          />
-          </span>
-        )}
-        {!compact && ([
-          { field: "province",               placeholder: "Provincia" },
-          { field: "assignedVolunteersText", placeholder: "Volontari" },
-        ] as { field: string; placeholder: string }[]).map(({ field, placeholder }) => (
-          <span key={field} className="p-input-icon-left" style={{ flex: "1 1 130px" }}>
-            <i className="pi pi-search" style={{ left: "0.75rem" }} />
-            <InputText
-              value={(filters[field] as any)?.value ?? ""}
-              onChange={(e) => setTextFilter(field, e.target.value)}
-              placeholder={placeholder}
-              style={{ paddingLeft: "2rem", width: "100%" }}
-            />
-          </span>
-        ))}
-      </div>
+      <RequestFiltersPanel
+        scope="admin"
+        filters={filters}
+        onChange={setFilter}
+        onReset={reset}
+        statusOptions={REQUEST_STATUSES.map((s) => ({ label: s, value: s }))}
+        publicStatusOptions={Object.keys(PUBLIC_STATUS_SEVERITY).map((s) => ({ label: s, value: s }))}
+        deviceTypeOptions={deviceTypeOptions}
+        genderOptions={genderOptions}
+        amputationTypeOptions={amputationTypeOptions}
+        columns={TOGGLEABLE_COLS}
+        visibleColumns={visibleCols}
+        onVisibleColumnsChange={setVisibleCols}
+      />
       <DataTable
-        value={tableData}
+        value={filteredData}
         paginator
         rows={20}
-        rowsPerPageOptions={[10, 20, 50, tableData.length]}
+        rowsPerPageOptions={[10, 20, 50, filteredData.length].filter((v, i, a) => v > 0 && a.indexOf(v) === i)}
         paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
         currentPageReportTemplate="Mostrati {first}-{last} di {totalRecords}"
-        filterDisplay="row"
-        filters={filters}
-        onFilter={(e) => setFilters(e.filters)}
+        emptyMessage="Nessuna richiesta corrisponde ai filtri."
         sortField={sortField}
         sortOrder={sortOrder}
         onSort={handleSort}
@@ -563,6 +440,7 @@ export default function AdminRequestTable({
         dataKey="id"
         scrollable
         scrollHeight="flex"
+        tableStyle={{ minWidth: tableMinWidth }}
         size={compact ? "small" : undefined}
         rowClassName={(rowData) =>
           compact && selectedRequestId && (rowData as RequestRow).id === selectedRequestId
@@ -570,190 +448,108 @@ export default function AdminRequestTable({
             : ""
         }
       >
-        {!compact && <Column selectionMode="multiple" style={{ width: "3rem" }} />}
+        {!compact && <Column selectionMode="multiple" style={{ width: COLUMN_WIDTHS.select }} />}
         <Column
           body={(row) => (
-        <div style={{ display: "flex", flexDirection: "row", gap: "0.5rem" }}>
-          <Button
-            icon="pi pi-search"
-            tooltip="Dettaglio"
-            tooltipOptions={{ position: "top" }}
-            onClick={() => handleOpen(row.id)}
-            rounded
-            text
-          />
-          {!compact && (
-            <Button
-              icon="pi pi-copy"
-              tooltip="Copia ID"
-              tooltipOptions={{ position: "top" }}
-              rounded
-              text
-              onClick={async () => {
-                await navigator.clipboard.writeText(row.id);
-                toast.current?.show({
-                  severity: "info",
-                  summary: "ID copiato",
-                  detail: `ID ${row.id} copiato negli appunti.`,
-                  life: 2000,
-                });
-              }}
-            />
+            <div style={{ display: "flex", flexDirection: "row", gap: "0.5rem" }}>
+              <Button
+                icon="pi pi-search"
+                tooltip="Dettaglio"
+                tooltipOptions={{ position: "top" }}
+                onClick={() => handleOpen(row.id)}
+                rounded
+                text
+              />
+              {!compact && (
+                <Button
+                  icon="pi pi-copy"
+                  tooltip="Copia ID"
+                  tooltipOptions={{ position: "top" }}
+                  rounded
+                  text
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(row.id);
+                    toast.current?.show({
+                      severity: "info",
+                      summary: "ID copiato",
+                      detail: `ID ${row.id} copiato negli appunti.`,
+                      life: 2000,
+                    });
+                  }}
+                />
+              )}
+            </div>
           )}
-        </div>
-          )}
-          style={{ width: "100px" }}
+          style={{ width: compact ? COLUMN_WIDTHS.openCompact : COLUMN_WIDTHS.open }}
         />
-        <Column field="seqId" header="ID" sortable style={{ width: "65px" }} />
+        <Column field="seqId" header="ID" sortable style={{ width: COLUMN_WIDTHS.seqId }} />
         <Column
           field="requiresAttention"
           header="⚠️ Attenzione"
           sortable
-          filter
-          showFilterMenu={false}
-          filterMatchMode={FilterMatchMode.EQUALS}
-          filterElement={(options) => (
-            <Dropdown
-              value={options.value}
-              options={[
-                { label: "Tutti", value: null },
-                { label: "Sì", value: true },
-                { label: "No", value: false },
-              ]}
-              optionValue="value"
-              onChange={(e) => {
-                setFilters((prev) => ({ ...prev, requiresAttention: { value: e.value, matchMode: FilterMatchMode.EQUALS } }));
-                options.filterCallback(e.value, options.index);
-              }}
-              placeholder="Filtra"
-              style={{ minWidth: 100 }}
-            />
-          )}
           body={(row) => row.requiresAttention
             ? <span title="Richiede attenzione" style={{ color: "#ef4444", fontWeight: 700, fontSize: 18 }}>&#9888;</span>
             : null
           }
-          style={{ width: "90px", textAlign: "center" }}
+          style={{ width: COLUMN_WIDTHS.attention, textAlign: "center" }}
         />
-        {col("requestNumber") && !compact && <Column field="requestNumber" header="Seq" sortable style={{ width: "65px" }} />}
-        {(col("firstName") || compact) && <Column field="firstName" header="Nome" sortable style={{ width: compact ? "120px" : "90px" }} />}
-        {(col("lastName") || compact) && <Column field="lastName" header="Cognome" sortable style={{ width: compact ? "130px" : "100px" }} />}
-        {col("recipient") && !compact && <Column field="recipient" header="Destinatario" sortable style={{ width: "110px" }} />}
-        {col("age") && !compact && <Column field="age" header="Età" sortable style={{ width: "55px" }} />}
-        {col("gender") && (
-          <Column
-            field="gender"
-            header="Genere"
-            filter
-            sortable
-            filterElement={makeMultiSelectFilter("gender", genderOptions, "Filtra genere")}
-            showFilterMenu={false}
-            filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "90px" }}
-          />
-        )}
-        {col("amputationType") && !compact && (
+        {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: COLUMN_WIDTHS.requestNumber }} />}
+        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: COLUMN_WIDTHS.firstName }} />}
+        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: COLUMN_WIDTHS.lastName }} />}
+        {col("recipient") && <Column field="recipient" header="Destinatario" sortable style={{ width: COLUMN_WIDTHS.recipient }} />}
+        {col("age") && <Column field="age" header="Età" sortable style={{ width: COLUMN_WIDTHS.age }} />}
+        {col("gender") && <Column field="gender" header="Genere" sortable style={{ width: COLUMN_WIDTHS.gender }} />}
+        {col("amputationType") && (
           <Column
             field="amputationType"
             header="Tipo amputazione"
             sortable
-            filter
-            filterElement={makeMultiSelectFilter("amputationType", amputationTypeOptions, "Filtra amputazione")}
-            showFilterMenu={false}
-            filterMatchMode={FilterMatchMode.IN}
             body={(row) => (
               <span title={row.amputationType}>{shortAmputationType(row.amputationType)}</span>
             )}
-            style={{ width: "120px" }}
+            style={{ width: COLUMN_WIDTHS.amputationType }}
           />
         )}
-        {(col("deviceType") || compact) && (
+        {col("deviceType") && <Column field="deviceType" header="Device" sortable style={{ width: COLUMN_WIDTHS.deviceType }} />}
+        {col("status") && <Column field="status" header="Stato" sortable body={statusTemplate} style={{ width: COLUMN_WIDTHS.status }} />}
+        {col("publicStatus") && (
           <Column
-            field="deviceType"
-            header="Device"
-            filter
-            sortable
-            filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
-            showFilterMenu={false}
-            filterMatchMode={FilterMatchMode.IN}
-            style={{ width: compact ? "130px" : "110px" }}
-          />
-        )}
-        {(col("status") || compact) && (
-          <Column
-            field="status"
-            header="Stato"
-            filter
-            sortable
-            filterElement={statusFilterTemplate}
-            showFilterMenu={false}
-            filterField="status"
-            filterMatchMode={FilterMatchMode.IN}
-            body={statusTemplate}
-            style={{ width: compact ? "150px" : "130px" }}
-          />
-        )}
-        {(col("publicStatus") || compact) && (
-          <Column
-            header="Stato Pubblico"
-            body={publicStatusTemplate}
-            filter
             field="publicStatus"
+            header="Stato Pubblico"
             sortable
-            filterElement={(options) => (
-              <MultiSelect
-                value={options.value || []}
-                options={Object.keys(PUBLIC_STATUS_SEVERITY).map(s => ({ label: s, value: s }))}
-                onChange={(e) => {
-                  setFilters((prev: DataTableFilterMeta) => ({
-                    ...prev,
-                    publicStatus: { value: e.value, matchMode: FilterMatchMode.IN }
-                  }));
-                  options.filterCallback(e.value, options.index);
-                }}
-                placeholder="Filtra stato pubblico"
-                display="chip"
-                style={{ minWidth: 140 }}
-              />
-            )}
-            showFilterMenu={false}
-            filterMatchMode={FilterMatchMode.IN}
-            style={{ width: compact ? "160px" : "140px" }}
+            body={publicStatusTemplate}
+            style={{ width: COLUMN_WIDTHS.publicStatus }}
           />
         )}
-        {col("province") && !compact && <Column field="province" header="Provincia" sortable style={{ width: "75px" }} />}
-        {col("assignedVolunteersText") && !compact && (
+        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: COLUMN_WIDTHS.province }} />}
+        {col("assignedVolunteersText") && (
           <Column
             field="assignedVolunteersText"
             header="Volontari"
             body={assignedVolunteersTemplate}
             sortable
-            style={{ width: "130px" }}
+            style={{ width: COLUMN_WIDTHS.assignedVolunteersText }}
           />
         )}
-        {!compact && <Column
-          field="createdAt"
-          header="Creato il"
-          body={(row) => dateTemplate(row, "createdAt")}
-          filter
-          dataType="date"
-          filterElement={dateFilterTemplate}
-          sortable
-          style={{ width: "110px" }}
-        />}
-        {(col("updatedAt") || compact) && (
+        {col("createdAt") && (
+          <Column
+            field="createdAt"
+            header="Creato il"
+            body={(row) => dateTemplate(row, "createdAt")}
+            sortable
+            style={{ width: COLUMN_WIDTHS.createdAt }}
+          />
+        )}
+        {col("updatedAt") && (
           <Column
             field="updatedAt"
             header="Aggiornato il"
             body={(row) => dateTemplate(row, "updatedAt")}
-            filter
-            dataType="date"
-            filterElement={dateFilterTemplate}
             sortable
-            style={{ width: compact ? "150px" : "120px" }}
+            style={{ width: COLUMN_WIDTHS.updatedAt }}
           />
         )}
-        {!compact && <Column body={actionTemplate} style={{ width: "80px" }} />}
+        {!compact && <Column body={actionTemplate} style={{ width: COLUMN_WIDTHS.rowActions }} />}
       </DataTable>
       {/* Tooltip component for PrimeReact */}
       <span style={{ display: "none" }}>
