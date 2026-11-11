@@ -137,7 +137,7 @@
         "enable-device/src/pages/ContactRequest.tsx",
         "enable-device/src/helpers/contactProfiles.ts"
       ],
-      "summary": "Form pubblico /contatti con anti-spam per l'invio di richieste di contatto (backend: functions/backend/src/contact/, createContactRequest). La gestione amministrativa delle richieste ricevute (consultazione/lavorazione lato admin) non e' ancora implementata: da finalizzare in un lavoro successivo.",
+      "summary": "Form pubblico /contatti con anti-spam per l'invio di richieste di contatto (backend: functions/backend/src/contact/, createContactRequest). Lato admin i contatti, il loro stato e l'invio dell'invito a unirsi alla community sono gestiti da enable-device/src/pages/admin/volunteers/ContactsList.tsx, che ricade nei path del dominio 'volunteer-management' (nessuna ulteriore gestione amministrativa prevista).",
       "status": "approved",
       "depth": "standard",
       "origin": "discovered"
