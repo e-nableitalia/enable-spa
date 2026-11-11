@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-08T00:19:40.282Z",
+  "generated_at": "2026-11-11T22:33:30.563Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -240,6 +240,19 @@
         "process-organizer-core",
         "special-projects-initiatives"
       ]
+    },
+    {
+      "id": "ir-contact-requests-admin-management",
+      "type": "implementation_request",
+      "source_path": "docs/implementation-requests/contact-requests-admin-management-request.md",
+      "created_at": "2026-11-11T22:33:30.562Z",
+      "updated_at": "2026-11-11T22:33:30.562Z",
+      "created_by": "agent:supervisor",
+      "status": "draft",
+      "domains": [
+        "contacts"
+      ],
+      "role": "problem"
     }
   ]
 }
