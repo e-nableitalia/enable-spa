@@ -136,7 +136,13 @@
       "summary": "Form pubblico /contatti con anti-spam e gestione amministrativa delle richieste di contatto ricevute. Sorgente backend in functions/backend/src/contact/ (createContactRequest).",
       "status": "draft",
       "depth": null,
-      "origin": "planned"
+      "origin": "planned",
+      "paths_review_suggested": true,
+      "paths_candidate": [
+        "functions/backend/src/contact/**",
+        "enable-device/src/pages/ContactRequest.tsx",
+        "enable-device/src/helpers/contactProfiles.ts"
+      ]
     }
   ]
 }
