@@ -116,13 +116,13 @@ describe("listDeviceRequestAttachments", () => {
   it("lets an admin list attachments of the request", async () => {
     const result = await listDeviceRequestAttachments.run(buildRequest({ requestId: "req-1" }, "admin-1"));
 
-    expect(result).toEqual({ attachments: [attachmentsStore["att-1"]] });
+    expect(result).toEqual({ attachments: [{ ...attachmentsStore["att-1"], retention: "persistent" }] });
   });
 
   it("lets a volunteer assigned to the request list attachments, same result as admin", async () => {
     const result = await listDeviceRequestAttachments.run(buildRequest({ requestId: "req-1" }, "volunteer-1"));
 
-    expect(result).toEqual({ attachments: [attachmentsStore["att-1"]] });
+    expect(result).toEqual({ attachments: [{ ...attachmentsStore["att-1"], retention: "persistent" }] });
   });
 
   it("denies listing to a volunteer not assigned to the request", async () => {
