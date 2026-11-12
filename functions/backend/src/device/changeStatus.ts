@@ -85,7 +85,15 @@ export const changeStatus = onCall(
     // non immediatamente precedente, se ammesse da RBAC. Nessun backfill sui
     // dati pregressi: le richieste già in uno di questi stati non vengono
     // ricontrollate, il gate riguarda solo le transizioni future.
-    if (STATUSES_REQUIRING_WAIVER.has(newStatus) && requestData?.waiverAcquired !== true) {
+    // Il gate riguarda solo un vero cambio di stato: le chiamate con
+    // newStatus === currentStatus servono solo a registrare un evento nella
+    // cronologia (note, modifica di indirizzo/tipo device/dati richiedente) e
+    // non devono fallire per una richiesta già in uno stato gated.
+    if (
+      newStatus !== currentStatus &&
+      STATUSES_REQUIRING_WAIVER.has(newStatus) &&
+      requestData?.waiverAcquired !== true
+    ) {
       throw new HttpsError(
         "failed-precondition",
         "Impossibile procedere: lo scarico di responsabilità non è stato acquisito per questa richiesta"

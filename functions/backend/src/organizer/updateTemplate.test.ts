@@ -94,13 +94,14 @@ describe("updateTemplate", () => {
   });
 
   // Scenario 3: updateTemplate con item type valido
-  it.each(["boolean", "generic", "numeric"] as const)(
+  it.each(["boolean", "generic", "numeric", "purchase"] as const)(
     "updates the item with the provided type '%s'",
     async (type) => {
+      const maybePurchaseFields = type === "purchase" ? { quantity: 1 } : {};
       await updateTemplate.run(
         buildRequest({
           templateId: TEMPLATE_ID,
-          items: [{ title: "Verifica dita", type }],
+          items: [{ title: "Verifica dita", type, ...maybePurchaseFields }],
         })
       );
 
@@ -119,14 +120,14 @@ describe("updateTemplate", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(updateMock).not.toHaveBeenCalled();
   });
 
   // Scenario 4: updateTemplate con item senza type o non valido
-  it("throws invalid-argument and does not update when an item in the new list has a type not among the 3 allowed", async () => {
+  it("throws invalid-argument and does not update when an item in the new list has a type not among the allowed types", async () => {
     await expect(
       updateTemplate.run(
         buildRequest({
@@ -135,7 +136,7 @@ describe("updateTemplate", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(updateMock).not.toHaveBeenCalled();

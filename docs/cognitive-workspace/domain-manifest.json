@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-08T00:00:00.000Z",
+  "generated_at": "2026-11-11T19:51:13.542Z",
   "repo_url": "https://github.com/e-nableitalia/enable-spa",
   "domains": [
     {
@@ -125,6 +125,19 @@
         "enable-device/src/pages/admin/superadmin/**"
       ],
       "summary": "Azioni operative gated su users/{uid}.superAdmin===true (flag additivo a role:admin, bootstrap manuale in console): deploy forward-only del registro versionato dei template email (registry in codice -> collection Firestore emailTemplates) e trigger dell'export/backup nativo Firestore verso bucket GCS dedicato con lifecycle 30gg. Il gate condiviso vive in functions/backend/src/security/superAdmin.ts (gia' coperto dal dominio 'security'). UI ospitata dalla pagina 'Super Admin' (SuperAdminPage.tsx, route /admin/superadmin), rinominata e spostata fuori da admin/requests/ per risolvere la sovrapposizione di path con device-requests (F-46, risolto). Epic EA-171, Story EA-172, Done.",
+      "status": "approved",
+      "depth": "standard",
+      "origin": "discovered"
+    },
+    {
+      "id": "contacts",
+      "name": "Richieste di Contatto",
+      "paths": [
+        "functions/backend/src/contact/**",
+        "enable-device/src/pages/ContactRequest.tsx",
+        "enable-device/src/helpers/contactProfiles.ts"
+      ],
+      "summary": "Form pubblico /contatti con anti-spam per l'invio di richieste di contatto (backend: functions/backend/src/contact/, createContactRequest). Lato admin i contatti, il loro stato e l'invio dell'invito a unirsi alla community sono gestiti da enable-device/src/pages/admin/volunteers/ContactsList.tsx, che ricade nei path del dominio 'volunteer-management' (nessuna ulteriore gestione amministrativa prevista).",
       "status": "approved",
       "depth": "standard",
       "origin": "discovered"

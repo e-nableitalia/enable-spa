@@ -12,6 +12,7 @@ interface ClonedItemFields {
   type: ChecklistItemType;
   assignee: null;
   quantity: number | null;
+  url: string | null;
   notes: string;
   status: typeof CHECKLIST_ITEM_STATUSES[number];
   completed: false;
@@ -26,7 +27,7 @@ interface ClonedItemFields {
  *
  * Logica di clonazione invariata rispetto a prima di EA-137 (Epic EA-3,
  * riferimento `useWorkshopAsTemplate` nel mockup allegato; aggiornata da
- * EA-126): titolo, type e quantità vengono copiati dalla sorgente, mentre
+ * EA-126): titolo, type, quantità e URL (se presente) vengono copiati dalla sorgente, mentre
  * stato, assegnatario, note e flag di completamento vengono sempre
  * azzerati, indipendentemente dallo stato di avanzamento che l'item aveva
  * nella sorgente — si riparte sempre da zero, ma senza perdere il type
@@ -43,12 +44,14 @@ function cloneSourceItem(sourceItem: Record<string, unknown>): ClonedItemFields 
   const title = typeof sourceItem?.title === "string" ? sourceItem.title : "";
   const type: ChecklistItemType = isChecklistItemType(sourceItem?.type) ? sourceItem.type : "generic";
   const quantity = typeof sourceItem?.quantity === "number" ? sourceItem.quantity : null;
+  const url = typeof sourceItem?.url === "string" && sourceItem.url.trim() ? sourceItem.url.trim() : null;
 
   return {
     title,
     type,
     assignee: null,
     quantity,
+    url,
     notes: "",
     status: CHECKLIST_ITEM_STATUSES[0],
     completed: false,
@@ -76,7 +79,7 @@ function cloneSourceItem(sourceItem: Record<string, unknown>): ClonedItemFields 
  * Risolve gli item della sorgente (referenziati come `itemId` in
  * `checklists/{sourceChecklistId}.items`, EA-137) nei documenti reali
  * `checklistItems` e ne crea uno nuovo per ciascuno nella nuova istanza
- * (titolo, type e quantità copiati, stato impostato ad 'Assegnare',
+ * (titolo, type, quantità e URL copiati, stato impostato ad 'Assegnare',
  * assegnatario a null, flag di completamento a false e i tre campi
  * nullabili `creationDate`/`dueDate`/`completionDate` azzerati a null su
  * ciascun item clonato, indipendentemente dallo stato che avevano nella

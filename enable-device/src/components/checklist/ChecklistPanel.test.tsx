@@ -177,6 +177,9 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
       if (name === "getDeviceRequestChecklistCompleteness") {
         return Promise.resolve({ data: { complete: false } });
       }
+      if (name === "listAssignableChecklistUsers") {
+        return Promise.resolve({ data: { users: [] } });
+      }
       if (name === "addDeviceRequestChecklistItem") {
         return Promise.resolve({ data: { itemId: "new-item" } });
       }
@@ -289,7 +292,7 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
     );
   });
 
-  it("importa item da testo creando un item boolean per ogni riga non vuota, in ordine", async () => {
+  it("importa item da testo creando item acquisto dal formato 2x ...", async () => {
     mockChecklistWithId("c42", []);
     const user = userEvent.setup();
     render(<ChecklistPanel requestId="r1" checklistId="c42" />);
@@ -297,10 +300,9 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
 
     await user.click(screen.getByRole("button", { name: "Importa item" }));
     const dialog = screen.getByRole("dialog");
-    await user.type(
-      within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"),
-      "Primo item\n\nSecondo item"
-    );
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "2x [Primo item](https://example.test/primo) | comprare online\n\n1x Secondo item | portare da casa | urgenti" },
+    });
     await user.click(within(dialog).getByRole("button", { name: "Importa" }));
 
     const addCalls = callable.mock.calls.filter(([name]) => name === "addDeviceRequestChecklistItem");
@@ -309,13 +311,113 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
       requestId: "r1",
       checklistId: "c42",
       title: "Primo item",
-      type: "boolean",
+      type: "purchase",
+      quantity: 2,
+      url: "https://example.test/primo",
+      notes: "comprare online",
     });
     expect(addCalls[1][1]).toMatchObject({
       requestId: "r1",
       checklistId: "c42",
       title: "Secondo item",
+      type: "numeric",
+      quantity: 1,
+      notes: "portare da casa | urgenti",
+    });
+  });
+
+  it("mostra il dialog di guida formato import", async () => {
+    mockChecklistWithId("c42", []);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Guida formato" }));
+
+    expect(await screen.findByText("Guida formato import checklist")).toBeInTheDocument();
+    expect(screen.getByText("3x fogli")).toBeInTheDocument();
+  });
+
+  it("importa assegnatario da @token e da @[Nome Cognome]", async () => {
+    callable.mockReset();
+    callable.mockImplementation((name: string) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({ data: { checklistId: "c42", title: "Checklist test", category: "cat", items: [] } });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "listAssignableChecklistUsers") {
+        return Promise.resolve({
+          data: {
+            users: [
+              { id: "vol-1", label: "Mario Rossi" },
+              { id: "alberto", label: "Alberto Navatta" },
+            ],
+          },
+        });
+      }
+      if (name === "addDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: { itemId: "new-item" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "1x Cavo USB @alberto\n2x Fogli @[Mario Rossi]" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addDeviceRequestChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({ title: "Cavo USB", assignee: "alberto" });
+    expect(addCalls[1][1]).toMatchObject({ title: "Fogli", assignee: "Mario Rossi" });
+  });
+
+  it("importa anche item base senza quantita' (boolean), con descrizione singola o tra []", async () => {
+    callable.mockReset();
+    callable.mockImplementation((name: string) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({ data: { checklistId: "c42", title: "Checklist test", category: "cat", items: [] } });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "listAssignableChecklistUsers") {
+        return Promise.resolve({ data: { users: [] } });
+      }
+      if (name === "addDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: { itemId: "new-item" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "###x\n[fogli protocollo] @alberto | da portare martedi'" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addDeviceRequestChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({ title: "###x", type: "boolean", quantity: undefined, url: undefined });
+    expect(addCalls[1][1]).toMatchObject({
+      title: "fogli protocollo",
       type: "boolean",
+      quantity: undefined,
+      assignee: "alberto",
+      notes: "da portare martedi'",
     });
   });
 });

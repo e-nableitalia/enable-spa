@@ -14,7 +14,7 @@ const REGION = "europe-west1";
 // iniziale "Assegnare" e flag di completamento a false, e ne aggiunge
 // l'itemId all'array `items` della checklist padre (EA-137: gli item
 // smettono di essere un array embedded aggiornato via arrayUnion). Richiede
-// un `type` esplicito ('boolean' | 'generic' | 'numeric'), coerentemente
+// un `type` esplicito ('boolean' | 'generic' | 'numeric' | 'purchase'), coerentemente
 // con createChecklist (EA-123): nessun default. Restituisce l'itemId
 // generato al consumer.
 export const addChecklistItem = onCall(
@@ -28,13 +28,14 @@ export const addChecklistItem = onCall(
         throw new HttpsError("unauthenticated", "User must be authenticated");
       }
 
-      const { checklistId, title, type, assignee, quantity, notes } = request.data as {
+      const { checklistId, title, type, assignee, quantity, notes, url } = request.data as {
         checklistId?: string;
         title?: string;
         type?: string;
         assignee?: string;
         quantity?: number;
         notes?: string;
+        url?: string | null;
       };
 
       if (!checklistId || typeof checklistId !== "string") {
@@ -44,13 +45,29 @@ export const addChecklistItem = onCall(
         throw new HttpsError("invalid-argument", "Missing title");
       }
       if (!isChecklistItemType(type)) {
-        throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
+        throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')");
       }
       if (assignee !== undefined && assignee !== null && typeof assignee !== "string") {
         throw new HttpsError("invalid-argument", "Item assignee must be a string");
       }
       if (quantity !== undefined && quantity !== null && typeof quantity !== "number") {
         throw new HttpsError("invalid-argument", "Item quantity must be a number");
+      }
+      if (url !== undefined && url !== null && typeof url !== "string") {
+        throw new HttpsError("invalid-argument", "Item url must be a string");
+      }
+      if (type === "purchase" && (quantity === undefined || quantity === null || typeof quantity !== "number" || quantity <= 0)) {
+        throw new HttpsError("invalid-argument", "Purchase item quantity must be a positive number");
+      }
+      if (type === "purchase" && typeof url === "string" && url.trim() !== "") {
+        try {
+          const parsed = new URL(url);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            throw new Error("invalid protocol");
+          }
+        } catch {
+          throw new HttpsError("invalid-argument", "Purchase item url must be a valid http/https URL");
+        }
       }
       if (notes !== undefined && notes !== null && typeof notes !== "string") {
         throw new HttpsError("invalid-argument", "Item notes must be a string");
@@ -76,6 +93,7 @@ export const addChecklistItem = onCall(
         type,
         assignee: assignee ?? null,
         quantity: quantity ?? null,
+        url: typeof url === "string" && url.trim() ? url.trim() : null,
         notes: notes ?? "",
         status: CHECKLIST_ITEM_STATUSES[0],
         completed: false,

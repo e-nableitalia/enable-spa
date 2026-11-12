@@ -9,7 +9,6 @@ import {
   getProjectOrThrow,
   assertProjectContentWritable,
   assertChecklistBelongsToProject,
-  isResolvableProjectAssignee,
 } from "./projectAccess";
 
 const REGION = "europe-west1";
@@ -45,7 +44,7 @@ export const addProjectChecklistItem = onCall({ region: REGION }, async (request
     throw new HttpsError("unauthenticated", "Authentication required");
   }
 
-  const { projectId, checklistId, title, type, assignee, quantity, notes } = (request.data ?? {}) as {
+  const { projectId, checklistId, title, type, assignee, quantity, notes, url } = (request.data ?? {}) as {
     projectId?: string;
     checklistId?: string;
     title?: string;
@@ -53,6 +52,7 @@ export const addProjectChecklistItem = onCall({ region: REGION }, async (request
     assignee?: string | null;
     quantity?: number | null;
     notes?: string | null;
+    url?: string | null;
   };
 
   if (!projectId || typeof projectId !== "string") {
@@ -78,18 +78,9 @@ export const addProjectChecklistItem = onCall({ region: REGION }, async (request
     assertProjectContentWritable(project.status);
     assertChecklistBelongsToProject(project, checklistId);
 
-    if (assignee !== undefined && assignee !== null) {
-      if (typeof assignee !== "string" || !(await isResolvableProjectAssignee(db, assignee))) {
-        throw new HttpsError(
-          "invalid-argument",
-          "Assignee must be the Firebase uid of an admin or an active volunteer"
-        );
-      }
-    }
-
     const result = (await addChecklistItem.run({
       ...request,
-      data: { checklistId, title, type, assignee, quantity, notes },
+      data: { checklistId, title, type, assignee, quantity, notes, url },
     } as CallableRequest)) as { itemId: string };
 
     console.log(

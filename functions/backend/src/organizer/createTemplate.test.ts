@@ -67,14 +67,15 @@ describe("createTemplate", () => {
   });
 
   // Scenario 1: createTemplate con item type valido
-  it.each(["boolean", "generic", "numeric"] as const)(
+  it.each(["boolean", "generic", "numeric", "purchase"] as const)(
     "creates the item with the provided type '%s'",
     async (type) => {
+      const maybePurchaseFields = type === "purchase" ? { quantity: 1 } : {};
       await createTemplate.run(
         buildRequest({
           category: "devicetype-mano",
           title: "Template mano",
-          items: [{ title: "Verifica dita", type }],
+          items: [{ title: "Verifica dita", type, ...maybePurchaseFields }],
         })
       );
 
@@ -94,14 +95,14 @@ describe("createTemplate", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(setMock).not.toHaveBeenCalled();
   });
 
   // Scenario 2: createTemplate con item senza type o non valido
-  it("throws invalid-argument when an item has a type not among the 3 allowed", async () => {
+  it("throws invalid-argument when an item has a type not among the allowed types", async () => {
     await expect(
       createTemplate.run(
         buildRequest({
@@ -111,7 +112,7 @@ describe("createTemplate", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(setMock).not.toHaveBeenCalled();

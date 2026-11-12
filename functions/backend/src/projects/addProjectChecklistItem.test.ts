@@ -56,24 +56,23 @@ describe("addProjectChecklistItem", () => {
     );
   });
 
-  it("rejects an inactive volunteer as assignee", async () => {
-    await expect(
-      addProjectChecklistItem.run(
-        buildRequest(
-          {
-            projectId: "proj-active",
-            checklistId: "checklist-1",
-            title: "Fai X",
-            type: "generic",
-            assignee: "volunteer-inactive",
-          },
-          "admin-1"
-        )
+  it("accepts free-text assignee values", async () => {
+    const result = await addProjectChecklistItem.run(
+      buildRequest(
+        {
+          projectId: "proj-active",
+          checklistId: "checklist-1",
+          title: "Fai X",
+          type: "generic",
+          assignee: "volunteer-inactive",
+        },
+        "admin-1"
       )
-    ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Assignee must be the Firebase uid of an admin or an active volunteer")
     );
-    expect(addChecklistItemRunMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ itemId: "item-1" });
+    expect(addChecklistItemRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ assignee: "volunteer-inactive" }) })
+    );
   });
 
   it("blocks addition on standby/archived/closed projects", async () => {

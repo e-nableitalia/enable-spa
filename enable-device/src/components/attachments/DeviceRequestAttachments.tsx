@@ -87,6 +87,7 @@ function formatSize(bytes: number): string {
 export default function DeviceRequestAttachments({ requestId, readOnly = false }: Props) {
   const toast = useRef<Toast>(null);
   const currentUid = auth.currentUser?.uid ?? null;
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [attachments, setAttachments] = useState<DeviceRequestAttachment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,12 +116,25 @@ export default function DeviceRequestAttachments({ requestId, readOnly = false }
    * nessun helper condiviso esiste oggi per questo). */
   const getUserFullName = useCallback(async (userId: string): Promise<string> => {
     if (!userId || userId.includes("/")) return userId;
-    const profileRef = doc(db, "users", userId, "private", "profile");
-    const profileSnap = await getDoc(profileRef);
-    if (profileSnap.exists()) {
-      const data = profileSnap.data();
-      const fullName = `${data.firstName || ""} ${data.lastName || ""}`.trim();
-      if (fullName) return fullName;
+    try {
+      const privateProfileSnap = await getDoc(doc(db, "users", userId, "private", "profile"));
+      if (privateProfileSnap.exists()) {
+        const data = privateProfileSnap.data();
+        const fullName = `${data.firstName || ""} ${data.lastName || ""}`.trim();
+        if (fullName) return fullName;
+      }
+    } catch {
+      // I volontari non leggono i private profile altrui: fallback su profilo pubblico.
+    }
+    try {
+      const publicProfileSnap = await getDoc(doc(db, "users", userId, "public", "profile"));
+      if (publicProfileSnap.exists()) {
+        const data = publicProfileSnap.data();
+        const fullName = `${data.firstName || ""} ${data.lastName || ""}`.trim();
+        if (fullName) return fullName;
+      }
+    } catch {
+      // Fallback finale su uid.
     }
     return userId;
   }, []);
@@ -164,6 +178,18 @@ export default function DeviceRequestAttachments({ requestId, readOnly = false }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetchAttachments fetches from a Cloud Function, not derivable from props/state
     fetchAttachments();
   }, [fetchAttachments]);
+
+  useEffect(() => {
+    const loadRole = async () => {
+      if (!currentUid) {
+        setIsAdmin(false);
+        return;
+      }
+      const userSnap = await getDoc(doc(db, "users", currentUid));
+      setIsAdmin(userSnap.exists() && userSnap.data()?.role === "admin");
+    };
+    void loadRole();
+  }, [currentUid]);
 
   const categories = Array.from(new Set(attachments.map((a) => a.category).filter((c): c is string => !!c)));
   const filteredAttachments = categoryFilter
@@ -345,14 +371,9 @@ export default function DeviceRequestAttachments({ requestId, readOnly = false }
   };
 
   /** Un allegato è modificabile/eliminabile dall'utente corrente se è
-   * l'uploader — l'admin vede comunque sempre le azioni, la Cloud Function
-   * generica applica comunque il controllo reale (questo è solo un
-   * suggerimento lato UI, non l'RBAC). Non conosciamo qui il ruolo
-   * dell'utente corrente: mostriamo le azioni se l'utente è il proprietario,
-   * e le lasciamo comunque visibili altrimenti (un tentativo non ammesso
-   * viene comunque respinto dal server con un messaggio d'errore chiaro). */
+   * admin o uploader. L'RBAC resta comunque enforced lato server. */
   const canModify = (attachment: DeviceRequestAttachment) =>
-    !readOnly && attachment.uploadedBy === currentUid;
+    !readOnly && (isAdmin || attachment.uploadedBy === currentUid);
 
   return (
     <div>

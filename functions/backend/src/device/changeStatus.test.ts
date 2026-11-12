@@ -514,6 +514,11 @@ describe("changeStatus - EA-159 (gate obbligatorio: scarico di responsabilità)"
         status: "da gestire",
         assignedVolunteers: [],
       },
+      // Richiesta già in uno stato gated senza liberatoria (dati pregressi, nessun backfill)
+      "req-already-gated": {
+        status: "spedita",
+        assignedVolunteers: [],
+      },
     };
 
     eventsStore = {};
@@ -580,6 +585,31 @@ describe("changeStatus - EA-159 (gate obbligatorio: scarico di responsabilità)"
 
     expect(result).toEqual({ success: true });
     expect(deviceRequestsStore["req-no-waiver"]).toMatchObject({ status: "in produzione" });
+  });
+
+  // Regression: salvataggi che registrano solo un evento (nota, indirizzo,
+  // tipo device, dati richiedente) chiamano changeStatus con lo stato corrente:
+  // non e' una transizione e non deve fallire sul gate della liberatoria.
+  it.each(["pronta per spedizione", "spedita", "completata"])(
+    "does not apply the waiver gate when newStatus equals the current status ('%s')",
+    async (status) => {
+      deviceRequestsStore["req-already-gated"] = { status, assignedVolunteers: [] };
+
+      await expect(
+        changeStatus.run(
+          buildRequest({ requestId: "req-already-gated", newStatus: status, note: "Indirizzo di spedizione aggiornato." }, "admin-1")
+        )
+      ).resolves.toEqual({ success: true });
+
+      expect(runTransactionMock).toHaveBeenCalled();
+      expect(deviceRequestsStore["req-already-gated"]).toMatchObject({ status });
+    }
+  );
+
+  it("still blocks a real transition into another gated status from an already-gated request", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-already-gated", newStatus: "completata" }, "admin-1"))
+    ).rejects.toMatchObject({ code: "failed-precondition" });
   });
 
   // Regression: il gate si applica anche al percorso volontario, non solo

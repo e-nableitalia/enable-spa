@@ -175,7 +175,7 @@ describe("ProjectChecklistPanel", () => {
     expect(await screen.findByDisplayValue("https://app.e-nableitalia.it/project-checklist-share/token-1")).toBeInTheDocument();
   });
 
-  it("importa item da testo creando un item boolean per ogni riga non vuota, in ordine", async () => {
+  it("importa item da testo creando item acquisto dal formato 2x ...", async () => {
     callable.mockImplementation((name: string) => {
       if (name === "getProjectChecklist") {
         return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "progetto", items: [] } });
@@ -192,10 +192,9 @@ describe("ProjectChecklistPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Importa item" }));
     const dialog = screen.getByRole("dialog");
-    await user.type(
-      within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"),
-      "Task A\n\nTask B"
-    );
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "3x [Task A](https://example.test/a) | acquisto\n\n1x Task B | portare | domani" },
+    });
     await user.click(within(dialog).getByRole("button", { name: "Importa" }));
 
     const addCalls = callable.mock.calls.filter(([name]) => name === "addProjectChecklistItem");
@@ -204,13 +203,111 @@ describe("ProjectChecklistPanel", () => {
       projectId: "p1",
       checklistId: "c1",
       title: "Task A",
-      type: "boolean",
+      type: "purchase",
+      quantity: 3,
+      url: "https://example.test/a",
+      notes: "acquisto",
     });
     expect(addCalls[1][1]).toMatchObject({
       projectId: "p1",
       checklistId: "c1",
       title: "Task B",
+      type: "numeric",
+      quantity: 1,
+      notes: "portare | domani",
+    });
+  });
+
+  it("mostra il dialog di guida formato import", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "getProjectChecklist") {
+        return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "progetto", items: [] } });
+      }
+      if (name === "getProjectChecklistCompleteness") return Promise.resolve({ data: { complete: false } });
+      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { uids: [] } });
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    render(<ProjectChecklistPanel projectId="p1" checklistId="c1" />);
+    await screen.findByText("Checklist test");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Guida formato" }));
+
+    expect(await screen.findByText("Guida formato import checklist")).toBeInTheDocument();
+    expect(screen.getByText("3x fogli")).toBeInTheDocument();
+  });
+
+  it("importa assegnatario da @token e da @[Nome Cognome]", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "getProjectChecklist") {
+        return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "progetto", items: [] } });
+      }
+      if (name === "getProjectChecklistCompleteness") return Promise.resolve({ data: { complete: false } });
+      if (name === "listAssignableProjectUsers") {
+        return Promise.resolve({
+          data: {
+            users: [
+              { id: "vol-1", label: "Mario Rossi" },
+              { id: "alberto", label: "Alberto Navatta" },
+            ],
+          },
+        });
+      }
+      if (name === "addProjectChecklistItem") return Promise.resolve({ data: { itemId: "new-item" } });
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    render(<ProjectChecklistPanel projectId="p1" checklistId="c1" />);
+    await screen.findByText("Checklist test");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "1x Cavo USB @alberto\n2x Fogli @[Mario Rossi]" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addProjectChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({ title: "Cavo USB", assignee: "alberto" });
+    expect(addCalls[1][1]).toMatchObject({ title: "Fogli", assignee: "Mario Rossi" });
+  });
+
+  it("importa anche item base senza quantita' (boolean), con descrizione singola o tra []", async () => {
+    callable.mockImplementation((name: string) => {
+      if (name === "getProjectChecklist") {
+        return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "progetto", items: [] } });
+      }
+      if (name === "getProjectChecklistCompleteness") return Promise.resolve({ data: { complete: false } });
+      if (name === "listAssignableProjectUsers") return Promise.resolve({ data: { users: [] } });
+      if (name === "addProjectChecklistItem") return Promise.resolve({ data: { itemId: "new-item" } });
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+
+    const user = userEvent.setup();
+    render(<ProjectChecklistPanel projectId="p1" checklistId="c1" />);
+    await screen.findByText("Checklist test");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "###x\n[fogli protocollo] @alberto | da portare martedi'" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addProjectChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({ title: "###x", type: "boolean", quantity: undefined, url: undefined });
+    expect(addCalls[1][1]).toMatchObject({
+      title: "fogli protocollo",
       type: "boolean",
+      quantity: undefined,
+      assignee: "alberto",
+      notes: "da portare martedi'",
     });
   });
 });

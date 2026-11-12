@@ -9,7 +9,7 @@
  * (es. sbloccare una transizione di stato altrove).
  *
  * Definizione di completezza di un item: il calcolo dipende dal `type`
- * dell'item ('boolean' | 'generic' | 'numeric', vedi
+ * dell'item ('boolean' | 'generic' | 'numeric' | 'purchase', vedi
  * `checklistItemStatus.ts`). L'assegnatario **non** è un vincolo di
  * completezza (può restare nullo anche su item già completati):
  * - `boolean`: completo se `completed === true`, indipendentemente da
@@ -19,6 +19,7 @@
  *   "In corso", risultava completo);
  * - `numeric`: come `generic`, più la quantità valorizzata (non `null`,
  *   non `undefined`);
+ * - `purchase`: completo se `status === 'Completata'`;
  * - `type` assente o non riconosciuto (item legacy pre-EA-123): trattato
  *   come `generic`, l'unico calcolo esprimibile con i soli campi
  *   storicamente disponibili (`status`, senza `completed`).
@@ -92,6 +93,10 @@ export function isChecklistItemComplete(item: ChecklistItemLike): boolean {
 
   if (item.type === "numeric") {
     return isNumericItemComplete(item);
+  }
+
+  if (item.type === "purchase") {
+    return isGenericItemComplete(item);
   }
 
   return isGenericItemComplete(item);

@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { doc, getDoc, collection, query, orderBy, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, functions, auth } from "../../../firebase";
@@ -18,13 +18,45 @@ import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
+import { ProgressSpinner } from "primereact/progressspinner";
 import { REQUEST_STATUSES, getPublicStatusGroup, CLOSED_STATUSES } from "../../../helpers/requestStatus";
 import { setRequiresAttention } from "../../../helpers/requiresAttention";
 import type { ShippingAddress } from "../../../shared/types/shippingAddress";
 import provinceList from "../../../helpers/province.json";
 
-export default function RequestDetail() {
-  const { id } = useParams();
+interface RequestDetailProps {
+  compact?: boolean;
+  listPath?: string;
+  requestId?: string;
+}
+
+function DetailPaneLoader() {
+  return (
+    <div
+      style={{
+        minHeight: 320,
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <ProgressSpinner style={{ width: 56, height: 56 }} strokeWidth="6" />
+    </div>
+  );
+}
+
+export default function RequestDetail({
+  compact = false,
+  listPath = "/admin/requests",
+  requestId,
+}: RequestDetailProps) {
+  const { id: routeId } = useParams();
+  const id = requestId ?? routeId;
+  const navigate = useNavigate();
+  const location = useLocation();
   const [request, setRequest] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [newStatus, setNewStatus] = useState("");
@@ -420,9 +452,8 @@ export default function RequestDetail() {
   const handleAddNote = async () => {
     if (!id || !noteText.trim()) return;
     try {
-      // Recupera lo stato precedente (ultimo evento)
-      const lastEvent = events[0];
-      const previousStatus = lastEvent?.status || request.status || "sconosciuto";
+      // La nota non è un cambio di stato: si registra con lo stato corrente della richiesta
+      const previousStatus = request.status || events[0]?.toStatus || "sconosciuto";
 
       const notifica = (noteNotificaAdmin || noteNotificaVolontari || noteNotificaTelegram)
         ? { admin: noteNotificaAdmin, volunteers: noteNotificaVolontari, telegram: noteNotificaTelegram }
@@ -721,7 +752,16 @@ export default function RequestDetail() {
   };
 
   const goBack = () => {
-    window.history.back();
+    const fromState = (location.state as { from?: string } | null)?.from;
+    if (fromState) {
+      navigate(fromState);
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(listPath);
   };
 
   const leftToolbarTemplate = () => (
@@ -733,14 +773,14 @@ export default function RequestDetail() {
     />
   );
 
-  if (!request) return <div>Loading...</div>;
+  if (!request) return <DetailPaneLoader />;
 
   const isArchived = request.archived === true;
   const canArchive =
     !isArchived && CLOSED_STATUSES.includes(request.status ?? "");
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: compact ? 12 : 20 }}>
       <Toast ref={toast} />
       {/* Dialog: segnala richiede attenzione */}
       <Dialog
@@ -792,8 +832,8 @@ export default function RequestDetail() {
           </div>
         </div>
       </Dialog>
-      <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />
-      <h2>Request Detail</h2>
+      {!compact && <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />}
+      <h2 style={{ marginTop: compact ? 0 : undefined }}>Request Detail</h2>
 
       {/* ── EA-168: refactor a tab. Ordine sezioni invariato all'interno di ogni
           tab rispetto alla versione a pannelli lineari precedente; le sole

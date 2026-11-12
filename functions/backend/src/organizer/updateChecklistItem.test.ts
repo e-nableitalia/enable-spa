@@ -176,14 +176,26 @@ describe("updateChecklistItem", () => {
     }
   );
 
+  it("updates type to purchase when quantity is provided", async () => {
+    await updateChecklistItem.run(
+      buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, type: "purchase", quantity: 1 })
+    );
+
+    expect(itemUpdateMock).toHaveBeenCalledWith({
+      type: "purchase",
+      quantity: 1,
+      updatedAt: SERVER_TIMESTAMP_SENTINEL,
+    });
+  });
+
   // Scenario 4: updateChecklistItem con type non valido
-  it("throws invalid-argument and does not write when type is not among the 3 allowed", async () => {
+  it("throws invalid-argument and does not write when type is not among the allowed types", async () => {
     await expect(
       updateChecklistItem.run(
         buildRequest({ checklistId: CHECKLIST_ID, itemId: ITEM_ID, type: "unknown-type" })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(itemUpdateMock).not.toHaveBeenCalled();

@@ -5,6 +5,26 @@ import { requireStaffRole } from "./projectAccess";
 
 const REGION = "europe-west1";
 
+interface AssignableProjectUser {
+  id: string;
+  label: string;
+}
+
+async function resolveUserLabel(uid: string): Promise<string> {
+  try {
+    const db = getFirestore();
+    const profileSnap = await db.collection("users").doc(uid).collection("private").doc("profile").get();
+    if (profileSnap.exists) {
+      const data = profileSnap.data() ?? {};
+      const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+      if (fullName) return fullName;
+    }
+  } catch {
+    // Fallback su uid.
+  }
+  return uid;
+}
+
 /**
  * Cloud Function callable del dominio "projects": risolve lato server
  * l'elenco degli utenti assegnabili a un item di checklist di progetto —
@@ -13,6 +33,9 @@ const REGION = "europe-west1";
  * esiste un concetto di `assignedVolunteers` per singolo progetto: qualunque
  * volontario attivo può operare su qualunque progetto non terminale/non in
  * standby, vedi `isResolvableProjectAssignee`).
+ *
+ * Restituisce anche i label già risolti via Admin SDK per evitare che il
+ * client debba leggere i profili privati altrui (bloccati dalle rules).
  */
 export const listAssignableProjectUsers = onCall({ region: REGION }, async (request) => {
   const invokeId = getInvokeId(request);
@@ -35,6 +58,10 @@ export const listAssignableProjectUsers = onCall({ region: REGION }, async (requ
     new Set([...adminsSnap.docs.map((doc) => doc.id), ...volunteersSnap.docs.map((doc) => doc.id)])
   );
 
-  console.log(`[listAssignableProjectUsers] OK: ${uids.length} assignable user(s) read by ${uid}`);
-  return { uids };
+  const users: AssignableProjectUser[] = await Promise.all(
+    uids.map(async (id) => ({ id, label: await resolveUserLabel(id) }))
+  );
+
+  console.log(`[listAssignableProjectUsers] OK: ${users.length} assignable user(s) read by ${uid}`);
+  return { users, uids };
 });

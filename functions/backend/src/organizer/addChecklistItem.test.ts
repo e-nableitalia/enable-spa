@@ -82,6 +82,7 @@ describe("addChecklistItem", () => {
       type: "generic",
       assignee: null,
       quantity: null,
+      url: null,
       notes: "",
       status: "Assegnare",
       completed: false,
@@ -106,11 +107,12 @@ describe("addChecklistItem", () => {
   });
 
   // Scenario 1: addChecklistItem con type valido
-  it.each(["boolean", "generic", "numeric"] as const)(
+  it.each(["boolean", "generic", "numeric", "purchase"] as const)(
     "adds the new item with the provided type '%s'",
     async (type) => {
+      const maybePurchaseFields = type === "purchase" ? { quantity: 1 } : {};
       await addChecklistItem.run(
-        buildRequest({ checklistId: CHECKLIST_ID, title: "Verifica dita", type })
+        buildRequest({ checklistId: CHECKLIST_ID, title: "Verifica dita", type, ...maybePurchaseFields })
       );
 
       const [, newItemDocument] = batchSetMock.mock.calls[0];
@@ -182,20 +184,20 @@ describe("addChecklistItem", () => {
     await expect(
       addChecklistItem.run(buildRequest({ checklistId: CHECKLIST_ID, title: "Titolo" }))
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   // Scenario 2: addChecklistItem senza type o con type non valido
-  it("throws invalid-argument when type is not among the 3 allowed", async () => {
+  it("throws invalid-argument when type is not among the allowed types", async () => {
     await expect(
       addChecklistItem.run(
         buildRequest({ checklistId: CHECKLIST_ID, title: "Titolo", type: "unknown-type" })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(batchCommitMock).not.toHaveBeenCalled();
