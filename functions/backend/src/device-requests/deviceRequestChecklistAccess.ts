@@ -1,5 +1,6 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import type { Firestore } from "firebase-admin/firestore";
+import { assertDeviceRequestNotArchived } from "../device/deviceRequestArchive";
 
 /**
  * Risoluzione di accesso alla checklist operativa collegata a una
@@ -36,7 +37,8 @@ export async function resolveDeviceRequestChecklistAccess(
   db: Firestore,
   uid: string,
   requestId: string,
-  checklistId: string
+  checklistId: string,
+  options?: { forWrite?: boolean }
 ): Promise<{ checklistId: string; assignedVolunteers: string[] }> {
   const requestRef = db.collection("deviceRequests").doc(requestId);
   const requestSnap = await requestRef.get();
@@ -46,9 +48,16 @@ export async function resolveDeviceRequestChecklistAccess(
   }
 
   const requestData = requestSnap.data() ?? {};
+  if (options?.forWrite) {
+    assertDeviceRequestNotArchived(requestData);
+  }
+  // Compatibilità backward: documenti pre-migrazione hanno ancora
+  // `assignedVolunteer` scalare (vedi deviceData.ts).
   const assignedVolunteers: string[] = Array.isArray(requestData.assignedVolunteers)
     ? requestData.assignedVolunteers.filter((v: unknown): v is string => typeof v === "string")
-    : [];
+    : typeof requestData.assignedVolunteer === "string" && requestData.assignedVolunteer
+      ? [requestData.assignedVolunteer]
+      : [];
 
   const userSnap = await db.collection("users").doc(uid).get();
   const role = userSnap.exists ? userSnap.data()?.role : undefined;

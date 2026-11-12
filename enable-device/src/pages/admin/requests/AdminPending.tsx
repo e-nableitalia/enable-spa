@@ -1,10 +1,11 @@
-import AdminRequestTable from "../../../components/requests/AdminRequestTable";
+import AdminRequestsWorkspace from "./AdminRequestsWorkspace";
 
 export default function AdminPending({ requests }: { requests: any[] }) {
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Richieste in attesa volontario</h2>
-      <AdminRequestTable requests={requests} />
-    </div>
+    <AdminRequestsWorkspace
+      title="Richieste in attesa volontario"
+      requests={requests}
+      detailBasePath="/admin/requests/pending"
+    />
   );
 }

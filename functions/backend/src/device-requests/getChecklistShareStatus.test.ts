@@ -136,7 +136,7 @@ describe("getChecklistShareStatus", () => {
       percentComplete: 50,
       requestNumber: "REQ-000137",
       items: [
-        { title: "Stampa mano", completed: true },
+        { title: "Stampa mano", completed: true, quantity: 2 },
         { title: "Verifica misure", completed: false },
       ],
     });
@@ -147,8 +147,12 @@ describe("getChecklistShareStatus", () => {
     expect(Object.keys(result as { items: object[] }).sort()).toEqual(
       ["items", "percentComplete", "requestNumber"]
     );
-    (result as { items: object[] }).items.forEach((item) => {
-      expect(Object.keys(item).sort()).toEqual(["completed", "title"]);
+    (result as { items: Record<string, unknown>[] }).items.forEach((item) => {
+      expect(item).toHaveProperty("completed");
+      expect(item).toHaveProperty("title");
+      expect(item).not.toHaveProperty("assignee");
+      expect(item).not.toHaveProperty("notes");
+      expect(item).not.toHaveProperty("status");
     });
   });
 
@@ -196,8 +200,8 @@ describe("getChecklistShareStatus", () => {
       percentComplete: 50,
       requestNumber: null,
       items: [
-        { title: "Item 1", completed: false },
-        { title: "Item 2", completed: true },
+        { title: "Item 1", completed: false, quantity: 2 },
+        { title: "Item 2", completed: true, quantity: 1 },
       ],
     });
   });
@@ -231,8 +235,8 @@ describe("getChecklistShareStatus", () => {
       percentComplete: 100,
       requestNumber: null,
       items: [
-        { title: "Item 1", completed: true },
-        { title: "Item 2", completed: true },
+        { title: "Item 1", completed: true, quantity: 2 },
+        { title: "Item 2", completed: true, quantity: 1 },
       ],
     });
   });
@@ -254,7 +258,22 @@ describe("getChecklistShareStatus", () => {
     expect(result).toEqual({
       percentComplete: 100,
       requestNumber: null,
-      items: [{ title: "Item 1", completed: true }],
+      items: [{ title: "Item 1", completed: true, quantity: 2 }],
+    });
+  });
+
+  it("marks an item completed when status is Completata even without an assignee", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1"] } };
+    checklistItemsStore = {
+      "item-1": { title: "Stampa mano", type: "generic", assignee: null, status: "Completata" },
+    };
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({
+      percentComplete: 100,
+      requestNumber: null,
+      items: [{ title: "Stampa mano", completed: true }],
     });
   });
 
@@ -277,6 +296,25 @@ describe("getChecklistShareStatus", () => {
       items: [
         { title: "Verifica batteria", completed: true },
         { title: "Controllo cinghia", completed: false },
+      ],
+    });
+  });
+
+  it("includes quantity/url only for purchase items", async () => {
+    checklistsStore = { [CHECKLIST_ID]: { items: ["item-1", "item-2"] } };
+    checklistItemsStore = {
+      "item-1": { title: "Cuscinetto 608ZZ", type: "purchase", quantity: 2, url: "https://shop.example/608zz", status: "Da iniziare" },
+      "item-2": { title: "Controllo finale", type: "generic", status: "Assegnare" },
+    };
+
+    const result = await getChecklistShareStatus.run(buildRequest({ token: TOKEN }));
+
+    expect(result).toEqual({
+      percentComplete: 0,
+      requestNumber: null,
+      items: [
+        { title: "Cuscinetto 608ZZ", completed: false, quantity: 2, url: "https://shop.example/608zz" },
+        { title: "Controllo finale", completed: false },
       ],
     });
   });

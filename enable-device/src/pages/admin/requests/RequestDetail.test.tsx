@@ -3,7 +3,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import RequestDetail from "./RequestDetail";
 
-vi.mock("react-router-dom", () => ({ useParams: () => ({ id: "req1" }) }));
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useParams: () => ({ id: "req1" }),
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: "/admin/requests/req1", search: "", hash: "", state: null, key: "test" }),
+  };
+});
 vi.mock("../../../firebase", () => ({ db: {}, functions: {}, auth: {} }));
 
 // setDeviceRequestConsent (EA-158) è una Cloud Function: a differenza delle
@@ -60,6 +68,18 @@ vi.mock("../../../components/checklist/DeviceRequestChecklists", () => ({
       data-request-id={props.requestId}
       data-checklist-ids={JSON.stringify(props.checklistIds)}
     />
+  ),
+}));
+
+// EA-168: senza questo mock, il vero DeviceRequestAttachments (montato
+// subito nella tab "Allegati" perché TabView usa renderActiveOnly={false})
+// chiamerebbe "listDeviceRequestAttachments" tramite lo stesso mock
+// `callable` condiviso da questo file — consumando silenziosamente un
+// eventuale `mockImplementationOnce` pensato per un'altra callable (es.
+// "sendDocumentsEmail"), con effetti collaterali reali sui test esistenti.
+vi.mock("../../../components/attachments/DeviceRequestAttachments", () => ({
+  default: (props: { requestId: string }) => (
+    <div data-testid="attachments" data-request-id={props.requestId} />
   ),
 }));
 

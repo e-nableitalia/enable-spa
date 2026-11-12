@@ -106,6 +106,7 @@ describe("createChecklist", () => {
       type: "boolean",
       assignee: null,
       quantity: 2,
+      url: null,
       notes: "Nota",
       status: "Assegnare",
       completed: false,
@@ -133,14 +134,15 @@ describe("createChecklist", () => {
   });
 
   // Scenario 1: item iniziale con type valido
-  it.each(["boolean", "generic", "numeric"] as const)(
+  it.each(["boolean", "generic", "numeric", "purchase"] as const)(
     "creates the item with the provided type '%s'",
     async (type) => {
+      const maybePurchaseFields = type === "purchase" ? { quantity: 1 } : {};
       const result = await createChecklist.run(
         buildRequest({
           category: "devicetype-mano",
           title: "Checklist mano",
-          items: [{ title: "Verifica dita", type }],
+          items: [{ title: "Verifica dita", type, ...maybePurchaseFields }],
         })
       );
 
@@ -162,14 +164,14 @@ describe("createChecklist", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(batchCommitMock).not.toHaveBeenCalled();
   });
 
   // Scenario 2: item iniziale senza type o con type non valido
-  it("throws invalid-argument when an initial item has a type not among the 3 allowed", async () => {
+  it("throws invalid-argument when an initial item has a type not among the allowed types", async () => {
     await expect(
       createChecklist.run(
         buildRequest({
@@ -179,7 +181,7 @@ describe("createChecklist", () => {
         })
       )
     ).rejects.toMatchObject(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
 
     expect(batchCommitMock).not.toHaveBeenCalled();

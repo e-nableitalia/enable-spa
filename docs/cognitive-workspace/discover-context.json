@@ -1,7 +1,7 @@
 {
   "$schema": "https://cognitive-workspace.dev/schemas/domain-manifest/v1.json",
   "manifest_version": "1.0",
-  "generated_at": "2026-07-28T00:00:00Z",
+  "generated_at": "2026-09-08T00:00:00Z",
 
   "project": {
     "name": "enable-spa",
@@ -261,6 +261,33 @@
         ],
         "rbac_helper": "functions/backend/src/device-requests/deviceRequestChecklistAccess.ts — resolveDeviceRequestChecklistAccess(db, uid, requestId): legge deviceRequests/{requestId}, verifica ruolo (admin o volunteer in assignedVolunteers), restituisce checklistId o solleva not-found/permission-denied.",
         "new_field_on_device_request": "deviceRequests/{requestId}.checklistId — introdotto da questo layer, assente dal modello device_entities.deviceRequest documentato in precedenza (vedi domain_entities.deviceRequest.key_fields.main, da integrare in eventuale prossimo deep-dive)."
+      },
+      {
+        "group": "super-admin",
+        "source": "functions/backend/src/backup/ + functions/backend/src/emailTemplates/",
+        "note": "Area nuova (Epic EA-171 'Super Admin', Story EA-172 Done, commit cdbdd23) mappata dal discover incrementale 2026-09-08 nel dominio manifest 'super-admin' (status: draft, depth: null). Azioni operative di piattaforma riservate a super admin: gate condiviso in functions/backend/src/security/superAdmin.ts (requireSuperAdmin). Entrambe le funzioni sono onCall europe-west1, forward-only e per-ambiente (ogni deploy opera solo sul proprio progetto Firebase, nessuna selezione esplicita di staging/prod).",
+        "auth_gate": "requireSuperAdmin(db, uid) — legge users/{uid}.superAdmin; lancia permission-denied se assente o !== true. Flag additivo a role:admin (mai un terzo valore di role), bootstrap solo manuale in console Firestore; nessuna Cloud Function scrive questo flag.",
+        "functions": [
+          {
+            "name": "deployEmailTemplates",
+            "description": "Applica il registro versionato in codice (emailTemplates/registry.ts::EMAIL_TEMPLATES) alla collection Firestore emailTemplates del progetto su cui la funzione è deployata: sync forward-only (repo -> Firestore, mai il contrario). Restituisce { templateIds: string[] } degli id aggiornati. Sostituisce l'enforcement a documento descrittivo (drift silenzioso, F-24/F-37) con un registro verificabile a compile-time.",
+            "source": "functions/backend/src/emailTemplates/deployEmailTemplates.ts",
+            "auth_required": true,
+            "role_check": "superAdmin"
+          },
+          {
+            "name": "triggerFirestoreBackup",
+            "description": "Avvia l'export nativo Firestore (v1 FirestoreAdminClient) verso il bucket GCS dedicato {projectId}-firestore-backups (regione EU, lifecycle di eliminazione automatica a 30 giorni deciso dalla spike IAM EA-172). Restituisce { outputUriPrefix }. Richiede sul service account di runtime roles/datastore.importExportAdmin e roles/storage.objectAdmin sul bucket.",
+            "source": "functions/backend/src/backup/triggerFirestoreBackup.ts",
+            "auth_required": true,
+            "role_check": "superAdmin"
+          }
+        ],
+        "email_template_registry": {
+          "source": "functions/backend/src/emailTemplates/registry.ts",
+          "ids": ["attivazioneVolontario", "confermaRicezione", "inviteVolunteer", "shipmentRequest", "device-request-documents-transmission"],
+          "note": "5 id reali già in uso nei sender esistenti; i primi 4 camelCase, il quinto (device-request-documents-transmission) kebab-case perché è la costante letterale DOCUMENTS_EMAIL_TEMPLATE_ID di device-requests/sendDocumentsEmail.ts. Contenuto dei primi 4 materializzato in sola lettura dal progetto live 'enableitalia' il 2026-09-08; il quinto scritto ex novo per chiudere F-38. I sender importano l'id da qui invece di scrivere stringhe libere in template.name."
+        }
       }
     ]
   },
@@ -372,7 +399,15 @@
     "mailQueue": {
       "description": "Coda email (Firebase Mail Extension). I documenti vengono processati dall'estensione Firebase Trigger Email.",
       "firestore_path": "mail/{mailId}",
-      "email_templates": ["confermaRicezione", "inviteVolunteer", "shipmentRequest", "attivazioneVolontario"]
+      "email_templates": ["confermaRicezione", "inviteVolunteer", "shipmentRequest", "attivazioneVolontario", "device-request-documents-transmission"]
+    },
+
+    "emailTemplate": {
+      "description": "Template email nativo dell'estensione Firebase Trigger Email (firestore-send-email), materializzato su Firestore dal deploy super-admin. Fonte di verità versionata in codice (functions/backend/src/emailTemplates/registry.ts), sincronizzata forward-only verso Firestore da deployEmailTemplates (EA-171/172).",
+      "firestore_path": "emailTemplates/{templateId}",
+      "key_fields": ["subject", "html", "text"],
+      "template_ids": ["attivazioneVolontario", "confermaRicezione", "inviteVolunteer", "shipmentRequest", "device-request-documents-transmission"],
+      "domain": "super-admin"
     },
 
     "rateLimit": {
@@ -423,7 +458,8 @@
         "all": "AdminAll", "pending": "AdminPending", "triage": "AdminTriage",
         "validate": "AdminValidate", "attention": "AdminAttention", "production": "AdminProduction",
         "shipping": "AdminShipping", "completed": "AdminCompleted", "cancelled": "AdminCancelled",
-        "maintenance": "AdminMaintenanceRequests", "detail": "RequestDetail"
+        "maintenance": "AdminMaintenanceRequests — ATTENZIONE: nome/route fuorvianti. Il file enable-device/src/pages/admin/requests/AdminMaintenanceRequests.tsx (route /admin/requests/maintenance, AdminLayout.tsx:463) NON gestisce richieste di manutenzione: da EA-172 (commit cdbdd23) è la pagina 'Super Admin' (dominio manifest 'super-admin'), che ospita i bottoni Deploy template email (deployEmailTemplates) e Backup Firestore (triggerFirestoreBackup). Fisicamente sotto admin/requests/ quindi catturato dal glob del dominio device-requests: sovrapposizione documentata in docs/FINDINGS.md F-46.",
+        "detail": "RequestDetail"
       },
       "volunteers": {
         "list": "AdminVolunteers / VolunteerAdminList", "pending": "PendingVolunteers",
@@ -457,7 +493,8 @@
         "admin": "Accesso completo a tutte le operazioni e viste",
         "volunteer": "Accesso limitato alle proprie richieste assegnate e alle transizioni di stato consentite"
       },
-      "activation": "I nuovi volontari partono con active=false; l'admin deve attivare manualmente l'account"
+      "activation": "I nuovi volontari partono con active=false; l'admin deve attivare manualmente l'account",
+      "super_admin_flag": "users/{uid}.superAdmin === true (Epic EA-171) — flag booleano ADDITIVO a role:admin, mai un terzo valore di role. Gate condiviso requireSuperAdmin (functions/backend/src/security/superAdmin.ts) usato dalle sole callable operative di piattaforma (deployEmailTemplates, triggerFirestoreBackup). Bootstrap solo manuale in console Firestore: nessuna Cloud Function legge/scrive questo flag per conto di altri utenti. Nessun controllo lato client: la UI 'Super Admin' resta raggiungibile via menu/URL ma il backend applica comunque l'RBAC."
     },
     "anti_spam": {
       "recaptcha": {

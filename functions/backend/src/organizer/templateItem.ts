@@ -42,11 +42,14 @@ export function normalizeTemplateItem(input: unknown): TemplateItem {
   }
 
   if (!isChecklistItemType(type)) {
-    throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')");
+    throw new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')");
   }
 
   if (quantity !== undefined && quantity !== null && typeof quantity !== "number") {
     throw new HttpsError("invalid-argument", "Item quantity must be a number");
+  }
+  if (type === "purchase" && (quantity === undefined || quantity === null || typeof quantity !== "number" || quantity <= 0)) {
+    throw new HttpsError("invalid-argument", "Purchase item quantity must be a positive number");
   }
 
   return {

@@ -11,6 +11,8 @@ import Footer from "../components/layout/Footer";
 interface ShareChecklistItem {
   title: string;
   completed: boolean;
+  quantity?: number;
+  url?: string;
 }
 
 /**
@@ -101,7 +103,28 @@ export default function ChecklistShareStatus() {
                       className={item.completed ? "pi pi-check-circle" : "pi pi-circle"}
                       style={{ color: item.completed ? "#22c55e" : "#9ca3af", fontSize: 18 }}
                     />
-                    <span style={{ color: item.completed ? "#374151" : "#6b7280" }}>{item.title}</span>
+                    <span style={{ color: item.completed ? "#374151" : "#6b7280" }}>
+                      {typeof item.quantity === "number" ? (
+                        <>
+                          {item.quantity + "x "}
+                          {item.url ? (
+                            <a href={item.url} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
+                              {item.title}
+                            </a>
+                          ) : (
+                            item.title
+                          )}
+                        </>
+                      ) : (
+                        item.url ? (
+                          <a href={item.url} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
+                            {item.title}
+                          </a>
+                        ) : (
+                          item.title
+                        )
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>

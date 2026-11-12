@@ -74,6 +74,23 @@ service cloud.firestore {
       }
     }
 
+    // ---- PROJECTS (EA-169/170: progetti speciali/iniziative/eventi) ----
+    match /projects/{projectId} {
+      // Lettura: qualunque admin o volontario, sempre permessa
+      // indipendentemente dallo stato (stesso perimetro di deviceRequests).
+      allow read: if isAdmin() || isVolunteer();
+
+      // Ogni mutazione passa dalle Cloud Function dedicate (RBAC e guardie
+      // di stato applicate lato server, vedi projectAccess.ts): nessuna
+      // scrittura diretta dal client, a differenza di deviceRequests.
+      allow write: if false;
+
+      match /events/{eventId} {
+        allow read: if isAdmin() || isVolunteer();
+        allow write: if false;
+      }
+    }
+
       // ---- PRIVATE COLLECTION ----
     match /contacts/{contactId} {
       allow read: if isAdmin();

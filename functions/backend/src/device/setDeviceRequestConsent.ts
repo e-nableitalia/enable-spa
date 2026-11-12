@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { logSecurityEvent } from "../security/securityLog";
+import { assertDeviceRequestNotArchived } from "./deviceRequestArchive";
 
 const REGION = "europe-west1";
 
@@ -86,6 +87,7 @@ export const setDeviceRequestConsent = onCall(
       console.log(`[setDeviceRequestConsent] KO: request ${requestId} not found`);
       throw new HttpsError("not-found", "Device request not found");
     }
+    assertDeviceRequestNotArchived(requestSnap.data());
 
     const acquiredField = `${consentType}Acquired`;
     const dateField = `${consentType}AcquiredDate`;

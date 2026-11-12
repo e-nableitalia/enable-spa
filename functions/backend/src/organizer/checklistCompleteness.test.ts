@@ -40,10 +40,10 @@ describe("isChecklistItemComplete", () => {
       ).toBe(false);
     });
 
-    it("returns false when assignee is missing even if completed is true", () => {
+    it("returns true when assignee is missing if completed is true (assignee is not a completeness constraint)", () => {
       expect(
         isChecklistItemComplete(buildItem({ type: "boolean", completed: true, assignee: null }))
-      ).toBe(false);
+      ).toBe(true);
     });
   });
 
@@ -59,7 +59,7 @@ describe("isChecklistItemComplete", () => {
     );
 
     // Scenario 3: item generic con status 'Completata' è completo
-    it("returns true when assignee is set and status is 'Completata'", () => {
+    it("returns true when status is 'Completata'", () => {
       expect(
         isChecklistItemComplete(buildItem({ type: "generic", status: "Completata" }))
       ).toBe(true);
@@ -71,10 +71,10 @@ describe("isChecklistItemComplete", () => {
       ).toBe(false);
     });
 
-    it("returns false when assignee is missing", () => {
+    it("returns true when assignee is missing if status is 'Completata'", () => {
       expect(
         isChecklistItemComplete(buildItem({ type: "generic", assignee: null }))
-      ).toBe(false);
+      ).toBe(true);
     });
 
     it("ignores quantity entirely (complete even if quantity is null or absent)", () => {
@@ -108,7 +108,7 @@ describe("isChecklistItemComplete", () => {
     });
 
     // Scenario 5: item numeric con quantity valorizzata è completo
-    it("returns true when assignee is set, status is 'Completata' and quantity is set", () => {
+    it("returns true when status is 'Completata' and quantity is set", () => {
       expect(
         isChecklistItemComplete(buildItem({ type: "numeric", status: "Completata", quantity: 5 }))
       ).toBe(true);
@@ -126,18 +126,18 @@ describe("isChecklistItemComplete", () => {
       ).toBe(false);
     });
 
-    it("returns false when assignee is missing", () => {
+    it("returns true when assignee is missing if status is 'Completata' and quantity is set", () => {
       expect(
         isChecklistItemComplete(
           buildItem({ type: "numeric", status: "Completata", quantity: 5, assignee: null })
         )
-      ).toBe(false);
+      ).toBe(true);
     });
   });
 
   describe("type assente o non riconosciuto (item legacy pre-EA-123)", () => {
     it("falls back to the 'generic' calculation when type is undefined", () => {
-      const completeItem: ChecklistItemLike = { assignee: "Mario Rossi", status: "Completata" };
+      const completeItem: ChecklistItemLike = { assignee: null, status: "Completata" };
       expect(isChecklistItemComplete(completeItem)).toBe(true);
 
       const inProgressItem: ChecklistItemLike = { assignee: "Mario Rossi", status: "In corso" };

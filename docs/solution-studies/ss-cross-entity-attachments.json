@@ -1,0 +1,214 @@
+{
+  "id": "ss-cross-entity-attachments",
+  "status": "decided",
+  "request_ref": "requests/ss-cross-entity-attachments.md",
+  "problem_statement": "Oggi non esiste alcuna infrastruttura di allegati/file nell'applicazione (verificato: nessun uso di Firebase Storage nel codice, nessun `storage.rules`, nessuna sezione `storage` in `firebase.json`), e non esiste un modo per associare file generici (con descrizione) a un'entita' applicativa. Il problema non e' 'dove mettere i file su Google Drive' — quella e' una soluzione proposta dall'operatore per uno dei sotto-problemi, non ancora decisa — ma: (1) fornire una capability di allegati riusabile trasversalmente da piu' domini (oggi `device-requests`, in futuro le iniziative/progetti speciali) invece di reinventare storage/modello-dati/RBAC per ognuno, e (2) farlo rispettando un perimetro di visibilita' e di autorizzazione gia' deciso (solo staff — admin e volontari, mai il richiedente/famiglia — con differenziazione admin/volontario su modifica ed eliminazione). La sequenza di sviluppo confermata dall'operatore vuole questa capability costruita e funzionante *prima* di agganciarla a qualunque dominio consumer: questo studio riguarda esclusivamente la capability di base (storage, modello dati, RBAC, superficie funzionale), non l'integrazione con `device-requests` ne' con i futuri progetti speciali, che restano un passo successivo separato.",
+  "constraints": [
+    "Nessuna infrastruttura di storage esiste oggi nel progetto (verificato: nessun `getStorage`/`uploadBytes` nel codice, nessun `storage.rules`, nessuna sezione `storage` in `firebase.json`, bucket Storage non provisionato): qualunque opzione la introduce da zero, incluse le regole di sicurezza.",
+    "RBAC gia' deciso dall'operatore (2026-09-06), non negoziabile in questo studio: visibilita' solo staff (admin + volontario, mai richiedente/famiglia); upload consentito sia ad admin sia a volontario; modifica/eliminazione — admin su qualunque allegato, volontario solo su quelli caricati da se stesso.",
+    "Perimetro entita' gia' deciso: solo entita' di alto livello (`deviceRequest`, futuri progetti speciali/iniziative), non a livello di singolo item di checklist.",
+    "Contenuto gia' deciso: file generico con descrizione libera, non tipizzato per categoria di documento.",
+    "Scope di questo studio limitato alla capability di base (sequenza confermata dall'operatore): non tratta l'integrazione con `device-requests` (step 2) ne' con `ir-special-projects-initiatives` (step 2, dominio non ancora implementato) — qualunque opzione deve restare integrabile in modo leggero da un futuro consumer, senza gia' impegnarsi sulla UI/RBAC specifica di quei domini.",
+    "Precedente di modellazione dati gia' stabilito nello stesso repo: la collection `checklistItems` (decisione dello studio `ss-checklist-item-model`, gia' 'decided') e' una collection Firestore di primo livello con riferimento all'entita' proprietaria, non una subcollection — coerente con l'osservazione della richiesta che questo e' il pattern 'che meglio si presta a essere capability di base riusabile'. Le opzioni sotto adottano questo stesso pattern per i metadati degli allegati (`attachments/{attachmentId}` con `entityType`/`entityId`), per coerenza con la scelta di modellazione piu' recente e analoga in questo repo, non per assunzione arbitraria.",
+    "Precedente RBAC 'ownership' gia' esistente nel dominio `shipments` (`deleteShipmentRequest`): 'l'admin puo' eliminare qualsiasi richiesta; il volontario solo le proprie in stato pending' — stesso pattern admin-vs-owner richiesto qui per modifica/eliminazione allegati, gia' precedente nel repo e non un caso nuovo da inventare.",
+    "Convenzione di progetto `security_logging`: ogni Cloud Function deve loggare inizio, fine ed errori in `securityLogs` via `logSecurityEvent` — si applica anche a qualunque nuova funzione di questa capability, indipendentemente dal backend scelto.",
+    "Nessuna dipendenza a oggi verso API Google esterne lato server: `functions/backend/package.json` dichiara solo `firebase-admin`, `firebase-functions`, `jsonwebtoken`. Il progetto usa gia' Google come identity provider (Google OAuth per il login di volontari/admin, dominio `auth`), ma quel client OAuth end-user e' un credential type distinto da quanto servirebbe per un'integrazione Drive API server-to-server (service account con domain-wide delegation, o OAuth server-side dedicato): l'assenza di precedenti riguarda specificamente l'uso server-side di API Google non-Firebase, non l'uso di Google in generale nel progetto.",
+    "Il backend di storage (Google Drive dedicato vs Firebase/Cloud Storage nativo) e' esplicitamente non deciso: l'operatore lo ha proposto in conversazione (2026-09-06) ma la richiesta stessa impone di pesarlo con trade-off espliciti, non di assumerlo.",
+    "Eccezione RBAC confermata dall'operatore (2026-09-06), aggiuntiva rispetto all'RBAC di cui sopra: un numero ristretto di 'superadmin' (ruolo oggi inesistente in app: solo admin/volontario/organizer, verificato) ha accesso diretto nativo allo spazio di storage, fuori dal proxy applicativo, per supervisione/backup. Per quei soli account l'RBAC per-utente/ownership deciso sopra non si applica — accettato esplicitamente dall'operatore come costo del canale. Il meccanismo di concessione/mantenimento dell'elenco superadmin (nuovo valore di `users/{uid}.role` vs lista fuori Firestore) non e' ancora deciso, indipendentemente dal backend scelto.",
+    "Ripensamento confermato dall'operatore (2026-09-06, dopo il primo refine): i costi di storage/trasferimento su Cloud Storage nativo sono minimi — l'argomento 'spazio a costo prevedibile/gestito a mano' che nel giro di refine precedente aveva pesato a favore di Drive e' esplicitamente ritirato dall'operatore, non solo derubricato a criterio organizzativo non pesabile tecnicamente: non va piu' trattato come un pro reale di nessuna opzione in questo studio.",
+    "Verificato in questo giro di refine (ricerca su documentazione Google Cloud ufficiale, 2026-09-06), in risposta alla richiesta esplicita dell'operatore di controllare l'affermazione del refine precedente: 'Option A richiederebbe IAM a livello di intero progetto GCP, non della sola cartella allegati' NON e' accurato. Cloud Storage supporta l'assegnazione di ruoli IAM (inclusi `roles/storage.admin` e `roles/storage.objectAdmin`) direttamente a livello di singolo bucket, non solo di progetto: il bucket e' esso stesso una risorsa IAM, e un binding a quel livello si applica solo al bucket indicato (e agli oggetti al suo interno), non al resto del progetto. Poiche' oggi non esiste alcuna infrastruttura Storage nel progetto (vedi vincolo sopra), un bucket dedicato esclusivamente agli allegati rende un binding IAM a livello di bucket gia' scoped esattamente alla capability allegati, senza bisogno di funzionalita' aggiuntive. Per uno scoping ancora piu' fine (prefisso/cartella all'interno di un bucket condiviso in futuro con altri usi Storage non-allegati), Cloud Storage supporta anche IAM Conditions basate su `resource.name.startsWith(...)`, documentate da Google per ruoli standard come `storage.objectViewer`/`storage.objectAdmin` — ma la documentazione Google stessa contiene una nota di ambiguita' non risolta da questa ricerca ('gli attributi API per Cloud Storage sono supportati solo nei Credential Access Boundaries', in apparente tensione con gli esempi di condizioni su prefisso documentati altrove). Questa ambiguita' non e' pero' rilevante per la decisione di questo studio: un bucket dedicato (scoping a livello di intero bucket, non di prefisso) e' gia' sufficiente per il caso d'uso superadmin confermato, e non richiede IAM Conditions."
+  ],
+  "options": [
+    {
+      "id": "opt-a-firebase-storage-native",
+      "name": "Cloud Storage nativo, RBAC interamente in Cloud Function con signed URL (nessun proxy di byte, nessuna Storage Rule per il perimetro RBAC)",
+      "summary": "I file fisici vivono in un bucket Cloud Storage dedicato esclusivamente agli allegati (path del tipo `attachments/{entityType}/{entityId}/{attachmentId}/{filename}`), provisionato da zero per questo progetto. Le Cloud Function callable (`uploadAttachment`/`downloadAttachment`/`listAttachments`/`updateAttachmentDescription`/`deleteAttachment`) fanno da unico punto di enforcement RBAC (stesso pattern gia' in uso ovunque nel backend: lettura `users/{uid}.role` + ownership dal documento allegato), in codice TypeScript testabile — non in regole dichiarative. Per upload e download, la function non fa da proxy dei byte: dopo aver verificato l'RBAC, genera una signed URL V4 a breve scadenza (azione `write` o `read`) e la restituisce al client, che trasferisce i byte direttamente client↔GCS. Le Storage Security Rules restano quindi marginali (bucket privato, nessun accesso diretto via SDK client Firebase): il perimetro di sicurezza reale e' interamente la generazione della signed URL post-RBAC, dato che le signed URL sono chiamate dirette all'API GCS e bypassano le Firebase Storage Rules per costruzione. I metadati (descrizione, `uploadedBy`, `entityType`/`entityId`, `storagePath`) vivono in una collection Firestore di primo livello `attachments/{attachmentId}`, coerente col precedente `checklistItems`. L'eccezione superadmin si risolve con un ruolo IAM nativo GCS (es. `roles/storage.admin` o `storage.objectAdmin`) assegnato a livello del solo bucket dedicato agli account superadmin, senza introdurre alcun sistema esterno.",
+      "domain_impact": {
+        "existing_domains_touched": [],
+        "new_domains_proposed": [
+          {
+            "id": "attachments",
+            "name": "Allegati",
+            "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership."
+          }
+        ],
+        "new_capabilities_sketch": [
+          "Provisioning di un bucket Cloud Storage dedicato agli allegati (storage.rules minimale/deny-by-default + sezione storage in firebase.json) — infrastruttura da zero",
+          "Cloud Function callable uploadAttachment/downloadAttachment/listAttachments/updateAttachmentDescription/deleteAttachment con RBAC in codice e generazione signed URL V4 post-RBAC",
+          "Collection Firestore attachments/{attachmentId} come catalogo metadati di primo livello",
+          "Concessione IAM a livello di bucket (non di progetto) dei pochi account superadmin, come configurazione GCP indipendente dal codice applicativo"
+        ]
+      },
+      "pros": [
+        "Nessuna nuova dipendenza esterna ne' nuove credenziali applicative: si integra nel progetto Firebase/GCP gia' in uso, stesso Google Auth gia' usato per RBAC altrove nel repo.",
+        "RBAC interamente in codice TypeScript nella Cloud Function, non in regole dichiarative: stesso pattern gia' validato per tutte le altre Cloud Function del backend, pienamente testabile con test unitari/di integrazione senza dover emulare Storage Security Rules per la logica di ownership.",
+        "Nessun proxy di byte attraverso la Cloud Function: upload e download avvengono client↔GCS diretti via signed URL, evitando i limiti di memoria/timeout che affliggono invece l'opzione basata su Drive proxato (Option B).",
+        "L'argomento del 'costo prevedibile' che nel giro di refine precedente aveva spostato la preferenza verso Drive e' stato ritirato esplicitamente dall'operatore in questo giro: il costo a consumo di Cloud Storage e' minimo, quindi non e' piu' un differenziale a sfavore di questa opzione.",
+        "Verificato in questo giro (vedi vincoli): l'eccezione superadmin e' soddisfatta nativamente da un ruolo IAM GCS assegnato a livello di bucket dedicato — non a livello di intero progetto come affermato erroneamente nel refine precedente — senza introdurre alcun secondo sistema esterno come Drive. Questo chiude il divario funzionale che nel giro precedente aveva reso Option B l'unica opzione a copertura completa."
+      ],
+      "cons": [
+        "Introduce comunque la primissima infrastruttura di Storage nel progetto (oggi assente): va scritto `storage.rules` da zero (anche se minimale, deny-by-default), aggiunta la sezione `storage` a `firebase.json`, provisionato il bucket dedicato.",
+        "Lo scoping IAM 'a livello di bucket' per il superadmin resta pulito solo finche' il bucket resta dedicato esclusivamente agli allegati: se in futuro si decidesse di condividere lo stesso bucket con altri usi Storage non correlati, servirebbe passare a IAM Conditions su prefisso, la cui documentazione Google contiene una nota di ambiguita' non risolta da questo studio (vedi vincoli) — non un problema per lo scope attuale, ma un vincolo di disciplina operativa da rispettare (bucket dedicato, non condiviso) perche' la semplicita' dello scoping resti valida.",
+        "Le signed URL, pur a scadenza breve e generate solo dopo RBAC verificato per quella singola richiesta, bypassano le Firebase Storage Security Rules per costruzione: il perimetro di sicurezza e' quindi un solo punto di enforcement (la Cloud Function al momento della generazione), non un doppio livello rules+function come si poteva ipotizzare nel giro precedente."
+      ],
+      "risks": [
+        "Se la Cloud Function genera una signed URL con RBAC verificato in modo errato (es. un edge case di ownership non gestito), l'URL risultante concede comunque accesso diretto al file per l'intera sua validita', senza un secondo livello di enforcement lato Storage Rules a fare da rete di sicurezza aggiuntiva.",
+        "Nessun trigger nativo Cloud Storage esiste per 'oggetto letto/scaricato' (i trigger disponibili sono solo finalize/delete/archive/metadataUpdate): il logging centralizzato puo' registrare l'emissione della signed URL di download (l'intento), ma non puo' osservare in modo nativo se il download e' stato effettivamente completato — un limite strutturale della piattaforma, non un dettaglio rimandabile all'implementazione."
+      ],
+      "effort_class": "S",
+      "reversibility": "medium",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Con le signed URL che bypassano le Storage Rules, la Cloud Function e' l'unico punto di enforcement RBAC per l'intera capability: un errore di logica nel controllo di ruolo/ownership prima della generazione della signed URL non ha alcuna rete di sicurezza aggiuntiva a valle.",
+          "mitigation": "Suite di test unitari/di integrazione dedicata per ogni combinazione ruolo/ownership (admin, volontario proprietario, volontario non proprietario) sulla funzione che genera la signed URL, trattata con lo stesso rigore gia' richiesto per la superficie RBAC piu' sensibile del backend, prima del deploy."
+        },
+        {
+          "severity": "medium",
+          "description": "Il completamento di un upload e' osservabile via trigger `onObjectFinalized`, ma il completamento di un download non ha alcun equivalente nativo GCS: la convenzione `security_logging` puo' quindi registrare solo l'emissione della signed URL di download, non l'avvenuto download.",
+          "mitigation": "Decidere esplicitamente, prima dell'implementazione, se 'signed URL di download emessa' e' un proxy accettabile per la convenzione `security_logging` su questa capability, oppure se serve un flusso alternativo (es. redirect controllato dalla function) per un logging di completamento piu' fedele — accettando in quel caso di reintrodurre parte del proxy di byte che questa opzione vuole evitare."
+        },
+        {
+          "severity": "medium",
+          "description": "La generazione di signed URL V4 dal service account di runtime di default di una Cloud Function richiede che quel service account abbia il ruolo `roles/iam.serviceAccountTokenCreator` su se stesso (concessione IAM una tantum): se omessa, la chiamata fallisce a runtime con un errore di permesso, non in fase di build/deploy.",
+          "mitigation": "Documentare questa concessione IAM esplicitamente nel checklist di deploy della capability e verificarla empiricamente prima di impegnarsi sull'effort stimato (vedi spike sotto)."
+        }
+      ],
+      "spikes": [
+        {
+          "id": "spike-signed-url-self-signing",
+          "question": "La Cloud Function riesce a generare una V4 signed URL usando esclusivamente il proprio service account di runtime di default (con self-grant di `roles/iam.serviceAccountTokenCreator`), senza dover esportare/gestire una chiave JSON separata?",
+          "verification_approach": "Prototipo time-boxed (~1-2 ore): deploy di una Cloud Function di prova che concede al proprio service account il ruolo Service Account Token Creator e chiama `bucket.file(...).getSignedUrl({action, expires})`, verificando che la chiamata riesca senza errori di permesso e che l'URL risultante permetta davvero un upload/download diretto client→GCS.",
+          "blocking": false,
+          "outcome": {
+            "answer": "Si', confermato empiricamente su enableitalia-staging: una Cloud Function gen2 (region europe-west1), usando esclusivamente il proprio service account di runtime di default (86295063836-compute@developer.gserviceaccount.com) dopo un self-grant una tantum di roles/iam.serviceAccountTokenCreator, genera con successo una V4 signed URL via getSignedUrl() senza alcuna chiave JSON esportata. La URL risultante permette un download diretto reale del file (verificato: HTTP 200, contenuto corretto). Nessuna riserva: la funzionalita' e' pienamente disponibile con la sola identita' di runtime.",
+            "verified_by": "human:Alberto Navatta",
+            "verified_at": "2026-09-06T16:23:58.956Z",
+            "evidence_ref": "Verifica manuale in sessione: bucket e function di test (spikeSignedUrl) deployati su enableitalia-staging, invocati con successo (risposta {ok:true,url:...}), URL scaricata via curl con HTTP 200 e contenuto corretto, poi rimossi a fine test. Il self-grant IAM e' stato mantenuto (prerequisito reale per l'implementazione)."
+          }
+        }
+      ]
+    },
+    {
+      "id": "opt-b-drive-proxy-function",
+      "name": "Google Drive dedicato, sempre mediato da Cloud Function proxy (nessun link diretto al client)",
+      "summary": "I file fisici vivono in uno spazio Drive dedicato (Shared Drive o cartella), a cui accede solo un service account con delega (domain-wide delegation) o account dedicato, mai esposto al client. Ogni operazione (upload/list/download/update-description/delete) passa esclusivamente da una Cloud Function callable che applica lo stesso RBAC gia' in uso altrove (lettura `users/{uid}.role` + ownership) prima di chiamare la Drive API v3 server-side; il client non riceve mai un link Drive diretto, solo il contenuto/byte stream mediato dalla function o uno stream temporaneo generato dalla function stessa. I metadati (descrizione, `uploadedBy`, `entityType`/`entityId`, `driveFileId`) vivono nella stessa collection Firestore di primo livello `attachments/{attachmentId}` di Option A. Eccezione confermata dall'operatore (2026-09-06): oltre al canale ordinario mediato dalla Cloud Function (riservato ad admin+volontario secondo l'RBAC deciso, invariato), lo spazio Drive dedicato prevede anche un accesso diretto nativo — fuori dal proxy applicativo, tramite condivisione Drive/Workspace nativa, non tramite codice applicativo — per un numero ristretto di 'superadmin' (ruolo oggi inesistente nell'app), a scopo di supervisione/backup: per quei pochi account l'RBAC per-utente (incluso il filtro di ownership sul volontario) non si applica, per costruzione.",
+      "domain_impact": {
+        "existing_domains_touched": [],
+        "new_domains_proposed": [
+          {
+            "id": "attachments",
+            "name": "Allegati",
+            "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership."
+          }
+        ],
+        "new_capabilities_sketch": [
+          "Integrazione Drive API v3 server-side (nuova dipendenza, nuove credenziali service account)",
+          "Cloud Function callable uploadAttachment/listAttachments/downloadAttachment/updateAttachmentDescription/deleteAttachment, ognuna proxy verso Drive con RBAC applicato prima della chiamata esterna",
+          "Collection Firestore attachments/{attachmentId} come catalogo metadati di primo livello, con driveFileId invece di storagePath",
+          "Condivisione Drive nativa (fuori dal proxy applicativo) per un elenco ristretto di superadmin — azione di configurazione Workspace/service account, non nuovo codice applicativo, ma con RBAC e logging fuori dal perimetro dell'app"
+        ]
+      },
+      "pros": [
+        "Nessun link Drive mai esposto al client per il canale ordinario: ogni accesso di admin/volontario passa da una Cloud Function che applica lo stesso RBAC gia' in uso altrove — l'opzione piu' aderente al vincolo esplicito della richiesta ('nessun link Drive diretto in mano al frontend') per lo staff normale.",
+        "Le operazioni diventano una superficie di Cloud Function dedicata e testabile in TypeScript, coerente con il pattern gia' usato ovunque nel backend (RBAC in codice, non in regole dichiarative) — un vantaggio ora condiviso con Option A, non piu' esclusivo di questa opzione.",
+        "Soddisfa nativamente il requisito di un canale di accesso diretto fuori-app per un numero ristretto di superadmin (supervisione/backup) tramite condivisione Drive per-account, meccanismo nativo della piattaforma scelta — ma questo vantaggio non e' piu' esclusivo di Option B: verificato in questo giro che anche Option A soddisfa lo stesso requisito nativamente, con un ruolo IAM GCS scoped a bucket dedicato."
+      ],
+      "cons": [
+        "Prima dipendenza esterna del backend verso un'API Google non-Firebase: nuova libreria (es. `googleapis`/`google-auth-library`), nuove credenziali da gestire come secret, nuovo punto di fallimento (quota/latenza Drive API) distinto da Firestore.",
+        "Ogni download deve passare dalla Cloud Function, che deve leggere il file da Drive e restituirlo al client (streaming o buffer): piu' complesso di un semplice signed URL nativo Storage, specie per file di dimensione non banale, dati i limiti di memoria/timeout delle Cloud Function — un costo che Option A evita per costruzione con le signed URL.",
+        "Nessun precedente nel repo di integrazione con API Google esterne lato server (verificato: nessuna dipendenza `googleapis` in `functions/backend/package.json`): territorio nuovo per il progetto, non estensione di un pattern gia' rodato.",
+        "L'argomento 'spazio a costo prevedibile/gestito a mano' che aveva motivato la preferenza per Drive nel giro di refine precedente e' stato esplicitamente ritirato dall'operatore in questo giro (costo Cloud Storage giudicato minimo): questo rimuove uno dei pro originari di questa opzione senza sostituirlo.",
+        "L'eccezione superadmin introduce un secondo canale di accesso allo stesso spazio, interamente fuori dal perimetro applicativo: le azioni di quei superadmin su Drive non passano dalla Cloud Function e quindi non vengono mai loggate in `securityLogs` — una violazione strutturale, per questo solo canale, della convenzione `security_logging` del progetto, accettata esplicitamente come costo del canale e non correggibile in codice (e' per definizione 'fuori dal proxy'). Lo stesso compromesso esiste anche in Option A (l'accesso IAM diretto del superadmin al bucket non passa dalla Cloud Function), quindi non e' piu' un differenziale a sfavore di questa sola opzione.",
+        "Il meccanismo concreto dell'eccezione resta da definire e non e' coperto da questo studio: chi/cosa mantiene l'elenco dei superadmin (nuovo valore di `users/{uid}.role` vs lista fuori Firestore) e come si concede in pratica l'accesso Drive (condivisione manuale in Workspace vs via API dallo stesso service account del proxy) sono scelte aperte, segnalate come non ancora strutturate dalla richiesta stessa — condiviso con Option A per la parte 'chi mantiene l'elenco superadmin', indipendente dal backend scelto."
+      ],
+      "risks": [
+        "Le quote della Drive API (richieste per 100s per utente/progetto) sono un vincolo esterno mai gestito prima nel progetto: un service account condiviso da tutte le operazioni rischia di raggiungere il limite piu' facilmente del previsto se il volume di allegati cresce.",
+        "Migrazione futura da Drive a un altro backend, se la scelta si rivelasse sbagliata, richiede un tool dedicato che scarichi ogni file da Drive e lo ricarichi altrove: costo di migrazione esplicito e non banale, coerente con quanto la richiesta chiede di dichiarare.",
+        "Doppio standard di sicurezza sullo stesso spazio: un errore di configurazione nella condivisione Drive nativa (es. una cartella condivisa piu' ampiamente del previsto, o un ex-superadmin che mantiene l'accesso dopo la revoca del ruolo) sfugge a qualunque controllo lato Cloud Function/Firestore, perche' e' per costruzione un canale che li bypassa interamente."
+      ],
+      "effort_class": "L",
+      "reversibility": "low",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Nuova dipendenza esterna (Drive API) con proprie quote/latenza mai gestita prima nel progetto.",
+          "mitigation": "Service account dedicato esclusivamente a questa capability, con quota isolata monitorata, non condiviso con eventuali usi futuri di Drive altrove nel progetto."
+        },
+        {
+          "severity": "medium",
+          "description": "Proxy di download di file di dimensione non banale attraverso una Cloud Function rischia timeout/limiti di memoria.",
+          "mitigation": "Valutare streaming lato function o URL Drive con scadenza breve generati e mai passati al client se non tramite redirect controllato dalla function; da verificare con lo spike sotto prima di impegnarsi sull'effort stimato."
+        },
+        {
+          "severity": "medium",
+          "description": "L'accesso diretto superadmin bypassa sia l'RBAC applicativo (incluso l'ownership del volontario) sia il logging centralizzato (`logSecurityEvent`), creando un canale non osservabile dall'app per un gruppo di account con accesso completo allo spazio.",
+          "mitigation": "Limitare l'elenco superadmin al minimo indispensabile e documentato fuori banda; ove disponibile, abilitare l'audit log nativo di Google Workspace/Drive per quello spazio come compensazione esterna all'app — restando comunque un sistema di logging distinto da `securityLogs`, non correlato automaticamente con gli eventi applicativi."
+        }
+      ],
+      "spikes": [
+        {
+          "id": "spike-drive-proxy-download-size",
+          "question": "Una Cloud Function callable riesce a proxare il download di un file Drive fino alla dimensione massima che si decidera' di consentire, entro i limiti di memoria/timeout di default, senza streaming custom?",
+          "verification_approach": "Prototipo time-boxed (2-3 ore): caricare un file di dimensione rappresentativa (es. 20-50 MB) su un Drive di test e scaricarlo tramite una Cloud Function di prova, misurando tempo e memoria effettivamente usati.",
+          "blocking": true,
+          "outcome": null
+        }
+      ]
+    },
+    {
+      "id": "opt-c-drive-native-sharing",
+      "name": "Google Drive dedicato, RBAC delegato ai permessi di condivisione Drive (link diretti al client)",
+      "summary": "Stesso spazio Drive dedicato di Option B, ma il controllo di accesso e' delegato ai permessi di condivisione Drive stessi (gestiti via API con service account, es. condivisione per-email ai singoli admin/volontari) invece di una Cloud Function proxy per ogni accesso. Il client riceve link Drive diretti (`webViewLink`/`webContentLink`) da mostrare/aprire; Firestore mantiene solo i metadati (descrizione, `uploadedBy`, `entityType`/`entityId`, `driveFileId`/link) nella stessa collection `attachments/{attachmentId}`.",
+      "domain_impact": {
+        "existing_domains_touched": [],
+        "new_domains_proposed": [
+          {
+            "id": "attachments",
+            "name": "Allegati",
+            "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello (oggi deviceRequest, in futuro progetti speciali/iniziative), con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership."
+          }
+        ],
+        "new_capabilities_sketch": [
+          "Integrazione Drive API v3 server-side per gestione permessi di condivisione per-utente (stessa nuova dipendenza di Option B)",
+          "Sincronizzazione permessi Drive ↔ ruolo/stato utente Firestore (nuova capability non richiesta dalle altre opzioni)",
+          "Collection Firestore attachments/{attachmentId} come catalogo metadati di primo livello, con link Drive esposti al client"
+        ]
+      },
+      "pros": [
+        "Meno codice/infrastruttura di proxy: nessuna Cloud Function deve gestire streaming di contenuto binario, i download passano direttamente per l'infrastruttura Drive, senza limiti di memoria/timeout Cloud Function coinvolti.",
+        "Sfrutta funzionalita' Drive gia' pronte (anteprima file, versioning nativo) senza doverle reimplementare."
+      ],
+      "cons": [
+        "Non replica il perimetro RBAC granulare gia' deciso (volontario puo' modificare/eliminare solo i propri allegati): sincronizzare permessi di condivisione Drive per singolo utente con lo stato Firestore (ruolo, assegnazione, disattivazione) e' una capability aggiuntiva non richiesta dalle altre opzioni, con finestre di inconsistenza reali (es. volontario disattivato che mantiene l'accesso Drive finche' la sincronizzazione non lo revoca).",
+        "I link diretti in mano al client sono esattamente lo scenario che la richiesta segnala come 'rischia di essere piu' permissivo di quanto voluto': un link puo' essere ri-condiviso o restare valido oltre il momento in cui il permesso Drive dovrebbe essere revocato, a differenza di un accesso rivalutato ad ogni chiamata da una Cloud Function (Option B) o di una signed URL a scadenza breve generata post-RBAC (Option A).",
+        "Stessa dipendenza esterna nuova di Option B (credenziali, quota, nessun precedente nel repo): non risparmia quel costo, lo scambia con un rischio di sicurezza piu' alto senza un beneficio equivalente."
+      ],
+      "risks": [
+        "Deriva strutturale tra permessi Drive e stato reale Firestore (doppia fonte di verita' per le autorizzazioni): senza una funzione di sincronizzazione dedicata (che di fatto reintroduce parte della complessita' di un proxy, senza i suoi benefici di mediazione totale), il rischio di accesso residuo dopo un cambio di ruolo e' strutturale, non un dettaglio implementativo.",
+        "Piu' superficie di errore di configurazione (permessi Drive gestiti per-utente via API) rispetto a un unico punto di enforcement in codice."
+      ],
+      "effort_class": "L",
+      "reversibility": "low",
+      "critical_concerns": [
+        {
+          "severity": "high",
+          "description": "Deriva permessi Drive vs stato Firestore: RBAC a doppia fonte di verita', in conflitto diretto col vincolo esplicito della richiesta di non esporre mai link diretti al client.",
+          "mitigation": "Nessuna mitigazione pulita compatibile col vincolo cosi' come dichiarato: per rispettarlo servirebbe comunque una funzione di sincronizzazione permessi ad ogni cambio di ruolo/disattivazione, che riduce il vantaggio principale di questa opzione (assenza di proxy) senza eliminarne il rischio residuo."
+        }
+      ],
+      "spikes": []
+    }
+  ],
+  "recommendation": {
+    "option_id": "opt-a-firebase-storage-native",
+    "rationale": "Questo giro di refine ribalta la raccomandazione del giro precedente (che aveva spostato la scelta su Option B) per due motivi concreti emersi in questa sessione, non per una nuova preferenza soggettiva. Primo: l'operatore ha ritirato esplicitamente l'argomento che aveva pesato a favore di Drive nel giro precedente — 'spazio a costo prevedibile/gestito a mano' — dichiarando che i costi di storage/trasferimento su Cloud Storage nativo sono minimi. Non era un criterio tecnico pesabile con evidenza equivalente gia' nel giro precedente (l'avevo segnalato come organizzativo), e ora e' stato ritirato alla fonte: non resta piu' alcun pro reale di Option B legato al costo. Secondo, e piu' importante: il giro precedente aveva scartato Option A come alternativa a pari copertura funzionale sulla base di un'affermazione tecnica — 'l'unico modo per un accesso superadmin fuori-app a Firebase Storage e' la console GCP con ruoli IAM a livello di intero progetto/bucket, non della sola cartella allegati'. Verificato in questo giro (vedi vincoli, con ricerca su documentazione Google Cloud ufficiale): questa affermazione non e' accurata. Cloud Storage supporta l'assegnazione di ruoli IAM a livello di singolo bucket (non solo di progetto), e un bucket dedicato esclusivamente agli allegati — che questo studio propone comunque, dato che non esiste alcuna infrastruttura Storage nel progetto oggi — rende quello scoping gia' esattamente equivalente alla 'sola cartella allegati' richiesta dall'operatore, senza bisogno di IAM Conditions ne' di un secondo sistema esterno come Drive. Con questa correzione, il requisito superadmin smette di essere strutturalmente scoped alla sola Option B: Option A lo soddisfa nativamente, alle stesse condizioni (per costruzione, l'accesso diretto del superadmin bypassa comunque l'RBAC applicativo e il logging centralizzato in entrambe le opzioni — non e' piu' un differenziale tra le due). Con il requisito superadmin ora equivalente tra le due opzioni e l'argomento costo ritirato, i criteri tecnici gia' individuati nel primissimo giro tornano decisivi, e sono tutti a favore di Option A: nessuna nuova dipendenza esterna (Option B introdurrebbe la prima integrazione server-side con un'API Google non-Firebase mai usata nel repo), effort minore (S vs L), reversibilita' piu' alta (medium vs low), nessuno spike bloccante residuo (lo spike sul proxy di download di Option B resta bloccante e irrisolto; lo spike sulla self-signing di Option A e' non-bloccante). Il ripensamento architetturale di questo giro (signed URL invece di proxy/Storage Rules) porta anche un beneficio non anticipato: l'RBAC per Option A si sposta interamente in codice TypeScript testabile nella Cloud Function, eliminando il con originario sulle Storage Rules difficili da testare esaustivamente, e allineando l'opzione allo stesso pattern gia' in uso ovunque nel backend. Scarto Option C per lo stesso motivo del giro precedente, non toccato da questo ripensamento: espone link diretti al client, lo scenario che la richiesta stessa segnala come 'piu' permissivo di quanto voluto', e per rispettare il perimetro RBAC gia' deciso richiederebbe comunque una sincronizzazione permessi Drive che ne annulla il principale vantaggio dichiarato. Punti aperti da decidere esplicitamente al gate, non coperti dalla scelta tra le opzioni: (1) lo spike non-bloccante sulla self-signing delle signed URL (verifica che il service account di runtime di default possa firmare senza chiave JSON esportata) va comunque eseguito prima di impegnarsi sull'effort stimato, anche se non blocca la decisione; (2) se 'signed URL di download emessa' e' un proxy accettabile per la convenzione `security_logging`, dato che non esiste un trigger GCS nativo per 'download completato'; (3) il meccanismo concreto dell'eccezione superadmin — chi mantiene l'elenco (nuovo valore di `users/{uid}.role` o lista fuori Firestore) — resta una scelta organizzativa indipendente dal backend, non risolta da questo giro; (4) limiti tecnici (dimensione massima file, quota per entita'/totale, eventuale virus-scan, durata di scadenza delle signed URL); (5) superficie esatta della capability (contratto di upload/list/update-description/delete) da esporre al futuro consumer."
+  },
+  "decision": {
+    "option_id": "opt-a-firebase-storage-native",
+    "decided_by": "human:anavatta",
+    "decided_at": "2026-09-06T16:25:35.652Z",
+    "rationale": "Cloud Storage nativo con Cloud Function per RBAC + signed URL: nessuna dipendenza esterna nuova, l'eccezione superadmin si risolve con IAM scoped al bucket (verificato che GCS supporta IAM a livello di bucket, non solo di progetto), l'argomento costo a favore di Drive è stato ritirato dall'operatore, e lo spike bloccante non è più un problema (spike-signed-url-self-signing verificato empiricamente su enableitalia-staging).",
+    "accepted_open_spikes": []
+  }
+}

@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { doc, getDoc, collection, query, orderBy, getDocs } from "firebase/firestore";
 import { db, functions } from "../../firebase";
@@ -11,12 +11,27 @@ import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
+import { TabView, TabPanel } from "primereact/tabview";
 import RequestTimeline from "../../components/timeline/RequestTimeline";
 import DeviceRequestChecklists from "../../components/checklist/DeviceRequestChecklists";
+import DeviceRequestAttachments from "../../components/attachments/DeviceRequestAttachments";
 import { REQUEST_STATUSES, getPublicStatusGroup } from "../../helpers/requestStatus";
 
-export default function VolunteerRequestDetail() {
-  const { id } = useParams();
+interface Props {
+  compact?: boolean;
+  requestId?: string;
+  listPath?: string;
+}
+
+export default function VolunteerRequestDetail({
+  compact = false,
+  requestId,
+  listPath = "/volunteer/my-requests",
+}: Props) {
+  const { id: routeId } = useParams();
+  const id = requestId ?? routeId;
+  const navigate = useNavigate();
+  const location = useLocation();
   const [request, setRequest] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [privateData, setPrivateData] = useState<any>(null);
@@ -99,7 +114,7 @@ export default function VolunteerRequestDetail() {
   const handleAddNote = async () => {
     if (!id || !noteText.trim()) return;
     try {
-      const previousStatus = events[0]?.status ?? request?.status ?? "sconosciuto";
+      const previousStatus = request?.status ?? events[0]?.toStatus ?? "sconosciuto";
       const fn = httpsCallable(functions, "changeStatus");
       await fn({ requestId: id, newStatus: previousStatus, note: noteText.trim() });
       toast.current?.show({ severity: "success", summary: "Nota aggiunta", detail: "Nota aggiunta alla cronologia.", life: 3000 });
@@ -111,18 +126,44 @@ export default function VolunteerRequestDetail() {
     }
   };
 
-  const goBack = () => window.history.back();
+  const goBack = () => {
+    const fromState = (location.state as { from?: string } | null)?.from;
+    if (fromState) {
+      navigate(fromState);
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(listPath);
+  };
 
-  if (!request) return <div>Loading...</div>;
+  if (!request) {
+    return (
+      <div style={{ textAlign: "center", marginTop: compact ? 40 : 80 }}>
+        <span className="pi pi-spin pi-spinner" style={{ fontSize: 32 }} />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: compact ? 12 : 20 }}>
       <Toast ref={toast} />
-      <Toolbar
-        left={<Button label="Indietro" icon="pi pi-arrow-left" className="p-button-text" onClick={goBack} />}
-        style={{ marginBottom: 16 }}
-      />
+      {!compact && (
+        <Toolbar
+          left={<Button label="Indietro" icon="pi pi-arrow-left" className="p-button-text" onClick={goBack} />}
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <h2>Dettaglio Richiesta</h2>
+
+      {/* EA-168: refactor a tab, stesso principio di RequestDetail (admin):
+          renderActiveOnly={false} necessario perché il contenuto di tutte
+          le tab sia presente nel DOM da subito (stesso motivo già
+          documentato per DeviceRequestChecklists/RequestDetail). */}
+      <TabView renderActiveOnly={false}>
+        <TabPanel header="Dati generali">
 
       {/* Dettagli principali */}
       <div className="p-panel p-component" style={{ marginBottom: 24 }}>
@@ -131,15 +172,18 @@ export default function VolunteerRequestDetail() {
           <div style={{ display: "flex", gap: 40 }}>
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 10 }}><strong>Device:</strong> {request.deviceType || "-"}</div>
-              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <strong>Stato:</strong>
                 <Badge value={request.status} severity="info" />
+                {request.archived === true && <Badge value="Archiviata" severity="secondary" />}
+                {request.archived !== true && (
                 <Button
                   label="Cambia Stato"
                   icon="pi pi-pencil"
                   className="p-button-text"
                   onClick={() => { setNewStatus(request.status ?? ""); setNote(""); setShowChangeStatusDialog(true); }}
                 />
+                )}
               </div>
               {request.publicStatus && (
                 <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
@@ -235,25 +279,18 @@ export default function VolunteerRequestDetail() {
         </div>
       )}
 
-      {/* Checklist di fabbricazione (Organizer) */}
-      <div className="p-panel p-component" style={{ marginBottom: 24 }}>
-        <div className="p-panel-header"><span>Checklist di fabbricazione</span></div>
-        <div className="p-panel-content">
-          <DeviceRequestChecklists
-            requestId={id as string}
-            checklistIds={Array.isArray(request.checklistIds) ? request.checklistIds : []}
-            deviceType={request.deviceType}
-            onChecklistsChanged={loadData}
-          />
-        </div>
-      </div>
-
       {/* Ultimo evento */}
       <Panel
         header={
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span>Ultimo evento</span>
-            <Button label="Aggiungi nota" icon="pi pi-plus" className="p-button-text" onClick={() => setShowAddNoteDialog(true)} />
+            <Button
+              label="Aggiungi nota"
+              icon="pi pi-plus"
+              className="p-button-text"
+              disabled={request.archived === true}
+              onClick={() => setShowAddNoteDialog(true)}
+            />
           </div>
         }
         style={{ marginBottom: 24 }}
@@ -268,6 +305,38 @@ export default function VolunteerRequestDetail() {
           <div>Nessun evento disponibile.</div>
         )}
       </Panel>
+
+      {/* Timeline */}
+      <Panel
+        header="Cronologia richiesta"
+        toggleable
+        collapsed={!timelineOpen}
+        onToggle={() => setTimelineOpen(!timelineOpen)}
+      >
+        <RequestTimeline events={events} />
+      </Panel>
+
+        </TabPanel>
+        <TabPanel header="Fabbricazione">
+
+      {/* Checklist di fabbricazione (Organizer) */}
+      <div className="p-panel p-component" style={{ marginBottom: 24 }}>
+        <div className="p-panel-header"><span>Checklist di fabbricazione</span></div>
+        <div className="p-panel-content">
+          <DeviceRequestChecklists
+            requestId={id as string}
+            checklistIds={Array.isArray(request.checklistIds) ? request.checklistIds : []}
+            deviceType={request.deviceType}
+            onChecklistsChanged={loadData}
+          />
+        </div>
+      </div>
+
+        </TabPanel>
+        <TabPanel header="Allegati">
+          <DeviceRequestAttachments requestId={id as string} readOnly={request.archived === true} />
+        </TabPanel>
+      </TabView>
 
       {/* Dialog cambio stato */}
       <Dialog
@@ -326,15 +395,6 @@ export default function VolunteerRequestDetail() {
         </div>
       </Dialog>
 
-      {/* Timeline */}
-      <Panel
-        header="Cronologia richiesta"
-        toggleable
-        collapsed={!timelineOpen}
-        onToggle={() => setTimelineOpen(!timelineOpen)}
-      >
-        <RequestTimeline events={events} />
-      </Panel>
     </div>
   );
 }

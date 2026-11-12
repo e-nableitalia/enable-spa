@@ -70,7 +70,17 @@ function formatDate(val: unknown): string {
   return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export default function ManageableRequestsPage() {
+interface Props {
+  compact?: boolean;
+  onOpenRequest?: (id: string) => void;
+  selectedRequestId?: string | null;
+}
+
+export default function ManageableRequestsPage({
+  compact = false,
+  onOpenRequest,
+  selectedRequestId = null,
+}: Props) {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,7 +204,7 @@ export default function ManageableRequestsPage() {
   }
 
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%", padding: compact ? 16 : 0 }}>
       <h2>Richieste da gestire ({requests.length})</h2>
 
       {/* Search bar */}
@@ -281,7 +291,7 @@ export default function ManageableRequestsPage() {
             style={{ width: 140 }}
           />
         </div>
-        <Button
+        {!compact && <Button
           icon="pi pi-filter-slash"
           label="Resetta filtri"
           className="p-button-outlined p-button-secondary"
@@ -296,7 +306,7 @@ export default function ManageableRequestsPage() {
             setSearchRelation("");
             sessionStorage.removeItem(SESSION_KEY);
           }}
-        />
+        />}
         <MultiSelect
           value={visibleCols}
           options={TOGGLEABLE_COLS}
@@ -324,9 +334,20 @@ export default function ManageableRequestsPage() {
         sortOrder={sortOrder}
         onSort={handleSort}
         emptyMessage="Nessuna richiesta da gestire."
-        onRowClick={(e) => navigate(`/volunteer/manageable-requests/${e.data.id}`)}
+        onRowClick={(e) => {
+          const requestId = e.data.id as string;
+          if (onOpenRequest) {
+            onOpenRequest(requestId);
+            return;
+          }
+          navigate(`/volunteer/manageable-requests/${requestId}`);
+        }}
         rowHover
         style={{ cursor: "pointer" }}
+        size={compact ? "small" : undefined}
+        rowClassName={(rowData) =>
+          compact && selectedRequestId && rowData.id === selectedRequestId ? "p-highlight" : ""
+        }
       >
         {col("requestNumber") && <Column field="requestNumber" header="Seq" sortable style={{ width: "7rem" }} />}
         {col("ageRange") && <Column field="ageRange" header="Fascia d'età" sortable style={{ width: "10rem" }} />}
@@ -367,7 +388,7 @@ export default function ManageableRequestsPage() {
             style={{ width: "11rem" }}
           />
         )}
-        <Column
+        {!compact && <Column
           header=""
           style={{ width: "5rem", textAlign: "center" }}
           body={(row) => (
@@ -379,7 +400,7 @@ export default function ManageableRequestsPage() {
               tooltipOptions={{ position: "left" }}
             />
           )}
-        />
+        />}
       </DataTable>
     </div>
   );

@@ -21,9 +21,19 @@ export async function checkEmailRateLimit(email: string) {
   await ref.set({ lastRequest: now });
 }
 
-export async function checkIpRateLimit(ip: string) {
-  const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
-  const ref = db.collection("rateLimits").doc(`ip_${ipHash}`);
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * Rate limit per IP. `scope` separa i contatori delle diverse form pubbliche
+ * (es. "contact"); senza scope resta la chiave storica `ip_<hash>` condivisa
+ * da richiesta device e registrazione.
+ */
+export async function checkIpRateLimit(ip: string, scope?: string) {
+  const ipHash = sha256(ip);
+  const docId = scope ? `ip_${scope}_${ipHash}` : `ip_${ipHash}`;
+  const ref = db.collection("rateLimits").doc(docId);
   const now = Date.now();
 
   const snap = await ref.get();
@@ -44,4 +54,22 @@ export async function checkIpRateLimit(ip: string) {
     windowStart: now,
     count: 1,
   });
+}
+
+/**
+ * Rate limit per contatto (email o telefono) della form pubblica di contatto:
+ * stessa finestra di `checkEmailRateLimit`, ma la chiave e' un hash, cosi' in
+ * `rateLimits` non finiscono email o telefoni in chiaro.
+ */
+export async function checkContactRateLimit(contactKey: string) {
+  const ref = db.collection("rateLimits").doc(`contact_${sha256(contactKey)}`);
+  const now = Date.now();
+
+  const snap = await ref.get();
+
+  if (snap.exists && now - (snap.data()?.lastRequest ?? 0) < EMAIL_WINDOW) {
+    throw new HttpsError("resource-exhausted", "Too many contact requests");
+  }
+
+  await ref.set({ lastRequest: now });
 }

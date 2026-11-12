@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-12T16:33:48.249Z",
+  "generated_at": "2026-11-11T22:52:18.843Z",
   "items": [
     {
       "id": "ir-multi-checklist-per-device-request",
@@ -60,9 +60,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/checklist-type-model-cleanup-request.md",
       "created_at": "2026-08-04T22:37:26.545Z",
-      "updated_at": "2026-08-04T22:37:26.545Z",
+      "updated_at": "2026-09-05T16:50:28.114Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "process-organizer-core",
         "device-requests"
@@ -73,9 +73,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/user-todo-list-request.md",
       "created_at": "2026-08-04T22:50:36.201Z",
-      "updated_at": "2026-08-04T22:50:36.201Z",
+      "updated_at": "2026-09-05T16:50:28.652Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "process-organizer-core",
         "device-requests"
@@ -94,9 +94,9 @@
       "type": "implementation_request",
       "source_path": "requests/ss-user-todo-list-epic-draft.md",
       "created_at": "2026-08-04T23:28:35.645Z",
-      "updated_at": "2026-08-04T23:28:35.645Z",
+      "updated_at": "2026-09-08T00:19:40.107Z",
       "created_by": "cli:solution-decide",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "process-organizer-core",
         "device-requests"
@@ -107,9 +107,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/device-request-macro-status-reduction-request.md",
       "created_at": "2026-08-06T10:15:50.219Z",
-      "updated_at": "2026-08-06T10:15:50.219Z",
+      "updated_at": "2026-09-05T16:50:29.227Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "device-requests",
         "process-organizer-core"
@@ -128,9 +128,9 @@
       "type": "implementation_request",
       "source_path": "requests/ss-device-request-macro-status-epic-draft.md",
       "created_at": "2026-08-06T14:22:24.318Z",
-      "updated_at": "2026-08-06T14:22:24.318Z",
+      "updated_at": "2026-09-08T00:19:40.282Z",
       "created_by": "cli:solution-decide",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "device-requests"
       ]
@@ -140,9 +140,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/volunteer-todo-list-page-request.md",
       "created_at": "2026-08-09T09:44:53.732Z",
-      "updated_at": "2026-08-09T09:44:53.732Z",
+      "updated_at": "2026-09-05T16:50:29.745Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "process-organizer-core",
         "device-requests"
@@ -153,9 +153,9 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/family-waiver-photo-release-request.md",
       "created_at": "2026-08-11T17:16:05.961Z",
-      "updated_at": "2026-08-11T17:16:05.961Z",
+      "updated_at": "2026-09-05T16:50:29.975Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "device-requests"
       ]
@@ -165,13 +165,143 @@
       "type": "implementation_request",
       "source_path": "docs/implementation-requests/email-templates-versioned-request.md",
       "created_at": "2026-08-12T16:33:48.249Z",
-      "updated_at": "2026-08-12T16:33:48.249Z",
+      "updated_at": "2026-09-07T23:59:58.325Z",
       "created_by": "agent:supervisor",
-      "status": "draft",
+      "status": "archived",
       "domains": [
         "device-requests",
-        "volunteer-management"
+        "volunteer-management",
+        "shipments"
       ]
+    },
+    {
+      "id": "ir-special-projects-initiatives",
+      "type": "implementation_request",
+      "source_path": "docs/implementation-requests/special-projects-initiatives-request.md",
+      "created_at": "2026-09-06T09:21:39.554Z",
+      "updated_at": "2026-09-08T00:19:37.938Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "process-organizer-core",
+        "special-projects"
+      ]
+    },
+    {
+      "id": "ir-cross-entity-attachments",
+      "type": "implementation_request",
+      "source_path": "docs/implementation-requests/cross-entity-attachments-request.md",
+      "created_at": "2026-09-06T09:22:29.772Z",
+      "updated_at": "2026-09-08T00:19:39.055Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "device-requests",
+        "special-projects"
+      ]
+    },
+    {
+      "id": "ss-cross-entity-attachments",
+      "type": "solution_study",
+      "source_path": "docs/solution-studies/ss-cross-entity-attachments.json",
+      "created_at": "2026-09-06T09:46:54.242Z",
+      "updated_at": "2026-09-06T16:25:35.658Z",
+      "created_by": "cli:solution-study"
+    },
+    {
+      "id": "ss-cross-entity-attachments-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/ss-cross-entity-attachments-epic-draft.md",
+      "created_at": "2026-09-06T16:25:35.659Z",
+      "updated_at": "2026-09-08T00:19:39.588Z",
+      "created_by": "cli:solution-decide",
+      "status": "archived",
+      "domains": [
+        "attachments"
+      ]
+    },
+    {
+      "id": "ss-special-projects-initiatives",
+      "type": "solution_study",
+      "source_path": "docs/solution-studies/ss-special-projects-initiatives.json",
+      "created_at": "2026-09-07T09:26:19.050Z",
+      "updated_at": "2026-09-07T09:56:47.424Z",
+      "created_by": "cli:solution-study"
+    },
+    {
+      "id": "ss-special-projects-initiatives-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/ss-special-projects-initiatives-epic-draft.md",
+      "created_at": "2026-09-07T09:56:47.426Z",
+      "updated_at": "2026-09-08T00:19:38.465Z",
+      "created_by": "cli:solution-decide",
+      "status": "archived",
+      "domains": [
+        "process-organizer-core",
+        "special-projects-initiatives"
+      ]
+    },
+    {
+      "id": "ea-161-device-requests-attachments-integration",
+      "type": "implementation_request",
+      "source_path": "requests/ea-161-device-requests-attachments-integration.md",
+      "created_at": "2026-11-11T22:38:01.440Z",
+      "updated_at": "2026-11-11T22:38:06.195Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "device-requests",
+        "attachments"
+      ]
+    },
+    {
+      "id": "ea-169-projects-full-implementation",
+      "type": "implementation_request",
+      "source_path": "requests/ea-169-projects-full-implementation.md",
+      "created_at": "2026-11-11T22:38:02.355Z",
+      "updated_at": "2026-11-11T22:38:06.557Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "special-projects-initiatives"
+      ]
+    },
+    {
+      "id": "ea-171-super-admin-implementation",
+      "type": "implementation_request",
+      "source_path": "requests/ea-171-super-admin-implementation.md",
+      "created_at": "2026-11-11T22:38:03.241Z",
+      "updated_at": "2026-11-11T22:38:06.962Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "super-admin"
+      ]
+    },
+    {
+      "id": "super-admin-epic-draft",
+      "type": "implementation_request",
+      "source_path": "requests/super-admin-epic-draft.md",
+      "created_at": "2026-11-11T22:38:04.003Z",
+      "updated_at": "2026-11-11T22:38:07.197Z",
+      "created_by": "agent:supervisor",
+      "status": "archived",
+      "domains": [
+        "super-admin"
+      ]
+    },
+    {
+      "id": "ir-requests-list-unified-filters",
+      "type": "implementation_request",
+      "source_path": "docs/implementation-requests/requests-list-unified-filters-request.md",
+      "created_at": "2026-11-11T22:52:18.843Z",
+      "updated_at": "2026-11-11T22:52:18.843Z",
+      "created_by": "agent:supervisor",
+      "status": "approved",
+      "domains": [
+        "device-requests"
+      ],
+      "role": "problem"
     }
   ]
 }

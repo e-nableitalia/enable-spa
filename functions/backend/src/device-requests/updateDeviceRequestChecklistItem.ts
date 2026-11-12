@@ -3,7 +3,7 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getInvokeId } from "../utils/invoke";
 import { updateChecklistItem } from "../organizer/updateChecklistItem";
-import { resolveDeviceRequestChecklistAccess, isResolvableChecklistAssignee } from "./deviceRequestChecklistAccess";
+import { resolveDeviceRequestChecklistAccess } from "./deviceRequestChecklistAccess";
 
 const REGION = "europe-west1";
 
@@ -38,7 +38,7 @@ export const updateDeviceRequestChecklistItem = onCall(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
-    const { requestId, checklistId, itemId, title, type, status, assignee, quantity, notes, completed } = request.data as {
+    const { requestId, checklistId, itemId, title, type, status, assignee, quantity, notes, completed, url } = request.data as {
       requestId?: string;
       checklistId?: string;
       itemId?: string;
@@ -48,6 +48,7 @@ export const updateDeviceRequestChecklistItem = onCall(
       assignee?: string | null;
       quantity?: number | null;
       notes?: string | null;
+      url?: string | null;
       completed?: boolean;
     };
 
@@ -59,20 +60,11 @@ export const updateDeviceRequestChecklistItem = onCall(
     }
 
     const db = getFirestore();
-    const { assignedVolunteers } = await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
-
-    if (assignee !== undefined && assignee !== null) {
-      if (typeof assignee !== "string" || !(await isResolvableChecklistAssignee(db, assignee, assignedVolunteers))) {
-        throw new HttpsError(
-          "invalid-argument",
-          "Assignee must be a Firebase uid of a volunteer assigned to this request or an admin"
-        );
-      }
-    }
+    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId, { forWrite: true });
 
     const result = (await updateChecklistItem.run({
       ...request,
-      data: { checklistId, itemId, title, type, status, assignee, quantity, notes, completed },
+      data: { checklistId, itemId, title, type, status, assignee, quantity, notes, completed, url },
     } as CallableRequest)) as { success: boolean };
 
     console.log(

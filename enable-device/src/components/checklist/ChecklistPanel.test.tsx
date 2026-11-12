@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ChecklistPanel from "./ChecklistPanel";
@@ -19,29 +19,12 @@ async function selectDropdownOption(user: ReturnType<typeof userEvent.setup>, tr
   fireEvent.click(option);
 }
 
-vi.mock("../../firebase", () => ({ db: {}, functions: {} }));
+vi.mock("../../firebase", () => ({ functions: {} }));
 
 const callable = vi.fn();
 vi.mock("firebase/functions", () => ({
   httpsCallable: (_functions: unknown, name: string) => (data: unknown) => callable(name, data),
 }));
-
-const firestoreDocs: Record<string, unknown> = {};
-vi.mock("firebase/firestore", () => ({
-  doc: (_db: unknown, ...segments: string[]) => ({ __path: segments.join("/") }),
-  getDoc: async (ref: { __path: string }) => {
-    const data = firestoreDocs[ref.__path];
-    return { exists: () => data !== undefined, data: () => data };
-  },
-}));
-
-function setUserProfile(uid: string, data: Record<string, unknown>) {
-  firestoreDocs[`users/${uid}/private/profile`] = data;
-}
-
-afterEach(() => {
-  for (const key of Object.keys(firestoreDocs)) delete firestoreDocs[key];
-});
 
 function mockChecklist(items: Array<Record<string, unknown>>) {
   callable.mockImplementation((name: string) => {
@@ -194,6 +177,9 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
       if (name === "getDeviceRequestChecklistCompleteness") {
         return Promise.resolve({ data: { complete: false } });
       }
+      if (name === "listAssignableChecklistUsers") {
+        return Promise.resolve({ data: { users: [] } });
+      }
       if (name === "addDeviceRequestChecklistItem") {
         return Promise.resolve({ data: { itemId: "new-item" } });
       }
@@ -255,7 +241,11 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
     const titleInput = within(row).getByDisplayValue("Verifica batteria");
     await user.clear(titleInput);
     await user.type(titleInput, "Verifica batteria (aggiornato)");
-    expect(within(row).getByDisplayValue("Verifica batteria (aggiornato)")).toBeInTheDocument();
+    // findBy invece di getBy: sotto carico (worktree di merge-preview del
+    // gate close-story) il re-render del controlled input può ritardare
+    // di qualche istante rispetto alla risoluzione di user.type — un
+    // assert sincrono può quindi correre più veloce del render effettivo.
+    expect(await within(row).findByDisplayValue("Verifica batteria (aggiornato)")).toBeInTheDocument();
 
     // Nessuna chiamata immediata: il salvataggio è debounced.
     expect(callable).not.toHaveBeenCalledWith("updateDeviceRequestChecklistItem", expect.anything());
@@ -301,6 +291,135 @@ describe("ChecklistPanel - checklistId esplicito inoltrato a tutte le Cloud Func
       expect.objectContaining({ requestId: "r1", checklistId: "c42" })
     );
   });
+
+  it("importa item da testo creando item acquisto dal formato 2x ...", async () => {
+    mockChecklistWithId("c42", []);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "2x [Primo item](https://example.test/primo) | comprare online\n\n1x Secondo item | portare da casa | urgenti" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addDeviceRequestChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({
+      requestId: "r1",
+      checklistId: "c42",
+      title: "Primo item",
+      type: "purchase",
+      quantity: 2,
+      url: "https://example.test/primo",
+      notes: "comprare online",
+    });
+    expect(addCalls[1][1]).toMatchObject({
+      requestId: "r1",
+      checklistId: "c42",
+      title: "Secondo item",
+      type: "numeric",
+      quantity: 1,
+      notes: "portare da casa | urgenti",
+    });
+  });
+
+  it("mostra il dialog di guida formato import", async () => {
+    mockChecklistWithId("c42", []);
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Guida formato" }));
+
+    expect(await screen.findByText("Guida formato import checklist")).toBeInTheDocument();
+    expect(screen.getByText("3x fogli")).toBeInTheDocument();
+  });
+
+  it("importa assegnatario da @token e da @[Nome Cognome]", async () => {
+    callable.mockReset();
+    callable.mockImplementation((name: string) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({ data: { checklistId: "c42", title: "Checklist test", category: "cat", items: [] } });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "listAssignableChecklistUsers") {
+        return Promise.resolve({
+          data: {
+            users: [
+              { id: "vol-1", label: "Mario Rossi" },
+              { id: "alberto", label: "Alberto Navatta" },
+            ],
+          },
+        });
+      }
+      if (name === "addDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: { itemId: "new-item" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "1x Cavo USB @alberto\n2x Fogli @[Mario Rossi]" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addDeviceRequestChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({ title: "Cavo USB", assignee: "alberto" });
+    expect(addCalls[1][1]).toMatchObject({ title: "Fogli", assignee: "Mario Rossi" });
+  });
+
+  it("importa anche item base senza quantita' (boolean), con descrizione singola o tra []", async () => {
+    callable.mockReset();
+    callable.mockImplementation((name: string) => {
+      if (name === "getDeviceRequestChecklist") {
+        return Promise.resolve({ data: { checklistId: "c42", title: "Checklist test", category: "cat", items: [] } });
+      }
+      if (name === "getDeviceRequestChecklistCompleteness") {
+        return Promise.resolve({ data: { complete: false } });
+      }
+      if (name === "listAssignableChecklistUsers") {
+        return Promise.resolve({ data: { users: [] } });
+      }
+      if (name === "addDeviceRequestChecklistItem") {
+        return Promise.resolve({ data: { itemId: "new-item" } });
+      }
+      return Promise.reject(new Error(`Unexpected callable invoked in test: ${name}`));
+    });
+    const user = userEvent.setup();
+    render(<ChecklistPanel requestId="r1" checklistId="c42" />);
+    await screen.findByText("Nessun item nella checklist.");
+
+    await user.click(screen.getByRole("button", { name: "Importa item" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Oppure incolla il testo (una riga per item)"), {
+      target: { value: "###x\n[fogli protocollo] @alberto | da portare martedi'" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Importa" }));
+
+    const addCalls = callable.mock.calls.filter(([name]) => name === "addDeviceRequestChecklistItem");
+    expect(addCalls).toHaveLength(2);
+    expect(addCalls[0][1]).toMatchObject({ title: "###x", type: "boolean", quantity: undefined, url: undefined });
+    expect(addCalls[1][1]).toMatchObject({
+      title: "fogli protocollo",
+      type: "boolean",
+      quantity: undefined,
+      assignee: "alberto",
+      notes: "da portare martedi'",
+    });
+  });
 });
 
 // Scenario 3 (EA-141): l'assegnatario di un item è una selezione tra utenti
@@ -311,7 +430,10 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
     callable.mockReset();
   });
 
-  function mockChecklistWithItems(items: Array<Record<string, unknown>>, assignableUids: string[] = []) {
+  function mockChecklistWithItems(
+    items: Array<Record<string, unknown>>,
+    assignableUsers: Array<{ id: string; label: string }> = []
+  ) {
     callable.mockImplementation((name: string) => {
       if (name === "getDeviceRequestChecklist") {
         return Promise.resolve({ data: { checklistId: "c1", title: "Checklist test", category: "cat", items } });
@@ -320,7 +442,7 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
         return Promise.resolve({ data: { complete: false } });
       }
       if (name === "listAssignableChecklistUsers") {
-        return Promise.resolve({ data: { uids: assignableUids } });
+        return Promise.resolve({ data: { users: assignableUsers } });
       }
       if (name === "updateDeviceRequestChecklistItem") {
         return Promise.resolve({ data: {} });
@@ -333,10 +455,9 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
   }
 
   it("il campo Assegnatario non è più un campo di testo libero", async () => {
-    setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
     mockChecklistWithItems(
       [{ id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false }],
-      ["vol-1"]
+      [{ id: "vol-1", label: "Anna Bianchi" }]
     );
 
     render(<ChecklistPanel requestId="r1" checklistId="c1" />);
@@ -349,10 +470,9 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
   });
 
   it("mostra tra le opzioni i volontari assegnati alla deviceRequest, risolti a nome reale", async () => {
-    setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
     mockChecklistWithItems(
       [{ id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false }],
-      ["vol-1"]
+      [{ id: "vol-1", label: "Anna Bianchi" }]
     );
     const user = userEvent.setup();
 
@@ -375,12 +495,11 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
   // admin diverso da sé stesso tra le opzioni (limite delle regole
   // Firestore lato client, non più applicabile ora che la risoluzione è
   // server-side). Qui si verifica che un admin *diverso dal chiamante*
-  // compaia comunque tra le opzioni.
+  // compaia comunque tra le opzioni, con label già risolte dal server.
   it("include tra le opzioni un admin diverso dal chiamante, risolto lato server da listAssignableChecklistUsers", async () => {
-    setUserProfile("admin-2", { firstName: "Luca", lastName: "Verdi" });
     mockChecklistWithItems(
       [{ id: "i1", title: "Verifica batteria", type: "generic", assignee: null, quantity: null, notes: "", status: "Assegnare", completed: false }],
-      ["admin-2"]
+      [{ id: "admin-2", label: "Luca Verdi" }]
     );
     const user = userEvent.setup();
 
@@ -397,8 +516,7 @@ describe("ChecklistPanel - assegnatario risolto a utenti reali (EA-141)", () => 
   });
 
   it("il dialog 'Aggiungi item' usa la stessa selezione tra utenti reali per l'assegnatario", async () => {
-    setUserProfile("vol-1", { firstName: "Anna", lastName: "Bianchi" });
-    mockChecklistWithItems([], ["vol-1"]);
+    mockChecklistWithItems([], [{ id: "vol-1", label: "Anna Bianchi" }]);
     const user = userEvent.setup();
 
     render(<ChecklistPanel requestId="r1" checklistId="c1" />);

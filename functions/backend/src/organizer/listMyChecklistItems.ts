@@ -1,14 +1,83 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { logSecurityEvent } from "../security/securityLog";
 import { getInvokeId } from "../utils/invoke";
 import { ChecklistItemLike } from "./checklistCompleteness";
 
 const REGION = "europe-west1";
 
+/** Firestore `array-contains-any` accetta al massimo 30 valori. */
+const ARRAY_CONTAINS_ANY_MAX = 30;
+
 interface ChecklistItemDoc extends ChecklistItemLike {
   id: string;
   checklistId: string;
+}
+
+interface ChecklistOrigin {
+  type: string;
+  id: string;
+}
+
+function isOrigin(value: unknown): value is ChecklistOrigin {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { type?: unknown; id?: unknown };
+  return typeof candidate.type === "string" && typeof candidate.id === "string" && candidate.id.length > 0;
+}
+
+/**
+ * Per checklist senza `origin` sul documento (dati legacy pre-EA origin, o
+ * create path che non lo scriveva), ricostruisce la provenienza cercando
+ * `deviceRequests` / `projects` che referenziano il checklistId in
+ * `checklistIds`. Opzionalmente riscrive `origin` sulla checklist (heal)
+ * così le letture successive non ripetono il reverse-lookup.
+ */
+async function resolveMissingOrigins(
+  db: Firestore,
+  originByChecklistId: Map<string, ChecklistOrigin | null>
+): Promise<void> {
+  const orphanIds = Array.from(originByChecklistId.entries())
+    .filter(([, origin]) => origin === null)
+    .map(([checklistId]) => checklistId);
+
+  if (orphanIds.length === 0) return;
+
+  const remaining = new Set(orphanIds);
+
+  async function scanCollection(collectionName: "deviceRequests" | "projects", originType: string) {
+    for (let i = 0; i < orphanIds.length && remaining.size > 0; i += ARRAY_CONTAINS_ANY_MAX) {
+      const chunk = orphanIds.slice(i, i + ARRAY_CONTAINS_ANY_MAX).filter((id) => remaining.has(id));
+      if (chunk.length === 0) continue;
+
+      const snap = await db.collection(collectionName).where("checklistIds", "array-contains-any", chunk).get();
+      for (const docSnap of snap.docs) {
+        const checklistIds: unknown[] = Array.isArray(docSnap.data()?.checklistIds)
+          ? docSnap.data()!.checklistIds
+          : [];
+        for (const checklistId of checklistIds) {
+          if (typeof checklistId !== "string" || !remaining.has(checklistId)) continue;
+          const origin: ChecklistOrigin = { type: originType, id: docSnap.id };
+          originByChecklistId.set(checklistId, origin);
+          remaining.delete(checklistId);
+          // Heal best-effort: non blocca la risposta se la scrittura fallisce.
+          db.collection("checklists")
+            .doc(checklistId)
+            .update({ origin })
+            .catch((err) => {
+              console.warn(
+                `[listMyChecklistItems] Failed to heal origin on checklist ${checklistId}:`,
+                err
+              );
+            });
+        }
+      }
+    }
+  }
+
+  await scanCollection("deviceRequests", "deviceRequest");
+  if (remaining.size > 0) {
+    await scanCollection("projects", "project");
+  }
 }
 
 /**
@@ -35,6 +104,10 @@ interface ChecklistItemDoc extends ChecklistItemLike {
  * `updateDeviceRequestChecklistItem` se l'utente vuole comunque modificarli
  * (riaprirli, correggere una nota, ecc.), non solo per il contesto di
  * provenienza mostrato in sola lettura.
+ *
+ * Se la checklist padre ha `origin` assente (legacy), tenta un
+ * reverse-lookup su `deviceRequests`/`projects.checklistIds` e, se trova
+ * un match, lo espone nella risposta e lo riscrive sulla checklist (heal).
  */
 export const listMyChecklistItems = onCall(
   { region: REGION },
@@ -77,15 +150,17 @@ export const listMyChecklistItems = onCall(
 
       const referencedChecklistIds = Array.from(new Set(items.map((item) => item.checklistId)));
 
-      const originByChecklistId = new Map<string, unknown>();
+      const originByChecklistId = new Map<string, ChecklistOrigin | null>();
       if (referencedChecklistIds.length > 0) {
         const checklistRefs = referencedChecklistIds.map((checklistId) => db.collection("checklists").doc(checklistId));
         const checklistSnaps = await db.getAll(...checklistRefs);
         checklistSnaps.forEach((checklistSnap) => {
           if (checklistSnap.exists) {
-            originByChecklistId.set(checklistSnap.id, checklistSnap.data()?.origin ?? null);
+            const rawOrigin = checklistSnap.data()?.origin ?? null;
+            originByChecklistId.set(checklistSnap.id, isOrigin(rawOrigin) ? rawOrigin : null);
           }
         });
+        await resolveMissingOrigins(db, originByChecklistId);
       }
 
       const responseItems = items.map((item) => ({

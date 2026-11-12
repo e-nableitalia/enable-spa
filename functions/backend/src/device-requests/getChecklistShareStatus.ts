@@ -9,6 +9,9 @@ const REGION = "europe-west1";
 
 interface ShareChecklistItemLike extends ChecklistItemLike {
   title?: string;
+  quantity?: number | null;
+  url?: string | null;
+  type?: string | null;
 }
 
 /**
@@ -33,8 +36,10 @@ interface ShareChecklistItemLike extends ChecklistItemLike {
  *
  * Oltre a `percentComplete`, la risposta include ora anche `items`
  * (richiesto dall'operatore): un elenco semplificato, un oggetto per
- * item con solo `title` e un flag booleano `completed`, MAI assegnatario,
- * note, quantita' o lo `status` grezzo. Il flag e' calcolato con lo
+ * item con almeno `title` e un flag booleano `completed`.
+ * Espone anche `quantity` (se presente) e `url` (se presente), cosi' la
+ * pagina pubblica puo' renderizzare la riga "quantita' + titolo con
+ * hyperlink". MAI assegnatario, note o `status` grezzo. Il flag e' calcolato con lo
  * stesso gate type-aware condiviso (`isChecklistItemComplete`), cosi' da
  * presentare in modo omogeneo i tre type (`boolean`/`numeric`/`generic`)
  * su questa pagina pubblica, senza esporre la colonna Quantita' (rilevante
@@ -93,10 +98,24 @@ export const getChecklistShareStatus = onCall(
       const totalItems = items.length;
       const completedItems = items.filter(isChecklistItemComplete).length;
       const percentComplete = totalItems === 0 ? 100 : Math.round((completedItems / totalItems) * 100);
-      const itemsSummary = items.map((item) => ({
-        title: typeof item.title === "string" ? item.title : "",
-        completed: isChecklistItemComplete(item),
-      }));
+      const itemsSummary = items.map((item) => {
+        const summary: {
+          title: string;
+          completed: boolean;
+          quantity?: number;
+          url?: string;
+        } = {
+          title: typeof item.title === "string" ? item.title : "",
+          completed: isChecklistItemComplete(item),
+        };
+        if (typeof item.quantity === "number") {
+          summary.quantity = item.quantity;
+        }
+        if (typeof item.url === "string" && item.url.trim()) {
+          summary.url = item.url.trim();
+        }
+        return summary;
+      });
 
       await logSecurityEvent({
         type: "system",

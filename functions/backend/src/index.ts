@@ -3,8 +3,10 @@ import {initializeApp} from "firebase-admin/app";
 initializeApp();
 
 export {createDeviceRequest} from "./device/createDeviceRequest";
+export { createContactRequest } from "./contact/createContactRequest";
 export {createDeviceRequestInternal} from "./device/createDeviceRequestInternal";
 export {changeStatus} from "./device/changeStatus";
+export {archiveDeviceRequest, restoreDeviceRequest} from "./device/archiveDeviceRequest";
 export {assignVolunteer} from "./device/assignVolunteer";
 export {setDeviceRequestConsent} from "./device/setDeviceRequestConsent";
 export { register, checkRegistration, completeRegistration, registerWithIntegratedAuth, doLogin } from "./auth/register";
@@ -16,7 +18,14 @@ export { inviteVolunteer } from "./volunteer/invite";
 export { acceptVolunteerConsents } from "./volunteer/acceptVolunteerConsents";
 export { setUserRole } from "./volunteer/setUserRole";
 export { listVolunteerAdminData } from "./volunteer/listVolunteerAdminData";
-export { createShipmentRequest, approveShipmentRequest, deleteShipmentRequest } from "./shipments/shipmentRequests";
+export {
+  createShipmentRequest,
+  approveShipmentRequest,
+  deleteShipmentRequest,
+  listShipmentAddressBook,
+  updateShipmentTracking,
+  markShipmentDelivered,
+} from "./shipments/shipmentRequests";
 export { saveGlobalMessage } from "./device/saveGlobalMessage";
 export { updateChecklist } from "./organizer/updateChecklist";
 export { createChecklist } from "./organizer/createChecklist";
@@ -39,6 +48,41 @@ export { listAssignableChecklistUsers } from "./device-requests/listAssignableCh
 export { removeDeviceRequestChecklistItem } from "./device-requests/removeDeviceRequestChecklistItem";
 export { createChecklistShareLink } from "./device-requests/createChecklistShareLink";
 export { getChecklistShareStatus } from "./device-requests/getChecklistShareStatus";
+export { updateDeviceRequestChecklistTitle } from "./device-requests/updateDeviceRequestChecklistTitle";
 export { sendDocumentsEmail } from "./device-requests/sendDocumentsEmail";
+export { uploadAttachment } from "./attachments/uploadAttachment";
+export { listAttachments } from "./attachments/listAttachments";
+export { downloadAttachment } from "./attachments/downloadAttachment";
+export { updateAttachmentDescription } from "./attachments/updateAttachmentDescription";
+export { deleteAttachment } from "./attachments/deleteAttachment";
+export { uploadDeviceRequestAttachment } from "./device-requests/uploadDeviceRequestAttachment";
+export { listDeviceRequestAttachments } from "./device-requests/listDeviceRequestAttachments";
+export { downloadDeviceRequestAttachment } from "./device-requests/downloadDeviceRequestAttachment";
+export { updateDeviceRequestAttachmentDescription } from "./device-requests/updateDeviceRequestAttachmentDescription";
+export { deleteDeviceRequestAttachment } from "./device-requests/deleteDeviceRequestAttachment";
+export { createProject } from "./projects/createProject";
+export { listProjects } from "./projects/listProjects";
+export { getProject } from "./projects/getProject";
+export { deleteProject } from "./projects/deleteProject";
+export { updateProject } from "./projects/updateProject";
+export { changeProjectStatus } from "./projects/changeProjectStatus";
+export { createProjectChecklist } from "./projects/createProjectChecklist";
+export { deleteProjectChecklist } from "./projects/deleteProjectChecklist";
+export { addProjectChecklistItem } from "./projects/addProjectChecklistItem";
+export { updateProjectChecklistItem } from "./projects/updateProjectChecklistItem";
+export { removeProjectChecklistItem } from "./projects/removeProjectChecklistItem";
+export { getProjectChecklist } from "./projects/getProjectChecklist";
+export { getProjectChecklistCompleteness } from "./projects/getProjectChecklistCompleteness";
+export { listAssignableProjectUsers } from "./projects/listAssignableProjectUsers";
+export { createProjectChecklistShareLink } from "./projects/createProjectChecklistShareLink";
+export { getProjectChecklistShareStatus } from "./projects/getProjectChecklistShareStatus";
+export { updateProjectChecklistMetadata } from "./projects/updateProjectChecklistMetadata";
+export { uploadProjectAttachment } from "./projects/uploadProjectAttachment";
+export { listProjectAttachments } from "./projects/listProjectAttachments";
+export { downloadProjectAttachment } from "./projects/downloadProjectAttachment";
+export { updateProjectAttachmentDescription } from "./projects/updateProjectAttachmentDescription";
+export { deleteProjectAttachment } from "./projects/deleteProjectAttachment";
+export { deployEmailTemplates } from "./emailTemplates/deployEmailTemplates";
+export { triggerFirestoreBackup } from "./backup/triggerFirestoreBackup";
 
 console.log("REGISTER BUILD SUCCESSFUL - " + new Date().toISOString());

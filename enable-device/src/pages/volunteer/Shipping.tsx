@@ -1,9 +1,10 @@
-import RequestTable from "../../components/requests/RequestTable";
+import VolunteerRequestsWorkspace from "./VolunteerRequestsWorkspace";
 export default function Shipping({ requests }: { requests: any[] }) {
   return (
-    <div>
-      <h2>Richieste di spedizione</h2>
-      <RequestTable requests={requests} onOpen={() => {}} />
-    </div>
+    <VolunteerRequestsWorkspace
+      title="Richieste di spedizione"
+      requests={requests}
+      detailBasePath="/volunteer/shipping"
+    />
   );
 }

@@ -30,7 +30,7 @@ export function isChecklistItemStatus(value: unknown): value is ChecklistItemSta
     (CHECKLIST_ITEM_STATUSES as readonly string[]).includes(value);
 }
 
-export const CHECKLIST_ITEM_TYPES = ["boolean", "generic", "numeric"] as const;
+export const CHECKLIST_ITEM_TYPES = ["boolean", "generic", "numeric", "purchase"] as const;
 export type ChecklistItemType = typeof CHECKLIST_ITEM_TYPES[number];
 
 /**

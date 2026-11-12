@@ -273,11 +273,7 @@ describe("addDeviceRequestChecklistItem", () => {
     expect(checklistUpdateMock).not.toHaveBeenCalled();
   });
 
-  // Regressione F-26: prima di questo fix, addDeviceRequestChecklistItem
-  // era l'unico endpoint del layer che accettava ancora assignee come
-  // stringa libera non risolta a un uid reale (a differenza di
-  // updateDeviceRequestChecklistItem.ts, EA-141).
-  describe("validazione assignee (F-26, stesso perimetro di updateDeviceRequestChecklistItem)", () => {
+  describe("assignee testuale o uid", () => {
     it("accepts an assignee that is a volunteer assigned to the request", async () => {
       const result = await addDeviceRequestChecklistItem.run(
         buildRequest(
@@ -303,38 +299,15 @@ describe("addDeviceRequestChecklistItem", () => {
       expect(result).toHaveProperty("itemId");
     });
 
-    it("rejects an assignee that is neither an assigned volunteer nor an admin", async () => {
-      await expect(
-        addDeviceRequestChecklistItem.run(
-          buildRequest(
-            { requestId: "req-1", checklistId: CHECKLIST_ID, title: "Titolo", type: "generic", assignee: "volunteer-2" },
-            "admin-1"
-          )
-        )
-      ).rejects.toMatchObject(
-        new HttpsError(
-          "invalid-argument",
-          "Assignee must be a Firebase uid of a volunteer assigned to this request or an admin"
+    it("accepts a non-resolved assignee as free text", async () => {
+      const result = await addDeviceRequestChecklistItem.run(
+        buildRequest(
+          { requestId: "req-1", checklistId: CHECKLIST_ID, title: "Titolo", type: "generic", assignee: "Mario Rossi" },
+          "admin-1"
         )
       );
-
-      expect(checklistUpdateMock).not.toHaveBeenCalled();
-    });
-
-    it("rejects a free-text assignee that does not resolve to any real uid", async () => {
-      await expect(
-        addDeviceRequestChecklistItem.run(
-          buildRequest(
-            { requestId: "req-1", checklistId: CHECKLIST_ID, title: "Titolo", type: "generic", assignee: "Mario Rossi" },
-            "admin-1"
-          )
-        )
-      ).rejects.toMatchObject(
-        new HttpsError(
-          "invalid-argument",
-          "Assignee must be a Firebase uid of a volunteer assigned to this request or an admin"
-        )
-      );
+      expect(result).toHaveProperty("itemId");
+      expect(checklistItemsStore[result.itemId]).toMatchObject({ assignee: "Mario Rossi" });
     });
 
     it("allows a null assignee (unassigned item), skipping validation", async () => {

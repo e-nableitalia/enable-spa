@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Dialog } from "primereact/dialog";
 import { Toast } from "primereact/toast";
@@ -7,8 +8,8 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../firebase";
 import type { UserRole, VolunteerData } from "../../../shared/types/volunteerData";
 import VolunteerAdminList from "./VolunteerAdminList";
-import VolunteerAdminDetailDialog from "./VolunteerAdminDetailDialog";
 import VolunteerAdminFilters from "./VolunteerAdminFilters";
+import VolunteerAdminDetailContent from "./VolunteerAdminDetailContent";
 import {
   applyVolunteerAdminFilters,
   EMPTY_VOLUNTEER_ADMIN_FILTERS,
@@ -45,10 +46,28 @@ interface ListVolunteerAdminDataResponse {
   volunteers: VolunteerData[];
 }
 
+function useIsDesktop(minWidth = 1200): boolean {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= minWidth : false
+  );
+
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= minWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [minWidth]);
+
+  return isDesktop;
+}
+
 export default function AdminVolunteers({ volunteers, onRefresh }: Readonly<AdminVolunteersProps>) {
   const toast = useRef<Toast>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { uid: selectedVolunteerUid } = useParams();
+  const isDesktop = useIsDesktop();
+  const hasDetail = Boolean(selectedVolunteerUid);
   const [confirmTarget, setConfirmTarget] = useState<{ uid: string; name: string; currentRole: UserRole } | null>(null);
-  const [detailVolunteer, setDetailVolunteer] = useState<VolunteerAdminRow | null>(null);
   const [adminVolunteers, setAdminVolunteers] = useState<VolunteerData[]>([]);
   const [filters, setFilters] = useState<VolunteerAdminFiltersState>(EMPTY_VOLUNTEER_ADMIN_FILTERS);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -60,6 +79,10 @@ export default function AdminVolunteers({ volunteers, onRefresh }: Readonly<Admi
   const filteredRows = useMemo(
     () => applyVolunteerAdminFilters(normalizedRows, filters),
     [normalizedRows, filters]
+  );
+  const selectedVolunteer = useMemo(
+    () => normalizedRows.find((row) => row.uid === selectedVolunteerUid) ?? null,
+    [normalizedRows, selectedVolunteerUid]
   );
 
   const availableMainInterest = useMemo(
@@ -150,6 +173,60 @@ export default function AdminVolunteers({ volunteers, onRefresh }: Readonly<Admi
 
   const newRole = confirmTarget?.currentRole === "admin" ? "volunteer" : "admin";
 
+  const openVolunteerDetail = (row: VolunteerAdminRow) => {
+    navigate(`/admin/volunteers/all/${row.uid}`, {
+      state: { from: `${location.pathname}${location.search}` },
+    });
+  };
+
+  const renderList = () => (
+    <>
+      <h2>Volontari</h2>
+
+      {errorMessage ? <Message severity="warn" text={errorMessage} style={{ marginBottom: 12 }} /> : null}
+
+      <VolunteerAdminFilters
+        filters={filters}
+        availableMainInterest={availableMainInterest}
+        availablePrinterBrands={availablePrinterBrands}
+        availablePrinterModels={availablePrinterModels}
+        availableEnableInterestAreas={availableEnableInterestAreas}
+        onChange={setFilters}
+        onReset={() => setFilters({ ...EMPTY_VOLUNTEER_ADMIN_FILTERS })}
+      />
+
+      <div style={{ marginTop: 12 }}>
+        <div style={{ marginBottom: 8, fontSize: 14 }}>
+          {filteredRows.length} volontari trovati su {normalizedRows.length}
+        </div>
+        <VolunteerAdminList
+          rows={filteredRows}
+          loading={dataLoading}
+          roleUpdateLoadingUid={loading ? confirmTarget?.uid ?? null : null}
+          onShowDetail={openVolunteerDetail}
+          onToggleRole={(uid, currentRole, name) => setConfirmTarget({ uid, currentRole, name })}
+          selectedVolunteerUid={selectedVolunteerUid ?? null}
+        />
+      </div>
+    </>
+  );
+
+  if (hasDetail && !isDesktop) {
+    return (
+      <div style={{ padding: 20 }}>
+        <Button
+          label="Indietro all'elenco"
+          icon="pi pi-arrow-left"
+          className="p-button-text"
+          onClick={() => navigate("/admin/volunteers/all")}
+          style={{ marginBottom: 12 }}
+        />
+        <h2>Dettaglio volontario</h2>
+        <VolunteerAdminDetailContent volunteer={selectedVolunteer} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <Toast ref={toast} />
@@ -176,38 +253,36 @@ export default function AdminVolunteers({ volunteers, onRefresh }: Readonly<Admi
           <strong>{confirmTarget?.currentRole}</strong> a <strong>{newRole}</strong>?
         </p>
       </Dialog>
-      <VolunteerAdminDetailDialog
-        visible={detailVolunteer !== null}
-        volunteer={detailVolunteer}
-        onHide={() => setDetailVolunteer(null)}
-      />
-
-      <h2>Volontari</h2>
-
-      {errorMessage ? <Message severity="warn" text={errorMessage} style={{ marginBottom: 12 }} /> : null}
-
-      <VolunteerAdminFilters
-        filters={filters}
-        availableMainInterest={availableMainInterest}
-        availablePrinterBrands={availablePrinterBrands}
-        availablePrinterModels={availablePrinterModels}
-        availableEnableInterestAreas={availableEnableInterestAreas}
-        onChange={setFilters}
-        onReset={() => setFilters({ ...EMPTY_VOLUNTEER_ADMIN_FILTERS })}
-      />
-
-      <div style={{ marginTop: 12 }}>
-        <div style={{ marginBottom: 8, fontSize: 14 }}>
-          {filteredRows.length} volontari trovati su {normalizedRows.length}
+      {!hasDetail && renderList()}
+      {hasDetail && isDesktop && (
+        <div style={{ display: "grid", gridTemplateColumns: "520px 1fr", gap: 16, minHeight: "100%" }}>
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              padding: 12,
+              maxHeight: "100%",
+              overflow: "auto",
+            }}
+          >
+            {renderList()}
+          </div>
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              padding: 16,
+              maxHeight: "100%",
+              overflow: "auto",
+            }}
+          >
+            <h2 style={{ marginTop: 0 }}>Dettaglio volontario</h2>
+            <VolunteerAdminDetailContent volunteer={selectedVolunteer} />
+          </div>
         </div>
-        <VolunteerAdminList
-          rows={filteredRows}
-          loading={dataLoading}
-          roleUpdateLoadingUid={loading ? confirmTarget?.uid ?? null : null}
-          onShowDetail={setDetailVolunteer}
-          onToggleRole={(uid, currentRole, name) => setConfirmTarget({ uid, currentRole, name })}
-        />
-      </div>
+      )}
     </div>
   );
 }

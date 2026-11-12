@@ -1,10 +1,11 @@
-import AdminRequestTable from "../../../components/requests/AdminRequestTable";
+import AdminRequestsWorkspace from "./AdminRequestsWorkspace";
 
 export default function AdminShipping({ requests }: { requests: any[] }) {
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Richieste spedizioni</h2>
-      <AdminRequestTable requests={requests} />
-    </div>
+    <AdminRequestsWorkspace
+      title="Richieste spedizioni"
+      requests={requests}
+      detailBasePath="/admin/requests/shipping"
+    />
   );
 }

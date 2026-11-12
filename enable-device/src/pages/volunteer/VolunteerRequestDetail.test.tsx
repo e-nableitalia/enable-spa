@@ -2,7 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import VolunteerRequestDetail from "./VolunteerRequestDetail";
 
-vi.mock("react-router-dom", () => ({ useParams: () => ({ id: "req1" }) }));
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useParams: () => ({ id: "req1" }),
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: "/volunteer/requests/req1", search: "", hash: "", state: null, key: "test" }),
+  };
+});
 vi.mock("../../firebase", () => ({ db: {}, functions: {} }));
 vi.mock("firebase/functions", () => ({ httpsCallable: () => vi.fn() }));
 
@@ -31,6 +39,16 @@ vi.mock("../../components/checklist/DeviceRequestChecklists", () => ({
       data-request-id={props.requestId}
       data-checklist-ids={JSON.stringify(props.checklistIds)}
     />
+  ),
+}));
+
+// EA-168: stesso principio di RequestDetail.test.tsx (F-45) — evita che il
+// vero DeviceRequestAttachments (montato subito nella tab "Allegati" per
+// via di renderActiveOnly={false}) esegua chiamate reali/side-effect
+// durante test che non riguardano gli allegati.
+vi.mock("../../components/attachments/DeviceRequestAttachments", () => ({
+  default: (props: { requestId: string }) => (
+    <div data-testid="attachments" data-request-id={props.requestId} />
   ),
 }));
 

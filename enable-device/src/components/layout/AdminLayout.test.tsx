@@ -44,6 +44,7 @@ vi.mock("firebase/firestore", () => ({
   collection: (_db: unknown, path: string) => ({ __path: path }),
   query: (ref: unknown) => ref,
   orderBy: () => undefined,
+  where: () => undefined,
   onSnapshot: (ref: { __path: string }, cb: (snap: { docs: typeof requestDocs }) => void) => {
     if (ref.__path === "deviceRequests") {
       cb({ docs: requestDocs });
@@ -66,7 +67,7 @@ const cases: Array<[string, string, number]> = [
 ];
 
 describe("AdminLayout - voce di menu 'To Do List' (riuso di MyChecklistItems gia' introdotta per il volontario, EA-153/EA-154/EA-156)", () => {
-  it("l'admin vede la voce 'To Do List' nel menu e la usa per raggiungere la pagina (la navigazione con originBasePath=/admin/request e' verificata in MyChecklistItems.test.tsx)", async () => {
+  it("l'admin vede la voce 'To Do List' nel menu e la usa per raggiungere la pagina (la navigazione con originBasePath=/admin/requests e' verificata in MyChecklistItems.test.tsx)", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/dashboard"]}>
         <Routes>
@@ -88,7 +89,7 @@ describe("AdminLayout - voce di menu 'To Do List' (riuso di MyChecklistItems gia
   });
 });
 
-describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuovo (F-33, migrazione EA-152 completata)", () => {
+describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuovo (F-33, migrazione EA-152 completata); pagina svuotata in vista di 'Super Admin'", () => {
   it("la voce non compare nel menu 'Richieste', ma la rotta resta comunque raggiungibile via URL diretto", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/dashboard"]}>
@@ -109,16 +110,16 @@ describe("AdminLayout - voce di menu 'Manutenzione (Import CSV)' nascosta di nuo
     expect(screen.queryByRole("treeitem", { name: "Manutenzione (Import CSV)" })).not.toBeInTheDocument();
   });
 
-  it("la rotta /admin/requests/maintenance resta funzionante via URL diretto", async () => {
+  it("la pagina 'Super Admin' e' raggiungibile su /admin/superadmin (F-46: rinominata/spostata da admin/requests/maintenance)", async () => {
     render(
-      <MemoryRouter initialEntries={["/admin/requests/maintenance"]}>
+      <MemoryRouter initialEntries={["/admin/superadmin"]}>
         <Routes>
           <Route path="/admin/*" element={<AdminLayout />} />
         </Routes>
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Manutenzione richieste - Import CSV")).toBeInTheDocument();
+    expect(await screen.findByText("Super Admin")).toBeInTheDocument();
   });
 });
 

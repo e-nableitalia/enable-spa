@@ -2,87 +2,66 @@ import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
 import { Tag } from "primereact/tag";
-import { Calendar } from "primereact/calendar";
-import { MultiSelect } from "primereact/multiselect";
-import { InputText } from "primereact/inputtext";
-import { useState, useEffect, useMemo } from "react";
-import { FilterMatchMode } from "primereact/api";
-import type { DataTableFilterMeta } from "primereact/datatable";
+import { useState, useMemo } from "react";
 import { REQUEST_STATUS_SEVERITY, PUBLIC_STATUS_SEVERITY, getPublicStatusGroup } from "../../helpers/requestStatus";
+import RequestFiltersPanel from "./RequestFiltersPanel";
+import { applyRequestFilters, useRequestListFilters, useVisibleColumns } from "./requestListFilters";
 
 interface Props {
   requests: any[];
   onOpen: (id: string) => void;
+  /** Usata solo per l'ordinamento (per vista); filtri e colonne sono condivisi tra le viste. */
   sessionKey?: string;
+  compact?: boolean;
+  selectedRequestId?: string | null;
 }
 
-export default function RequestTable({ requests, onOpen, sessionKey = "requestTableFilters" }: Props) {
+// Chiavi di sessionStorage condivise da tutte le viste volontario
+const FILTERS_KEY = "volunteerRequestListFilters";
+const COLS_KEY = "volunteerRequestListCols";
 
-  console.log("Rendering RequestTable with requests:", requests);
+const TOGGLEABLE_COLS = [
+  { key: "firstName",    label: "Nome" },
+  { key: "lastName",     label: "Cognome" },
+  { key: "age",          label: "Età" },
+  { key: "province",     label: "Provincia" },
+  { key: "deviceType",   label: "Device" },
+  { key: "status",       label: "Stato" },
+  { key: "publicStatus", label: "Stato Pubblico" },
+  { key: "createdAt",    label: "Creata" },
+  { key: "updatedAt",    label: "Modificata" },
+];
+const ALL_COL_KEYS = TOGGLEABLE_COLS.map((c) => c.key);
+const COMPACT_DEFAULT_COLS = ["firstName", "lastName", "deviceType", "status", "publicStatus", "updatedAt"];
 
-  const TOGGLEABLE_COLS = [
-    { key: "firstName",   label: "Nome" },
-    { key: "lastName",    label: "Cognome" },
-    { key: "age",         label: "Età" },
-    { key: "province",    label: "Provincia" },
-    { key: "deviceType",  label: "Device" },
-    { key: "status",      label: "Stato" },
-    { key: "publicStatus",label: "Stato Pubblico" },
-    { key: "createdAt",   label: "Creata" },
-    { key: "updatedAt",   label: "Modificata" },
-  ];
+// Larghezze in px: usate sia per le colonne sia per il min-width della tabella (scroll orizzontale)
+const COLUMN_WIDTHS: Record<string, number> = {
+  rowActions: 110,
+  firstName: 120,
+  lastName: 130,
+  age: 60,
+  province: 90,
+  deviceType: 130,
+  status: 150,
+  publicStatus: 170,
+  createdAt: 150,
+  updatedAt: 150,
+};
 
-  const COLS_KEY = sessionKey + "_cols";
-  const loadVisibleCols = (): string[] => {
-    try {
-      const saved = sessionStorage.getItem(COLS_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch { /* ignore */ }
-    return TOGGLEABLE_COLS.map((c) => c.key);
-  };
-  const [visibleCols, setVisibleCols] = useState<string[]>(loadVisibleCols);
-  const handleVisibleCols = (keys: string[]) => {
-    setVisibleCols(keys);
-    try { sessionStorage.setItem(COLS_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
-  };
+export default function RequestTable({
+  requests,
+  onOpen,
+  sessionKey = "requestTableFilters",
+  compact = false,
+  selectedRequestId = null,
+}: Props) {
+  const { filters, setFilter, reset } = useRequestListFilters(FILTERS_KEY);
+  const [visibleCols, setVisibleCols] = useVisibleColumns(
+    COLS_KEY,
+    ALL_COL_KEYS,
+    compact ? COMPACT_DEFAULT_COLS : ALL_COL_KEYS
+  );
   const col = (key: string) => visibleCols.includes(key);
-
-  const defaultFilters: DataTableFilterMeta = {
-    firstName: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    lastName: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    age: { value: null, matchMode: FilterMatchMode.EQUALS },
-    province: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    deviceType: { value: null, matchMode: FilterMatchMode.IN },
-    status: { value: null, matchMode: FilterMatchMode.IN },
-    publicStatus: { value: null, matchMode: FilterMatchMode.IN },
-    createdAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
-    updatedAt: { value: null, matchMode: FilterMatchMode.DATE_IS },
-  };
-
-  const loadFilters = (): DataTableFilterMeta => {
-    try {
-      const saved = sessionStorage.getItem(sessionKey);
-      if (!saved) return defaultFilters;
-      const parsed = JSON.parse(saved);
-      for (const field of ["createdAt", "updatedAt"] as const) {
-        const f = parsed[field];
-        if (f?.value) f.value = new Date(f.value);
-      }
-      return { ...defaultFilters, ...parsed };
-    } catch {
-      return defaultFilters;
-    }
-  };
-
-  const [filters, setFilters] = useState<DataTableFilterMeta>(loadFilters);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(sessionKey, JSON.stringify(filters));
-    } catch {
-      // sessionStorage non disponibile
-    }
-  }, [filters, sessionKey]);
 
   const sortStorageKey = sessionKey + "_sort";
   const loadSort = (): { field: string; order: 1 | -1 } => {
@@ -129,23 +108,12 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
     updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : null,
   }));
 
-  // Template per formattare le date
+  const filteredData = applyRequestFilters(tableData, filters);
+
   const dateTemplate = (row: any, field: "createdAt" | "updatedAt") => {
     const date = row[field];
     return date ? date.toLocaleString() : "-";
   };
-
-  // Template per il filtro data
-  const dateFilterTemplate = (options: any) => (
-    <Calendar
-      value={options.value}
-      onChange={(e) => options.filterCallback(e.value, options.index)}
-      dateFormat="dd/mm/yy"
-      placeholder="gg/mm/aaaa"
-      mask="99/99/9999"
-      showIcon
-    />
-  );
 
   const deviceTypeOptions = useMemo(() => {
     const unique = [...new Set(requests.map((r) => r.deviceType).filter(Boolean))] as string[];
@@ -162,160 +130,73 @@ export default function RequestTable({ requests, onOpen, sessionKey = "requestTa
     return unique.sort().map((s) => ({ label: s, value: s }));
   }, [requests]);
 
-  const makeMultiSelectFilter = (field: string, opts: { label: string; value: string }[], placeholder: string) =>
-    (options: any) => (
-      <MultiSelect
-        value={options.value || []}
-        options={opts}
-        onChange={(e) => {
-          setFilters((prev) => ({
-            ...prev,
-            [field]: { value: e.value, matchMode: FilterMatchMode.IN },
-          }));
-          options.filterCallback(e.value, options.index);
-        }}
-        placeholder={placeholder}
-        display="chip"
-        style={{ minWidth: 160 }}
-      />
-    );
+  const tableMinWidth =
+    (compact ? 0 : COLUMN_WIDTHS.rowActions) +
+    visibleCols.reduce((sum, k) => sum + (COLUMN_WIDTHS[k] ?? 0), 0);
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <MultiSelect
-          value={visibleCols}
-          options={TOGGLEABLE_COLS}
-          optionLabel="label"
-          optionValue="key"
-          onChange={(e) => handleVisibleCols(e.value)}
-          placeholder="Colonne visibili"
-          maxSelectedLabels={0}
-          selectedItemsLabel="{0} colonne visibili"
-          display="chip"
-          style={{ minWidth: 200 }}
-        />
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
-        <span className="p-input-icon-left" style={{ flex: "1 1 160px" }}>
-          <i className="pi pi-search" style={{ left: "0.75rem" }} />
-          <InputText
-            value={(filters.firstName as any)?.value ?? ""}
-            onChange={(e) => setFilters((prev) => ({ ...prev, firstName: { value: e.target.value || null, matchMode: FilterMatchMode.CONTAINS } }))}
-            placeholder="Nome"
-            style={{ paddingLeft: "2rem", width: "100%" }}
-          />
-        </span>
-        <span className="p-input-icon-left" style={{ flex: "1 1 160px" }}>
-          <i className="pi pi-search" style={{ left: "0.75rem" }} />
-          <InputText
-            value={(filters.lastName as any)?.value ?? ""}
-            onChange={(e) => setFilters((prev) => ({ ...prev, lastName: { value: e.target.value || null, matchMode: FilterMatchMode.CONTAINS } }))}
-            placeholder="Cognome"
-            style={{ paddingLeft: "2rem", width: "100%" }}
-          />
-        </span>
-        <span className="p-input-icon-left" style={{ flex: "0 1 180px" }}>
-          <i className="pi pi-search" style={{ left: "0.75rem" }} />
-          <InputText
-            value={(filters.age as any)?.value ?? ""}
-            onChange={(e) => setFilters((prev) => ({ ...prev, age: { value: e.target.value ? Number(e.target.value) : null, matchMode: FilterMatchMode.EQUALS } }))}
-            placeholder="Età"
-            type="number"
-            style={{ paddingLeft: "2rem", width: "100%" }}
-          />
-        </span>
-        <span className="p-input-icon-left" style={{ flex: "1 1 140px" }}>
-          <i className="pi pi-search" style={{ left: "0.75rem" }} />
-          <InputText
-            value={(filters.province as any)?.value ?? ""}
-            onChange={(e) => setFilters((prev) => ({ ...prev, province: { value: e.target.value || null, matchMode: FilterMatchMode.CONTAINS } }))}
-            placeholder="Provincia"
-            style={{ paddingLeft: "2rem", width: "100%" }}
-          />
-        </span>
-      </div>
+      <RequestFiltersPanel
+        scope="volunteer"
+        filters={filters}
+        onChange={setFilter}
+        onReset={reset}
+        statusOptions={statusOptions}
+        publicStatusOptions={publicStatusOptions}
+        deviceTypeOptions={deviceTypeOptions}
+        columns={TOGGLEABLE_COLS}
+        visibleColumns={visibleCols}
+        onVisibleColumnsChange={setVisibleCols}
+      />
       <DataTable
-        value={tableData}
+        value={filteredData}
         paginator
         rows={10}
-        rowsPerPageOptions={[10, 20, 50, tableData.length]}
+        rowsPerPageOptions={[10, 20, 50, filteredData.length].filter((v, i, a) => v > 0 && a.indexOf(v) === i)}
         paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
         currentPageReportTemplate="Mostrati {first}-{last} di {totalRecords}"
-        filterDisplay="row"
-        filters={filters}
-        onFilter={(e) => setFilters(e.filters)}
+        emptyMessage="Nessuna richiesta corrisponde ai filtri."
         sortField={sortField}
         sortOrder={sortOrder}
         onSort={handleSort}
+        onRowClick={compact ? (e) => onOpen((e.data as any).id) : undefined}
+        rowClassName={(rowData) =>
+          compact && selectedRequestId && (rowData as any).id === selectedRequestId ? "p-highlight" : ""
+        }
+        size={compact ? "small" : undefined}
+        scrollable
+        tableStyle={{ minWidth: tableMinWidth }}
       >
-        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: "100px" }} />}
-        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: "110px" }} />}
-        {col("age") && <Column field="age" header="Età" sortable style={{ width: "60px" }} />}
-        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: "90px" }} />}
-        {col("deviceType") && (
-          <Column
-            field="deviceType"
-            header="Device"
-            sortable
-            filter
-            filterElement={makeMultiSelectFilter("deviceType", deviceTypeOptions, "Filtra device")}
-            showFilterMenu={false}
-            filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "130px" }}
-          />
-        )}
+        {col("firstName") && <Column field="firstName" header="Nome" sortable style={{ width: COLUMN_WIDTHS.firstName }} />}
+        {col("lastName") && <Column field="lastName" header="Cognome" sortable style={{ width: COLUMN_WIDTHS.lastName }} />}
+        {col("age") && <Column field="age" header="Età" sortable style={{ width: COLUMN_WIDTHS.age }} />}
+        {col("province") && <Column field="province" header="Provincia" sortable style={{ width: COLUMN_WIDTHS.province }} />}
+        {col("deviceType") && <Column field="deviceType" header="Device" sortable style={{ width: COLUMN_WIDTHS.deviceType }} />}
         {col("status") && (
-          <Column
-            field="status"
-            header="Stato"
-            sortable
-            body={internalStatusTemplate}
-            filter
-            filterElement={makeMultiSelectFilter("status", statusOptions, "Filtra stato")}
-            showFilterMenu={false}
-            filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "130px" }}
-          />
+          <Column field="status" header="Stato" sortable body={internalStatusTemplate} style={{ width: COLUMN_WIDTHS.status }} />
         )}
         {col("publicStatus") && (
-          <Column
-            header="Stato Pubblico"
-            sortable
-            body={statusTemplate}
-            filter
-            field="publicStatus"
-            filterElement={makeMultiSelectFilter("publicStatus", publicStatusOptions, "Filtra stato pubblico")}
-            showFilterMenu={false}
-            filterMatchMode={FilterMatchMode.IN}
-            style={{ width: "150px" }}
-          />
+          <Column field="publicStatus" header="Stato Pubblico" sortable body={statusTemplate} style={{ width: COLUMN_WIDTHS.publicStatus }} />
         )}
         {col("createdAt") && (
           <Column
+            field="createdAt"
             header="Creata"
             sortable
             body={(row) => dateTemplate(row, "createdAt")}
-            filter
-            field="createdAt"
-            dataType="date"
-            filterElement={dateFilterTemplate}
-            style={{ width: "110px" }}
+            style={{ width: COLUMN_WIDTHS.createdAt }}
           />
         )}
         {col("updatedAt") && (
           <Column
+            field="updatedAt"
             header="Modificata"
             sortable
             body={(row) => dateTemplate(row, "updatedAt")}
-            filter
-            field="updatedAt"
-            dataType="date"
-            filterElement={dateFilterTemplate}
-            style={{ width: "120px" }}
+            style={{ width: COLUMN_WIDTHS.updatedAt }}
           />
         )}
-        <Column body={actionTemplate} style={{ width: "90px" }} />
+        {!compact && <Column body={actionTemplate} style={{ width: COLUMN_WIDTHS.rowActions }} />}
       </DataTable>
     </div>
   );

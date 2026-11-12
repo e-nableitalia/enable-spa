@@ -54,7 +54,7 @@ describe("VolunteerLayout (EA-150) - classificazione produzione/spedizione dal g
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Richieste in produzione")).toBeInTheDocument();
+    expect(await screen.findByText(/Richieste in produzione/)).toBeInTheDocument();
     const table = await screen.findByRole("table");
     expect(within(table).getByText("in produzione")).toBeInTheDocument();
     expect(within(table).queryByText("spedita")).not.toBeInTheDocument();
@@ -69,7 +69,7 @@ describe("VolunteerLayout (EA-150) - classificazione produzione/spedizione dal g
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Richieste di spedizione")).toBeInTheDocument();
+    expect(await screen.findByText(/Richieste di spedizione/)).toBeInTheDocument();
     const table = await screen.findByRole("table");
     expect(within(table).getByText("spedita")).toBeInTheDocument();
     expect(within(table).queryByText("in produzione")).not.toBeInTheDocument();

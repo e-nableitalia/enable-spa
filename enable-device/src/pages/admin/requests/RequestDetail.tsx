@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { doc, getDoc, collection, query, orderBy, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, functions, auth } from "../../../firebase";
@@ -9,20 +9,54 @@ import { Dropdown } from "primereact/dropdown";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
 import { ListBox } from "primereact/listbox";
+import { TabView, TabPanel } from "primereact/tabview";
 import RequestTimeline from "../../../components/timeline/RequestTimeline";
 import DeviceRequestChecklists from "../../../components/checklist/DeviceRequestChecklists";
+import DeviceRequestAttachments from "../../../components/attachments/DeviceRequestAttachments";
 import { Toast } from "primereact/toast";
 import { Panel } from "primereact/panel";
 import { Dialog } from "primereact/dialog";
 import { Badge } from "primereact/badge";
 import { Toolbar } from "primereact/toolbar";
-import { REQUEST_STATUSES, getPublicStatusGroup } from "../../../helpers/requestStatus";
+import { ProgressSpinner } from "primereact/progressspinner";
+import { REQUEST_STATUSES, getPublicStatusGroup, CLOSED_STATUSES } from "../../../helpers/requestStatus";
 import { setRequiresAttention } from "../../../helpers/requiresAttention";
 import type { ShippingAddress } from "../../../shared/types/shippingAddress";
 import provinceList from "../../../helpers/province.json";
 
-export default function RequestDetail() {
-  const { id } = useParams();
+interface RequestDetailProps {
+  compact?: boolean;
+  listPath?: string;
+  requestId?: string;
+}
+
+function DetailPaneLoader() {
+  return (
+    <div
+      style={{
+        minHeight: 320,
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <ProgressSpinner style={{ width: 56, height: 56 }} strokeWidth="6" />
+    </div>
+  );
+}
+
+export default function RequestDetail({
+  compact = false,
+  listPath = "/admin/requests",
+  requestId,
+}: RequestDetailProps) {
+  const { id: routeId } = useParams();
+  const id = requestId ?? routeId;
+  const navigate = useNavigate();
+  const location = useLocation();
   const [request, setRequest] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [newStatus, setNewStatus] = useState("");
@@ -49,6 +83,10 @@ export default function RequestDetail() {
   const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [showChangeDeviceTypeDialog, setShowChangeDeviceTypeDialog] = useState(false);
   const [sendingDocumentsEmail, setSendingDocumentsEmail] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [purgeTransientOnArchive, setPurgeTransientOnArchive] = useState(true);
+  const [archiving, setArchiving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   // ── Validazione richiesta (status "inviata") ─────────────────────────────
   const [showValidateDialog, setShowValidateDialog] = useState(false);
@@ -293,6 +331,63 @@ export default function RequestDetail() {
     await loadData();
   };
 
+  const handleArchive = async () => {
+    if (!id) return;
+    setArchiving(true);
+    try {
+      const fn = httpsCallable(functions, "archiveDeviceRequest");
+      const result = await fn({
+        requestId: id,
+        purgeTransientAttachments: purgeTransientOnArchive,
+      });
+      const purged = (result.data as { purgedTransientCount?: number })?.purgedTransientCount ?? 0;
+      toast.current?.show({
+        severity: "success",
+        summary: "Richiesta archiviata",
+        detail: purgeTransientOnArchive
+          ? `Archiviata. Allegati transitori eliminati: ${purged}.`
+          : "La richiesta è stata archiviata.",
+        life: 4000,
+      });
+      setShowArchiveDialog(false);
+      await loadData();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Impossibile archiviare la richiesta.",
+        life: 5000,
+      });
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!id) return;
+    setRestoring(true);
+    try {
+      const fn = httpsCallable(functions, "restoreDeviceRequest");
+      await fn({ requestId: id });
+      toast.current?.show({
+        severity: "success",
+        summary: "Richiesta ripristinata",
+        detail: "La richiesta è di nuovo attiva (live).",
+        life: 3000,
+      });
+      await loadData();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Impossibile ripristinare la richiesta.",
+        life: 5000,
+      });
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const handleAddVolunteerToList = async () => {
     if (!volunteerToAdd || !id) return;
     setAddingVolunteer(true);
@@ -357,9 +452,8 @@ export default function RequestDetail() {
   const handleAddNote = async () => {
     if (!id || !noteText.trim()) return;
     try {
-      // Recupera lo stato precedente (ultimo evento)
-      const lastEvent = events[0];
-      const previousStatus = lastEvent?.status || request.status || "sconosciuto";
+      // La nota non è un cambio di stato: si registra con lo stato corrente della richiesta
+      const previousStatus = request.status || events[0]?.toStatus || "sconosciuto";
 
       const notifica = (noteNotificaAdmin || noteNotificaVolontari || noteNotificaTelegram)
         ? { admin: noteNotificaAdmin, volunteers: noteNotificaVolontari, telegram: noteNotificaTelegram }
@@ -658,7 +752,16 @@ export default function RequestDetail() {
   };
 
   const goBack = () => {
-    window.history.back();
+    const fromState = (location.state as { from?: string } | null)?.from;
+    if (fromState) {
+      navigate(fromState);
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(listPath);
   };
 
   const leftToolbarTemplate = () => (
@@ -670,10 +773,14 @@ export default function RequestDetail() {
     />
   );
 
-  if (!request) return <div>Loading...</div>;
+  if (!request) return <DetailPaneLoader />;
+
+  const isArchived = request.archived === true;
+  const canArchive =
+    !isArchived && CLOSED_STATUSES.includes(request.status ?? "");
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: compact ? 12 : 20 }}>
       <Toast ref={toast} />
       {/* Dialog: segnala richiede attenzione */}
       <Dialog
@@ -725,8 +832,16 @@ export default function RequestDetail() {
           </div>
         </div>
       </Dialog>
-      <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />
-      <h2>Request Detail</h2>
+      {!compact && <Toolbar left={leftToolbarTemplate} style={{ marginBottom: 16 }} />}
+      <h2 style={{ marginTop: compact ? 0 : undefined }}>Request Detail</h2>
+
+      {/* ── EA-168: refactor a tab. Ordine sezioni invariato all'interno di ogni
+          tab rispetto alla versione a pannelli lineari precedente; le sole
+          eccezioni sono lo spostamento della Cronologia accanto a "Ultimo
+          evento" (prima era all'ultimo posto, dopo tutti i Dialog) e dei
+          Dialog stessi (prima interposti tra i pannelli, ora tutti dopo la
+          TabView: la loro posizione nell'albero JSX non ha mai influenza
+          sulla resa, essendo tutti modali). ── */}
 
       {/* ── Pannello validazione (visibile solo se status === "inviata") ── */}
       {request?.status === "inviata" && (
@@ -960,6 +1075,14 @@ export default function RequestDetail() {
         </Panel>
       )}
 
+      {/* renderActiveOnly={false}: senza, PrimeReact monta solo il contenuto
+          della tab attiva — i contenuti delle altre tab (es. dati e azioni
+          della tab "Fabbricazione/Liberatorie") resterebbero assenti dal DOM
+          finché non si clicca sopra la tab, stesso motivo già documentato
+          per DeviceRequestChecklists. */}
+      <TabView renderActiveOnly={false}>
+        <TabPanel header="Dati generali">
+
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>
         <div className="p-panel-header">
           <span>Dettagli richiesta</span>
@@ -970,6 +1093,7 @@ export default function RequestDetail() {
               <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
                 <strong>Device:</strong>
                 <span>{request.deviceType || '-'}</span>
+                {!isArchived && (
                 <Button
                   label="Modifica"
                   icon="pi pi-pencil"
@@ -988,12 +1112,15 @@ export default function RequestDetail() {
                     setShowChangeDeviceTypeDialog(true);
                   }}
                 />
+                )}
               </div>
-              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <strong>Status:</strong>
                 <span style={{ marginLeft: 8 }}>
                   <Badge value={request.status} severity="info" />
                 </span>
+                {isArchived && <Badge value="Archiviata" severity="secondary" />}
+                {!isArchived && (
                 <Button
                   label="Cambia Stato"
                   icon="pi pi-pencil"
@@ -1001,6 +1128,27 @@ export default function RequestDetail() {
                   style={{ marginLeft: 8 }}
                   onClick={() => setShowChangeStatusDialog(true)}
                 />
+                )}
+                {canArchive && (
+                  <Button
+                    label="Archivia"
+                    icon="pi pi-inbox"
+                    className="p-button-outlined p-button-secondary"
+                    onClick={() => {
+                      setPurgeTransientOnArchive(true);
+                      setShowArchiveDialog(true);
+                    }}
+                  />
+                )}
+                {isArchived && (
+                  <Button
+                    label="Ripristina"
+                    icon="pi pi-replay"
+                    className="p-button-outlined"
+                    loading={restoring}
+                    onClick={handleRestore}
+                  />
+                )}
               </div>
               <div style={{ marginBottom: 10 }}>
                 <strong>Stato pubblico:</strong>
@@ -1018,7 +1166,7 @@ export default function RequestDetail() {
                   ? <Badge value="⚠️ Sì" severity="danger" />
                   : <span style={{ color: "#888" }}>No</span>
                 }
-                {request.requiresAttention
+                {!isArchived && (request.requiresAttention
                   ? <Button
                       label="Rimuovi flag"
                       icon="pi pi-times"
@@ -1032,7 +1180,7 @@ export default function RequestDetail() {
                       className="p-button-text p-button-sm p-button-warning"
                       onClick={() => { setAttentionNote(""); setShowAttentionDialog(true); }}
                     />
-                }
+                )}
               </div>
             </div>
             <div style={{ flex: 1 }}>
@@ -1048,6 +1196,7 @@ export default function RequestDetail() {
                   icon="pi pi-pencil"
                   className="p-button-text"
                   style={{ marginLeft: 8 }}
+                  disabled={isArchived}
                   onClick={() => setShowAssignVolunteerDialog(true)}
                 />
               </div>
@@ -1092,7 +1241,12 @@ export default function RequestDetail() {
                     ? "Email del richiedente non valorizzata"
                     : undefined
               }
-              disabled={!privateData?.email || request.documentsEmailSent === true || sendingDocumentsEmail}
+              disabled={
+                isArchived ||
+                !privateData?.email ||
+                request.documentsEmailSent === true ||
+                sendingDocumentsEmail
+              }
               loading={sendingDocumentsEmail}
               onClick={handleSendDocumentsEmail}
             />
@@ -1100,6 +1254,7 @@ export default function RequestDetail() {
               label="Modifica"
               icon="pi pi-pencil"
               className="p-button-text"
+              disabled={isArchived}
               onClick={() => {
                 setPrivateForm({
                   email: privateData?.email || "",
@@ -1159,6 +1314,7 @@ export default function RequestDetail() {
             label="Modifica"
             icon="pi pi-pencil"
             className="p-button-text"
+            disabled={isArchived}
             onClick={() => {
               setPublicForm({
                 recipient: request.recipient || "",
@@ -1206,6 +1362,7 @@ export default function RequestDetail() {
             label="Modifica"
             icon="pi pi-pencil"
             className="p-button-text"
+            disabled={isArchived}
             onClick={() => {
               const addr = request.shippingAddress;
               setAddressForm(addr ? { ...{ phone: "", notes: "", ...addr } } : { fullName: "", street: "", city: "", province: "", postalCode: "", country: "IT", phone: "", notes: "" });
@@ -1235,6 +1392,57 @@ export default function RequestDetail() {
         </div>
       </div>
 
+      {/* Ultimo stato come panel con bottone e dialog */}
+      <Panel
+        header={
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>Ultimo evento</span>
+            {!isArchived && (
+            <Button
+              label="Aggiungi nota"
+              icon="pi pi-plus"
+              className="p-button-text"
+              onClick={() => setShowAddNoteDialog(true)}
+            />
+            )}
+          </div>
+        }
+        style={{ marginBottom: 30 }}
+      >
+        {events.length > 0 ? (
+          <div>
+            <strong>{events[0].status}</strong>
+            <div>
+              <span>
+                {events[0].timestamp?.toDate
+                  ? events[0].timestamp.toDate().toLocaleString()
+                  : "-"}
+              </span>
+            </div>
+            {events[0].note && (
+              <div>
+                <strong>Nota:</strong> {events[0].note}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>Nessun evento disponibile.</div>
+        )}
+      </Panel>
+
+      {/* Timeline collapsable */}
+      <Panel
+        header="Cronologia gestione richiesta"
+        toggleable
+        collapsed={!timelineOpen}
+        onToggle={() => setTimelineOpen(!timelineOpen)}
+        style={{ marginBottom: 30 }}
+      >
+        <RequestTimeline events={events} />
+      </Panel>
+        </TabPanel>
+        <TabPanel header="Fabbricazione/Liberatorie">
+
       {/* Liberatorie familiari (EA-158) */}
       <div className="p-panel p-component" style={{ marginBottom: 30 }}>
         <div className="p-panel-header">
@@ -1249,7 +1457,7 @@ export default function RequestDetail() {
                   ? <Badge value="Acquisito" severity="success" />
                   : <Badge value="Non acquisito" severity="warning" />
                 }
-                {!request.waiverAcquired && (
+                {!request.waiverAcquired && !isArchived && (
                   <Button
                     label="Segna come acquisito"
                     icon="pi pi-check"
@@ -1275,7 +1483,7 @@ export default function RequestDetail() {
                   ? <Badge value="Acquisita" severity="success" />
                   : <Badge value="Non acquisita" severity="warning" />
                 }
-                {!request.photoReleaseAcquired && (
+                {!request.photoReleaseAcquired && !isArchived && (
                   <Button
                     label="Segna come acquisita"
                     icon="pi pi-check"
@@ -1314,41 +1522,51 @@ export default function RequestDetail() {
         </div>
       </div>
 
-      {/* Ultimo stato come panel con bottone e dialog */}
-      <Panel
-        header={
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span>Ultimo evento</span>
+        </TabPanel>
+        <TabPanel header="Allegati">
+          <DeviceRequestAttachments requestId={id as string} readOnly={isArchived} />
+        </TabPanel>
+      </TabView>
+
+      <Dialog
+        header="Archivia richiesta"
+        visible={showArchiveDialog}
+        style={{ width: "480px" }}
+        modal
+        onHide={() => setShowArchiveDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <Button
-              label="Aggiungi nota"
-              icon="pi pi-plus"
+              label="Annulla"
               className="p-button-text"
-              onClick={() => setShowAddNoteDialog(true)}
+              onClick={() => setShowArchiveDialog(false)}
+              disabled={archiving}
+            />
+            <Button
+              label="Archivia"
+              icon="pi pi-inbox"
+              onClick={handleArchive}
+              loading={archiving}
             />
           </div>
         }
-        style={{ marginBottom: 30 }}
       >
-        {events.length > 0 ? (
-          <div>
-            <strong>{events[0].status}</strong>
-            <div>
-              <span>
-                {events[0].timestamp?.toDate
-                  ? events[0].timestamp.toDate().toLocaleString()
-                  : "-"}
-              </span>
-            </div>
-            {events[0].note && (
-              <div>
-                <strong>Nota:</strong> {events[0].note}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div>Nessun evento disponibile.</div>
-        )}
-      </Panel>
+        <p>
+          La richiesta passerà nel menu Archiviate in sola lettura. Lo stato
+          ({request.status}) non cambia.
+        </p>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12 }}>
+          <Checkbox
+            inputId="purge-transient"
+            checked={purgeTransientOnArchive}
+            onChange={(e) => setPurgeTransientOnArchive(!!e.checked)}
+          />
+          <label htmlFor="purge-transient">
+            Eliminare anche gli allegati transitori (operazione irreversibile).
+            Gli allegati persistenti restano.
+          </label>
+        </div>
+      </Dialog>
 
       {/* Dialog indirizzo di spedizione */}
       <Dialog
@@ -1766,16 +1984,6 @@ export default function RequestDetail() {
         </div>
       </Dialog>
 
-      {/* Timeline collapsable */}
-      <Panel
-        header="Cronologia gestione richiesta"
-        toggleable
-        collapsed={!timelineOpen}
-        onToggle={() => setTimelineOpen(!timelineOpen)}
-        style={{ marginBottom: 30 }}
-      >
-        <RequestTimeline events={events} />
-      </Panel>
     </div>
   );
 }

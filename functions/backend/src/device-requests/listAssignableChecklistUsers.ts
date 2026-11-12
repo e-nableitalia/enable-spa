@@ -4,12 +4,47 @@ import { getInvokeId } from "../utils/invoke";
 
 const REGION = "europe-west1";
 
+export interface AssignableChecklistUser {
+  id: string;
+  label: string;
+}
+
+/**
+ * Risolve il nome visualizzato di un utente da `users/{uid}/private/profile`
+ * via Admin SDK (bypass regole client). Fallback sull'uid se il profilo
+ * manca o non ha firstName/lastName.
+ */
+async function resolveUserLabel(uid: string): Promise<string> {
+  try {
+    const db = getFirestore();
+    const profileSnap = await db
+      .collection("users")
+      .doc(uid)
+      .collection("private")
+      .doc("profile")
+      .get();
+    if (profileSnap.exists) {
+      const data = profileSnap.data() ?? {};
+      const fullName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+      if (fullName) return fullName;
+    }
+  } catch {
+    // fallback: uid
+  }
+  return uid;
+}
+
 /**
  * Cloud Function callable del layer di integrazione device-requests
  * (F-27): risolve lato server l'elenco completo di utenti selezionabili
  * come assegnatario di un item di checklist per una `deviceRequest` —
  * `assignedVolunteers` della richiesta più **tutti** gli admin
  * dell'organizzazione, non solo il chiamante.
+ *
+ * Restituisce `{ users: { id, label }[] }` con le etichette già risolte
+ * via Admin SDK: le regole Firestore permettono a un volontario di leggere
+ * solo il proprio `users/{uid}/private/profile`, quindi una risoluzione
+ * client-side lasciava UIDs opachi (o dropdown "senza nomi") per i peer.
  *
  * Prima di questa funzione, `ChecklistPanel.tsx` risolveva questo elenco
  * client-side leggendo `deviceRequests/{id}` (per `assignedVolunteers`,
@@ -48,9 +83,13 @@ export const listAssignableChecklistUsers = onCall(
     }
 
     const requestData = requestSnap.data() ?? {};
+    // Compatibilità backward: documenti pre-migrazione hanno ancora
+    // `assignedVolunteer` scalare (vedi deviceData.ts).
     const assignedVolunteers: string[] = Array.isArray(requestData.assignedVolunteers)
       ? requestData.assignedVolunteers
-      : [];
+      : typeof requestData.assignedVolunteer === "string" && requestData.assignedVolunteer
+        ? [requestData.assignedVolunteer]
+        : [];
 
     const userSnap = await db.collection("users").doc(uid).get();
     const role = userSnap.exists ? userSnap.data()?.role : undefined;
@@ -69,8 +108,13 @@ export const listAssignableChecklistUsers = onCall(
     const adminUids = adminsSnap.docs.map((doc) => doc.id);
 
     const uids = Array.from(new Set([...assignedVolunteers, ...adminUids]));
+    const users: AssignableChecklistUser[] = await Promise.all(
+      uids.map(async (id) => ({ id, label: await resolveUserLabel(id) }))
+    );
 
-    console.log(`[listAssignableChecklistUsers] OK: ${uids.length} assignable user(s) for request ${requestId}`);
-    return { uids };
+    console.log(
+      `[listAssignableChecklistUsers] OK: ${users.length} assignable user(s) for request ${requestId}`
+    );
+    return { users };
   }
 );

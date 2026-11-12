@@ -1,0 +1,608 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { httpsCallable } from "firebase/functions";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db, functions } from "../../firebase";
+import { DataTable } from "primereact/datatable";
+import { Column } from "primereact/column";
+import { Button } from "primereact/button";
+import { Dialog } from "primereact/dialog";
+import { InputText } from "primereact/inputtext";
+import { InputTextarea } from "primereact/inputtextarea";
+import { Dropdown } from "primereact/dropdown";
+import { Toast } from "primereact/toast";
+import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
+import { SelectButton } from "primereact/selectbutton";
+import { Tag } from "primereact/tag";
+
+interface FirestoreTimestampLike {
+  _seconds: number;
+  _nanoseconds: number;
+}
+
+type AttachmentRetention = "persistent" | "transient";
+
+interface ProjectAttachment {
+  id: string;
+  fileName: string;
+  extension: string;
+  description: string;
+  notes: string;
+  category: string | null;
+  retention: AttachmentRetention;
+  size: number;
+  uploadedBy: string;
+  createdAt: FirestoreTimestampLike | null;
+  updatedAt: FirestoreTimestampLike | null;
+}
+
+interface Props {
+  projectId: string;
+  readOnly?: boolean;
+}
+
+const RETENTION_OPTIONS: { label: string; value: AttachmentRetention }[] = [
+  { label: "Persistente", value: "persistent" },
+  { label: "Transitorio", value: "transient" },
+];
+
+function normalizeRetention(value: unknown): AttachmentRetention {
+  return value === "transient" ? "transient" : "persistent";
+}
+
+function retentionLabel(value: AttachmentRetention): string {
+  return value === "transient" ? "Transitorio" : "Persistente";
+}
+
+function formatTimestamp(value: FirestoreTimestampLike | null | undefined): string {
+  if (!value || typeof value._seconds !== "number") return "-";
+  return new Date(value._seconds * 1000).toLocaleString();
+}
+
+function formatSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function ProjectAttachments({ projectId, readOnly = false }: Props) {
+  const toast = useRef<Toast>(null);
+  const currentUid = auth.currentUser?.uid ?? null;
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const [attachments, setAttachments] = useState<ProjectAttachment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploaderNames, setUploaderNames] = useState<Record<string, string>>({});
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDescription, setUploadDescription] = useState("");
+  const [uploadNotes, setUploadNotes] = useState("");
+  const [uploadCategory, setUploadCategory] = useState("");
+  const [uploadRetention, setUploadRetention] = useState<AttachmentRetention | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const [editingAttachment, setEditingAttachment] = useState<ProjectAttachment | null>(null);
+  const [editDescription, setEditDescription] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editRetention, setEditRetention] = useState<AttachmentRetention>("persistent");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const getUserFullName = useCallback(async (userId: string): Promise<string> => {
+    if (!userId || userId.includes("/")) return userId;
+    try {
+      const privateProfileSnap = await getDoc(doc(db, "users", userId, "private", "profile"));
+      if (privateProfileSnap.exists()) {
+        const data = privateProfileSnap.data();
+        const fullName = `${data.firstName || ""} ${data.lastName || ""}`.trim();
+        if (fullName) return fullName;
+      }
+    } catch {
+      // I volontari non leggono i private profile altrui: fallback su profilo pubblico.
+    }
+    try {
+      const publicProfileSnap = await getDoc(doc(db, "users", userId, "public", "profile"));
+      if (publicProfileSnap.exists()) {
+        const data = publicProfileSnap.data();
+        const fullName = `${data.firstName || ""} ${data.lastName || ""}`.trim();
+        if (fullName) return fullName;
+      }
+    } catch {
+      // Fallback finale su uid.
+    }
+    return userId;
+  }, []);
+
+  const fetchAttachments = useCallback(async (options?: { warnOnError?: boolean }) => {
+    setLoading(true);
+    try {
+      const fn = httpsCallable<{ projectId: string }, { attachments: ProjectAttachment[] }>(
+        functions,
+        "listProjectAttachments"
+      );
+      const result = await fn({ projectId });
+      const list = (result.data.attachments ?? []).map((a) => ({
+        ...a,
+        retention: normalizeRetention(a.retention),
+      }));
+      setAttachments(list);
+
+      const uniqueUploaders = Array.from(new Set(list.map((a) => a.uploadedBy)));
+      const resolved = await Promise.all(uniqueUploaders.map((uid) => getUserFullName(uid)));
+      setUploaderNames(Object.fromEntries(uniqueUploaders.map((uid, i) => [uid, resolved[i]])));
+      return true;
+    } catch (err) {
+      toast.current?.show({
+        severity: options?.warnOnError ? "warn" : "error",
+        summary: options?.warnOnError ? "Elenco non aggiornato" : "Errore",
+        detail: err instanceof Error
+          ? err.message
+          : options?.warnOnError
+            ? "L'allegato è stato caricato, ma non è stato possibile aggiornare l'elenco."
+            : "Impossibile recuperare gli allegati.",
+        life: 4000,
+      });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, getUserFullName]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetchAttachments fetches from a Cloud Function, not derivable from props/state
+    fetchAttachments();
+  }, [fetchAttachments]);
+
+  useEffect(() => {
+    const loadRole = async () => {
+      if (!currentUid) {
+        setIsAdmin(false);
+        return;
+      }
+      const userSnap = await getDoc(doc(db, "users", currentUid));
+      setIsAdmin(userSnap.exists() && userSnap.data()?.role === "admin");
+    };
+    void loadRole();
+  }, [currentUid]);
+
+  const categories = Array.from(new Set(attachments.map((a) => a.category).filter((c): c is string => !!c)));
+  const filteredAttachments = categoryFilter
+    ? attachments.filter((a) => a.category === categoryFilter)
+    : attachments;
+
+  const openUploadDialog = () => {
+    setUploadFile(null);
+    setUploadDescription("");
+    setUploadNotes("");
+    setUploadCategory("");
+    setUploadRetention(null);
+    setShowUploadDialog(true);
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile || !uploadDescription.trim() || !uploadRetention) return;
+    setUploading(true);
+    try {
+      const fn = httpsCallable<
+        {
+          projectId: string;
+          fileName: string;
+          description: string;
+          notes?: string;
+          category?: string;
+          retention: AttachmentRetention;
+          size: number;
+        },
+        { attachmentId: string; uploadUrl: string }
+      >(functions, "uploadProjectAttachment");
+      const result = await fn({
+        projectId,
+        fileName: uploadFile.name,
+        description: uploadDescription.trim(),
+        notes: uploadNotes.trim() || undefined,
+        category: uploadCategory.trim() || undefined,
+        retention: uploadRetention,
+        size: uploadFile.size,
+      });
+
+      const putResponse = await fetch(result.data.uploadUrl, {
+        method: "PUT",
+        body: uploadFile,
+      });
+      if (!putResponse.ok) {
+        throw new Error(`Caricamento del file fallito (HTTP ${putResponse.status})`);
+      }
+
+      toast.current?.show({
+        severity: "success",
+        summary: "Allegato caricato",
+        detail: "L'allegato è stato caricato correttamente.",
+        life: 3000,
+      });
+      setShowUploadDialog(false);
+      const uploadedCategory = uploadCategory.trim() || null;
+      setCategoryFilter((prev) => {
+        if (prev === null) return null;
+        if (uploadedCategory && prev === uploadedCategory) return prev;
+        return null;
+      });
+      await fetchAttachments({ warnOnError: true });
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante il caricamento dell'allegato.",
+        life: 5000,
+      });
+    }
+    setUploading(false);
+  };
+
+  const handleDownload = async (attachment: ProjectAttachment) => {
+    setDownloadingId(attachment.id);
+    try {
+      const fn = httpsCallable<{ projectId: string; attachmentId: string }, { downloadUrl: string }>(
+        functions,
+        "downloadProjectAttachment"
+      );
+      const result = await fn({ projectId, attachmentId: attachment.id });
+      window.open(result.data.downloadUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Impossibile scaricare l'allegato.",
+        life: 4000,
+      });
+    }
+    setDownloadingId(null);
+  };
+
+  const openEditDialog = (attachment: ProjectAttachment) => {
+    setEditingAttachment(attachment);
+    setEditDescription(attachment.description);
+    setEditNotes(attachment.notes);
+    setEditRetention(normalizeRetention(attachment.retention));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingAttachment || !editDescription.trim()) return;
+    setSavingEdit(true);
+    try {
+      const fn = httpsCallable<
+        {
+          projectId: string;
+          attachmentId: string;
+          description: string;
+          notes?: string;
+          retention: AttachmentRetention;
+        },
+        { attachmentId: string }
+      >(functions, "updateProjectAttachmentDescription");
+      await fn({
+        projectId,
+        attachmentId: editingAttachment.id,
+        description: editDescription.trim(),
+        notes: editNotes,
+        retention: editRetention,
+      });
+      toast.current?.show({
+        severity: "success",
+        summary: "Allegato aggiornato",
+        detail: "Descrizione, note e tipologia aggiornate.",
+        life: 3000,
+      });
+      setEditingAttachment(null);
+      await fetchAttachments();
+    } catch (err) {
+      toast.current?.show({
+        severity: "error",
+        summary: "Errore",
+        detail: err instanceof Error ? err.message : "Errore durante l'aggiornamento dell'allegato.",
+        life: 5000,
+      });
+    }
+    setSavingEdit(false);
+  };
+
+  const handleDelete = (attachment: ProjectAttachment) => {
+    confirmDialog({
+      message: `Eliminare l'allegato "${attachment.fileName}"? L'operazione non è reversibile.`,
+      header: "Conferma eliminazione allegato",
+      icon: "pi pi-exclamation-triangle",
+      acceptLabel: "Elimina",
+      rejectLabel: "Annulla",
+      acceptClassName: "p-button-danger",
+      accept: async () => {
+        setDeletingId(attachment.id);
+        try {
+          const fn = httpsCallable<{ projectId: string; attachmentId: string }, { attachmentId: string }>(
+            functions,
+            "deleteProjectAttachment"
+          );
+          await fn({ projectId, attachmentId: attachment.id });
+          toast.current?.show({
+            severity: "success",
+            summary: "Allegato eliminato",
+            detail: "L'allegato è stato eliminato.",
+            life: 3000,
+          });
+          await fetchAttachments();
+        } catch (err) {
+          toast.current?.show({
+            severity: "error",
+            summary: "Errore",
+            detail: err instanceof Error ? err.message : "Errore durante l'eliminazione dell'allegato.",
+            life: 5000,
+          });
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
+  };
+
+  const canModify = (attachment: ProjectAttachment) =>
+    !readOnly && (isAdmin || attachment.uploadedBy === currentUid);
+
+  return (
+    <div>
+      <Toast ref={toast} />
+      <ConfirmDialog />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        {!readOnly && <Button label="Carica allegato" icon="pi pi-upload" onClick={openUploadDialog} />}
+        {categories.length > 0 && (
+          <Dropdown
+            value={categoryFilter}
+            options={[{ label: "Tutte le categorie", value: null }, ...categories.map((c) => ({ label: c, value: c }))]}
+            optionValue="value"
+            onChange={(e) => setCategoryFilter(e.value)}
+            placeholder="Filtra per categoria"
+            style={{ minWidth: 220 }}
+          />
+        )}
+      </div>
+
+      <DataTable
+        value={filteredAttachments}
+        loading={loading}
+        emptyMessage="Nessun allegato collegato a questo progetto."
+        dataKey="id"
+      >
+        <Column
+          header=""
+          style={{ width: 48 }}
+          body={(a: ProjectAttachment) => {
+            const notes = a.notes?.trim();
+            if (!notes) return null;
+            return (
+              <Button
+                type="button"
+                icon="pi pi-info-circle"
+                className="p-button-text p-button-rounded p-button-sm"
+                aria-label={`Note: ${notes}`}
+                tooltip={notes}
+                tooltipOptions={{ position: "top", showDelay: 200, style: { maxWidth: 360 } }}
+              />
+            );
+          }}
+        />
+        <Column field="fileName" header="File" />
+        <Column field="description" header="Descrizione" />
+        <Column field="category" header="Categoria" body={(a: ProjectAttachment) => a.category || "-"} />
+        <Column
+          header="Tipologia"
+          body={(a: ProjectAttachment) => (
+            <Tag
+              value={retentionLabel(normalizeRetention(a.retention))}
+              severity={normalizeRetention(a.retention) === "transient" ? "warning" : "success"}
+            />
+          )}
+        />
+        <Column field="size" header="Dimensione" body={(a: ProjectAttachment) => formatSize(a.size)} />
+        <Column
+          header="Caricato da"
+          body={(a: ProjectAttachment) => uploaderNames[a.uploadedBy] || a.uploadedBy}
+        />
+        <Column header="Caricato il" body={(a: ProjectAttachment) => formatTimestamp(a.createdAt)} />
+        <Column header="Modificato il" body={(a: ProjectAttachment) => formatTimestamp(a.updatedAt)} />
+        <Column
+          header="Azioni"
+          body={(a: ProjectAttachment) => (
+            <div style={{ display: "flex", gap: 4 }}>
+              <Button
+                icon="pi pi-download"
+                className="p-button-text p-button-sm"
+                tooltip="Scarica"
+                aria-label="Scarica"
+                loading={downloadingId === a.id}
+                onClick={() => handleDownload(a)}
+              />
+              {!readOnly && (
+                <>
+                  <Button
+                    icon="pi pi-pencil"
+                    className="p-button-text p-button-sm"
+                    tooltip="Modifica descrizione/note"
+                    aria-label="Modifica descrizione/note"
+                    onClick={() => openEditDialog(a)}
+                    disabled={!canModify(a)}
+                  />
+                  <Button
+                    icon="pi pi-trash"
+                    className="p-button-text p-button-sm p-button-danger"
+                    tooltip="Elimina"
+                    aria-label="Elimina"
+                    loading={deletingId === a.id}
+                    onClick={() => handleDelete(a)}
+                    disabled={!canModify(a)}
+                  />
+                </>
+              )}
+            </div>
+          )}
+        />
+      </DataTable>
+
+      <Dialog
+        header="Carica allegato"
+        visible={showUploadDialog}
+        style={{ width: "480px" }}
+        modal
+        onHide={() => setShowUploadDialog(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setShowUploadDialog(false)}
+              disabled={uploading}
+            />
+            <Button
+              label="Carica"
+              icon="pi pi-upload"
+              onClick={handleUpload}
+              loading={uploading}
+              disabled={!uploadFile || !uploadDescription.trim() || !uploadRetention}
+            />
+          </div>
+        }
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="project-attachment-file" style={{ display: "block", marginBottom: 4 }}>
+            File
+          </label>
+          <Button
+            label={uploadFile ? uploadFile.name : "Scegli file"}
+            icon="pi pi-file"
+            className="p-button-outlined"
+            onClick={() => document.getElementById("project-attachment-file")?.click()}
+            type="button"
+          />
+          <input
+            id="project-attachment-file"
+            type="file"
+            onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+            style={{ display: "none" }}
+          />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="project-attachment-description" style={{ display: "block", marginBottom: 4 }}>
+            Descrizione
+          </label>
+          <InputText
+            id="project-attachment-description"
+            value={uploadDescription}
+            onChange={(e) => setUploadDescription(e.target.value)}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="project-attachment-notes" style={{ display: "block", marginBottom: 4 }}>
+            Note
+          </label>
+          <InputTextarea
+            id="project-attachment-notes"
+            value={uploadNotes}
+            onChange={(e) => setUploadNotes(e.target.value)}
+            rows={2}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="project-attachment-category" style={{ display: "block", marginBottom: 4 }}>
+            Categoria
+          </label>
+          <InputText
+            id="project-attachment-category"
+            value={uploadCategory}
+            onChange={(e) => setUploadCategory(e.target.value)}
+            placeholder="es. documenti, foto..."
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div>
+          <span id="project-attachment-retention-label" style={{ display: "block", marginBottom: 4 }}>
+            Tipologia (obbligatoria)
+          </span>
+          <SelectButton
+            id="project-attachment-retention"
+            value={uploadRetention}
+            onChange={(e) => setUploadRetention(e.value)}
+            options={RETENTION_OPTIONS}
+            aria-labelledby="project-attachment-retention-label"
+          />
+          <small style={{ display: "block", marginTop: 8, color: "#6b7280" }}>
+            Persistente: documenti e materiali da conservare. Transitorio: bozze e media temporanei.
+          </small>
+        </div>
+      </Dialog>
+
+      <Dialog
+        header="Modifica allegato"
+        visible={!!editingAttachment}
+        style={{ width: "480px" }}
+        modal
+        onHide={() => setEditingAttachment(null)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button
+              label="Annulla"
+              className="p-button-text"
+              onClick={() => setEditingAttachment(null)}
+              disabled={savingEdit}
+            />
+            <Button
+              label="Salva"
+              icon="pi pi-check"
+              onClick={handleSaveEdit}
+              loading={savingEdit}
+              disabled={!editDescription.trim()}
+            />
+          </div>
+        }
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="edit-project-attachment-description" style={{ display: "block", marginBottom: 4 }}>
+            Descrizione
+          </label>
+          <InputText
+            id="edit-project-attachment-description"
+            value={editDescription}
+            onChange={(e) => setEditDescription(e.target.value)}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="edit-project-attachment-notes" style={{ display: "block", marginBottom: 4 }}>
+            Note
+          </label>
+          <InputTextarea
+            id="edit-project-attachment-notes"
+            value={editNotes}
+            onChange={(e) => setEditNotes(e.target.value)}
+            rows={2}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div>
+          <span id="edit-project-attachment-retention-label" style={{ display: "block", marginBottom: 4 }}>
+            Tipologia
+          </span>
+          <SelectButton
+            id="edit-project-attachment-retention"
+            value={editRetention}
+            onChange={(e) => setEditRetention(e.value)}
+            options={RETENTION_OPTIONS}
+            aria-labelledby="edit-project-attachment-retention-label"
+          />
+        </div>
+      </Dialog>
+    </div>
+  );
+}

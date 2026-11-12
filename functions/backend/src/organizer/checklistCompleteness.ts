@@ -8,18 +8,18 @@
  * limita a esporre lo stato, il consumer decide cosa fare dell'esito
  * (es. sbloccare una transizione di stato altrove).
  *
- * Definizione di completezza di un item (EA-127): il calcolo dipende dal
- * `type` dell'item ('boolean' | 'generic' | 'numeric', vedi
- * `checklistItemStatus.ts`), oltre all'assegnatario sempre richiesto:
- * - l'assegnatario è valorizzato (non null, non stringa vuota/whitespace)
- *   in tutti i casi;
+ * Definizione di completezza di un item: il calcolo dipende dal `type`
+ * dell'item ('boolean' | 'generic' | 'numeric' | 'purchase', vedi
+ * `checklistItemStatus.ts`). L'assegnatario **non** è un vincolo di
+ * completezza (può restare nullo anche su item già completati):
  * - `boolean`: completo se `completed === true`, indipendentemente da
- *   `status` e `quantity`;
+ *   `status`, `quantity` e `assignee`;
  * - `generic`: completo se `status === 'Completata'` (corregge il bug per
  *   cui qualunque stato diverso da "Assegnare", incluso "Da iniziare" e
  *   "In corso", risultava completo);
  * - `numeric`: come `generic`, più la quantità valorizzata (non `null`,
  *   non `undefined`);
+ * - `purchase`: completo se `status === 'Completata'`;
  * - `type` assente o non riconosciuto (item legacy pre-EA-123): trattato
  *   come `generic`, l'unico calcolo esprimibile con i soli campi
  *   storicamente disponibili (`status`, senza `completed`).
@@ -45,13 +45,6 @@ export interface ChecklistItemLike {
 const COMPLETED_STATUS = "Completata";
 
 /**
- * Verifica se l'assegnatario di un item è valorizzato.
- */
-function hasAssignee(item: ChecklistItemLike): boolean {
-  return typeof item.assignee === "string" && item.assignee.trim().length > 0;
-}
-
-/**
  * Verifica se la quantità di un item è valorizzata (non `null`, non
  * `undefined`). Usato solo per gli item `numeric`, per cui la quantità è
  * per definizione rilevante.
@@ -68,18 +61,18 @@ function hasCompletedStatus(item: ChecklistItemLike): boolean {
 }
 
 /**
- * Item `boolean`: completo se assegnatario valorizzato e `completed === true`.
+ * Item `boolean`: completo se `completed === true`.
  */
 function isBooleanItemComplete(item: ChecklistItemLike): boolean {
-  return hasAssignee(item) && item.completed === true;
+  return item.completed === true;
 }
 
 /**
- * Item `generic` (o item legacy privi di `type`): completo se assegnatario
- * valorizzato e stato "Completata".
+ * Item `generic` (o item legacy privi di `type`): completo se stato
+ * "Completata".
  */
 function isGenericItemComplete(item: ChecklistItemLike): boolean {
-  return hasAssignee(item) && hasCompletedStatus(item);
+  return hasCompletedStatus(item);
 }
 
 /**
@@ -100,6 +93,10 @@ export function isChecklistItemComplete(item: ChecklistItemLike): boolean {
 
   if (item.type === "numeric") {
     return isNumericItemComplete(item);
+  }
+
+  if (item.type === "purchase") {
+    return isGenericItemComplete(item);
   }
 
   return isGenericItemComplete(item);

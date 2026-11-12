@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-28T00:00:00Z",
+  "generated_at": "2026-11-11T19:51:13.542Z",
   "repo_url": "https://github.com/e-nableitalia/enable-spa",
   "domains": [
     {
@@ -86,6 +86,58 @@
         "functions/backend/src/organizer/**"
       ],
       "summary": "Modulo generico per checklist assegnabili con avanzamento e template, pensato per essere riusato oltre il caso device (es. organizzazione eventi/workshop in futuro).",
+      "status": "approved",
+      "depth": "standard",
+      "origin": "discovered"
+    },
+    {
+      "id": "attachments",
+      "name": "Allegati",
+      "paths": [
+        "functions/backend/src/attachments/**",
+        "enable-device/src/components/attachments/**"
+      ],
+      "summary": "Capability di base per allegare file generici (con descrizione) a entita' applicative di alto livello, con visibilita' staff-only (admin+volontario) e RBAC di modifica/eliminazione differenziato per ownership. Cloud Storage nativo con signed URL (Epic EA-161, Done). Integrata nel dominio device-requests (Story EA-168: wrapper dedicati in functions/backend/src/device-requests/*Attachment*.ts, gia' coperti dal path esistente di quel dominio) e nel dominio special-projects-initiatives.",
+      "status": "approved",
+      "depth": "standard",
+      "origin": "discovered"
+    },
+    {
+      "id": "special-projects-initiatives",
+      "name": "Progetti Speciali e Iniziative",
+      "paths": [
+        "functions/backend/src/projects/**",
+        "enable-device/src/pages/admin/projects/**",
+        "enable-device/src/components/checklist/ProjectChecklists.tsx",
+        "enable-device/src/components/checklist/ProjectChecklistPanel.tsx"
+      ],
+      "summary": "Entita' (nome interno \"project\", collection projects/{projectId}) per tracciare progetti tecnici ed eventi (projectType: progetto/iniziativa/evento, estensibile; stato a 5 valori new/active/standby/archived/closed con restrizioni di modifica in standby/archived/closed; creazione admin-only, assegnazione item aperta anche ai volontari) con una o piu' todo-list etichettate collegate tramite il core Organizer gia' esistente (Epic EA-169, Story EA-170, Done).",
+      "status": "approved",
+      "depth": "standard",
+      "origin": "discovered"
+    },
+    {
+      "id": "super-admin",
+      "name": "Super Admin — Operazioni di Piattaforma",
+      "paths": [
+        "functions/backend/src/backup/**",
+        "functions/backend/src/emailTemplates/**",
+        "enable-device/src/pages/admin/superadmin/**"
+      ],
+      "summary": "Azioni operative gated su users/{uid}.superAdmin===true (flag additivo a role:admin, bootstrap manuale in console): deploy forward-only del registro versionato dei template email (registry in codice -> collection Firestore emailTemplates) e trigger dell'export/backup nativo Firestore verso bucket GCS dedicato con lifecycle 30gg. Il gate condiviso vive in functions/backend/src/security/superAdmin.ts (gia' coperto dal dominio 'security'). UI ospitata dalla pagina 'Super Admin' (SuperAdminPage.tsx, route /admin/superadmin), rinominata e spostata fuori da admin/requests/ per risolvere la sovrapposizione di path con device-requests (F-46, risolto). Epic EA-171, Story EA-172, Done.",
+      "status": "approved",
+      "depth": "standard",
+      "origin": "discovered"
+    },
+    {
+      "id": "contacts",
+      "name": "Richieste di Contatto",
+      "paths": [
+        "functions/backend/src/contact/**",
+        "enable-device/src/pages/ContactRequest.tsx",
+        "enable-device/src/helpers/contactProfiles.ts"
+      ],
+      "summary": "Form pubblico /contatti con anti-spam per l'invio di richieste di contatto (backend: functions/backend/src/contact/, createContactRequest). Lato admin i contatti, il loro stato e l'invio dell'invito a unirsi alla community sono gestiti da enable-device/src/pages/admin/volunteers/ContactsList.tsx, che ricade nei path del dominio 'volunteer-management' (nessuna ulteriore gestione amministrativa prevista).",
       "status": "approved",
       "depth": "standard",
       "origin": "discovered"

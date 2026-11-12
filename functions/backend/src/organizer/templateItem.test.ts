@@ -46,10 +46,10 @@ describe("normalizeTemplateItem", () => {
 
   it("throws invalid-argument when type is missing or not among the allowed values", () => {
     expect(() => normalizeTemplateItem({ title: "Vite M3" })).toThrow(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
     expect(() => normalizeTemplateItem({ title: "Vite M3", type: "unknown-type" })).toThrow(
-      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric')")
+      new HttpsError("invalid-argument", "Each item must have a valid type ('boolean' | 'generic' | 'numeric' | 'purchase')")
     );
   });
 

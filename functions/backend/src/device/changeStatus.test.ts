@@ -179,6 +179,18 @@ describe("changeStatus", () => {
     expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "spedita" });
   });
 
+  // F-29 (residuo): un admin che chiami la function direttamente (non via
+  // dropdown UI) con un valore fuori dal dominio a 11 stati viene respinto,
+  // incluso uno dei 10 valori legacy rimossi da EA-148.
+  it("rejects a newStatus outside the 11-value domain, even for admin", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-1", newStatus: "scelta device e dimensionamento" }, "admin-1"))
+    ).rejects.toMatchObject(new HttpsError("invalid-argument", "Invalid newStatus"));
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+    expect(deviceRequestsStore["req-1"]).toMatchObject({ status: "in produzione" });
+  });
+
   // Scenario 2 (EA-103, ridotto a 2 coppie da EA-148): volontario assegnato
   // può eseguire una delle 2 transizioni consentite
   it("allows an assigned volunteer to perform one of the 2 allowed transitions", async () => {
@@ -502,6 +514,11 @@ describe("changeStatus - EA-159 (gate obbligatorio: scarico di responsabilità)"
         status: "da gestire",
         assignedVolunteers: [],
       },
+      // Richiesta già in uno stato gated senza liberatoria (dati pregressi, nessun backfill)
+      "req-already-gated": {
+        status: "spedita",
+        assignedVolunteers: [],
+      },
     };
 
     eventsStore = {};
@@ -568,6 +585,31 @@ describe("changeStatus - EA-159 (gate obbligatorio: scarico di responsabilità)"
 
     expect(result).toEqual({ success: true });
     expect(deviceRequestsStore["req-no-waiver"]).toMatchObject({ status: "in produzione" });
+  });
+
+  // Regression: salvataggi che registrano solo un evento (nota, indirizzo,
+  // tipo device, dati richiedente) chiamano changeStatus con lo stato corrente:
+  // non e' una transizione e non deve fallire sul gate della liberatoria.
+  it.each(["pronta per spedizione", "spedita", "completata"])(
+    "does not apply the waiver gate when newStatus equals the current status ('%s')",
+    async (status) => {
+      deviceRequestsStore["req-already-gated"] = { status, assignedVolunteers: [] };
+
+      await expect(
+        changeStatus.run(
+          buildRequest({ requestId: "req-already-gated", newStatus: status, note: "Indirizzo di spedizione aggiornato." }, "admin-1")
+        )
+      ).resolves.toEqual({ success: true });
+
+      expect(runTransactionMock).toHaveBeenCalled();
+      expect(deviceRequestsStore["req-already-gated"]).toMatchObject({ status });
+    }
+  );
+
+  it("still blocks a real transition into another gated status from an already-gated request", async () => {
+    await expect(
+      changeStatus.run(buildRequest({ requestId: "req-already-gated", newStatus: "completata" }, "admin-1"))
+    ).rejects.toMatchObject({ code: "failed-precondition" });
   });
 
   // Regression: il gate si applica anche al percorso volontario, non solo

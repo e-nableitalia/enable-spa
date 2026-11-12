@@ -1,10 +1,11 @@
-import AdminRequestTable from "../../../components/requests/AdminRequestTable";
+import AdminRequestsWorkspace from "./AdminRequestsWorkspace";
 
 export default function AdminCompleted({ requests }: { requests: any[] }) {
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Richieste completate</h2>
-      <AdminRequestTable requests={requests} />
-    </div>
+    <AdminRequestsWorkspace
+      title="Richieste completate"
+      requests={requests}
+      detailBasePath="/admin/requests/completed"
+    />
   );
 }

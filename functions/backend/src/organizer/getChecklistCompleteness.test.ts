@@ -78,8 +78,8 @@ describe("getChecklistCompleteness", () => {
     expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: true });
   });
 
-  // Scenario: getChecklistCompleteness applica il gate sugli item risolti da checklistItems
-  it("returns complete: false when at least one resolved item has no assignee", async () => {
+  // L'assegnatario non è un vincolo di completezza: status Completata basta.
+  it("returns complete: true when a resolved item has no assignee but status is Completata", async () => {
     getMock.mockResolvedValue(buildChecklistSnapshot(["item-1"]));
     stubResolvedItems({
       "item-1": { id: "item-1", assignee: null, quantity: 2, status: "Completata" },
@@ -87,7 +87,7 @@ describe("getChecklistCompleteness", () => {
 
     const result = await getChecklistCompleteness.run(buildRequest({ checklistId: CHECKLIST_ID }));
 
-    expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: false });
+    expect(result).toEqual({ checklistId: CHECKLIST_ID, complete: true });
   });
 
   it("returns complete: false when a resolved numeric item's quantity field is present but null", async () => {
@@ -126,10 +126,10 @@ describe("getChecklistCompleteness", () => {
     }
   );
 
-  it("returns complete: true for a resolved boolean item with assignee set and completed=true, regardless of status/quantity", async () => {
+  it("returns complete: true for a resolved boolean item with completed=true, regardless of status/quantity/assignee", async () => {
     getMock.mockResolvedValue(buildChecklistSnapshot(["item-1"]));
     stubResolvedItems({
-      "item-1": { id: "item-1", type: "boolean", assignee: "Mario Rossi", status: "Assegnare", completed: true },
+      "item-1": { id: "item-1", type: "boolean", assignee: null, status: "Assegnare", completed: true },
     });
 
     const result = await getChecklistCompleteness.run(buildRequest({ checklistId: CHECKLIST_ID }));

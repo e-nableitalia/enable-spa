@@ -1,10 +1,11 @@
-import AdminRequestTable from "../../../components/requests/AdminRequestTable";
+import AdminRequestsWorkspace from "./AdminRequestsWorkspace";
 
 export default function AdminTriage({ requests }: { requests: any[] }) {
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Richieste da gestire</h2>
-      <AdminRequestTable requests={requests} />
-    </div>
+    <AdminRequestsWorkspace
+      title="Richieste da gestire"
+      requests={requests}
+      detailBasePath="/admin/requests/triage"
+    />
   );
 }

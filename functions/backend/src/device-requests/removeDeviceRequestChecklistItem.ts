@@ -44,7 +44,7 @@ export const removeDeviceRequestChecklistItem = onCall(
     }
 
     const db = getFirestore();
-    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId);
+    await resolveDeviceRequestChecklistAccess(db, uid, requestId, checklistId, { forWrite: true });
 
     const result = (await removeChecklistItem.run({
       ...request,
