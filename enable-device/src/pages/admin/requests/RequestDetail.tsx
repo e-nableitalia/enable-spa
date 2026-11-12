@@ -452,9 +452,8 @@ export default function RequestDetail({
   const handleAddNote = async () => {
     if (!id || !noteText.trim()) return;
     try {
-      // Recupera lo stato precedente (ultimo evento)
-      const lastEvent = events[0];
-      const previousStatus = lastEvent?.status || request.status || "sconosciuto";
+      // La nota non è un cambio di stato: si registra con lo stato corrente della richiesta
+      const previousStatus = request.status || events[0]?.toStatus || "sconosciuto";
 
       const notifica = (noteNotificaAdmin || noteNotificaVolontari || noteNotificaTelegram)
         ? { admin: noteNotificaAdmin, volunteers: noteNotificaVolontari, telegram: noteNotificaTelegram }

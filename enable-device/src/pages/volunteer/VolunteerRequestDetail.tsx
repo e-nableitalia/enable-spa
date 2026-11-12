@@ -114,7 +114,7 @@ export default function VolunteerRequestDetail({
   const handleAddNote = async () => {
     if (!id || !noteText.trim()) return;
     try {
-      const previousStatus = events[0]?.status ?? request?.status ?? "sconosciuto";
+      const previousStatus = request?.status ?? events[0]?.toStatus ?? "sconosciuto";
       const fn = httpsCallable(functions, "changeStatus");
       await fn({ requestId: id, newStatus: previousStatus, note: noteText.trim() });
       toast.current?.show({ severity: "success", summary: "Nota aggiunta", detail: "Nota aggiunta alla cronologia.", life: 3000 });
