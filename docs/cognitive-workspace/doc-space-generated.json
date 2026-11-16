@@ -1,0 +1,1109 @@
+{
+  "schema_version": 1,
+  "pages": [
+    {
+      "page_key": "generated-glossary",
+      "title": "Glossario",
+      "section": 1,
+      "content_class": "generated",
+      "data": {
+        "terms": [
+          {
+            "term": "ageRange (fascia d'età del beneficiario)",
+            "node_id": "device-requests/dc-age-range",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Campo derivato calcolato alla creazione e salvato in `publicDeviceRequests/{id}.ageRange`. Trasforma il campo numerico `age` in una stringa a fascia per la privacy."
+          },
+          {
+            "term": "amputationType (tipo di amputazione)",
+            "node_id": "device-requests/dc-amputation-type",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Categoria medica che descrive il tipo di differenza agli arti del beneficiario. Selezionato dal richiedente nel form pubblico, memorizzato in `private/data.amputationType`."
+          },
+          {
+            "term": "Archiviata (flag)",
+            "node_id": "device-requests/dc-archived-flag",
+            "domain": "device-requests",
+            "status": "draft",
+            "definition": "Campo booleano `archived` (con `archivedAt`, `archivedBy`) su `deviceRequests/{id}`, applicabile solo a richieste `completata` o `annullata`. Non è uno status: lo status resta invariato. Una richiesta archiviata è in sola lettura per tutte le scritture \"live\"."
+          },
+          {
+            "term": "Bucket di backup Firestore",
+            "node_id": "super-admin/concept-backup-bucket",
+            "domain": "super-admin",
+            "status": "live",
+            "definition": "Bucket GCS dedicato per progetto, nome `{projectId}-firestore-backups`, regione EU, con lifecycle di eliminazione a 30 giorni. Ogni export crea un prefisso timestamp (`gs://<bucket>/<ISO-timestamp>`). Il bucket è infrastruttura esterna, non creata dal codice."
+          },
+          {
+            "term": "Catalogo + indice per entità (modello ibrido)",
+            "node_id": "attachments/dc-attachment-two-level-index",
+            "domain": "attachments",
+            "status": "live",
+            "definition": "Struttura dati degli allegati: un catalogo di primo livello `attachments/{id}` con tutti i metadati e un indice nella subcollection `attachments` dell'entità proprietaria, che referenzia lo stesso id. Il campo `entityCollectionPath` dice dove si trova l'indice. Il file fisico sta nel bucket dedicato `{projectId}-attachments` al path `attachments/{entityType}/{entityId}/{attachmentId}/{fileName}`."
+          },
+          {
+            "term": "Categoria opaca",
+            "node_id": "process-organizer-core/concept-opaque-category",
+            "domain": "process-organizer-core",
+            "status": "live",
+            "definition": "Identificatore di categoria libero (stringa) associato a checklist e template, usato per filtrare `listTemplates` e per collegare un template a un contesto applicativo (es. `devicetype` nel layer `device-requests`). Il core Organizer non ne conosce ne' valida il significato: e' interamente il consumer a decidere il proprio spazio di valori."
+          },
+          {
+            "term": "checklistIds",
+            "node_id": "device-requests/dc-checklist-ids",
+            "domain": "device-requests",
+            "status": "draft",
+            "definition": "Campo array su `deviceRequests/{id}` con gli id delle checklist Organizer collegate (max 5). Fa da controllo di appartenenza per RBAC/accesso. Sostituisce il vecchio campo singolare `checklistId`, senza coesistenza."
+          },
+          {
+            "term": "Ciclo di vita degli stati interni",
+            "node_id": "device-requests/dc-status-lifecycle",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "La `deviceRequest` attraversa 19 stati interni distinti:"
+          },
+          {
+            "term": "Collection emailTemplates",
+            "node_id": "super-admin/concept-email-templates-collection",
+            "domain": "super-admin",
+            "status": "live",
+            "definition": "Collection Firestore letta dall'estensione Firebase \"Trigger Email\" (`firestore-send-email`): il documento con id = nome template contiene `subject`, `html`, opzionale `text`. Il suo contenuto è governato dal registro in codice e sincronizzato forward-only da [[super-admin/cap-email-template-deploy]]."
+          },
+          {
+            "term": "Contatto (Contact)",
+            "node_id": "volunteer-management/dc-contact",
+            "domain": "volunteer-management",
+            "status": "live",
+            "definition": "Un contatto è una persona potenzialmente interessata a diventare volontario, gestita in una collection CRM separata (`contacts/{contactId}`). Non è ancora un utente della piattaforma."
+          },
+          {
+            "term": "Contatto (documento contacts)",
+            "node_id": "contacts/dc-contact-document",
+            "domain": "contacts",
+            "status": "live",
+            "definition": "Documento della collection Firestore `contacts/{contactId}`: una persona che ha chiesto di essere ricontattata (o importata da CSV, nel dominio volunteer-management). Quando creato dalla form contiene nome, cognome, email/telefono, profilo, note, `source`, `origin: contact-form`, `status` iniziale `new`, consenso privacy, `recaptchaScore`, flag `deleted` (soft delete, `false` alla creazione) e timestamp `receivedAt`/`createdAt`/`updatedAt`. Le transizioni di `status` e l'invito sono gestiti lato admin."
+          },
+          {
+            "term": "Counter Firestore per ID sequenziali",
+            "node_id": "device-requests/dc-counter",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Documento Firestore `counters/deviceRequests` con campo `lastId` (intero). Letto e incrementato all'interno della stessa transazione Firestore che crea `deviceRequests/{id}`, garantendo atomicità e assenza di race condition."
+          },
+          {
+            "term": "DeviceRequest",
+            "node_id": "device-requests/dc-device-request",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Entità centrale della piattaforma. Rappresenta la richiesta di un dispositivo prostetico stampato in 3D per un beneficiario con limb difference."
+          },
+          {
+            "term": "devicetype (tipo di dispositivo prostetico)",
+            "node_id": "device-requests/dc-device-type",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Identifica il modello open-source di dispositivo prostetico che verrà realizzato. Assegnato dall'admin in validazione (non dal richiedente)."
+          },
+          {
+            "term": "Evento di cronologia del progetto",
+            "node_id": "special-projects-initiatives/dc-project-event",
+            "domain": "special-projects-initiatives",
+            "status": "live",
+            "definition": "Documento `projects/{id}/events/{eventId}` con `fromStatus`, `toStatus`, `note`, `createdBy`, `timestamp`. Creato da ogni `changeProjectStatus`; una nota pura ha `fromStatus === toStatus`."
+          },
+          {
+            "term": "Flag requiresAttention",
+            "node_id": "device-requests/dc-requires-attention",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Flag booleano su `deviceRequests/{id}` che segnala che la richiesta necessita di intervento urgente, indipendentemente dallo stato."
+          },
+          {
+            "term": "GlobalMessage (messaggio globale di sistema)",
+            "node_id": "device-requests/dc-global-message",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Comunicazione broadcast creata dagli admin, visibile in base al `target`. Memorizzata in `messages/{messageId}`."
+          },
+          {
+            "term": "Liberatorie familiari",
+            "node_id": "device-requests/dc-family-consent",
+            "domain": "device-requests",
+            "status": "draft",
+            "definition": "Due documenti tracciati come flag sulla richiesta: scarico di responsabilità (`waiverAcquired*`) e liberatoria foto (`photoReleaseAcquired*`), con data e admin acquirente. Distinti da `consentPrivacy` del form pubblico."
+          },
+          {
+            "term": "Link di condivisione checklist",
+            "node_id": "device-requests/dc-checklist-share-link",
+            "domain": "device-requests",
+            "status": "draft",
+            "definition": "Documento `checklistShareLinks/{token}` (checklistId, requestId, createdAt, createdBy) con token UUID, non scadente e non revocabile, che abilita la lettura pubblica del solo avanzamento di una checklist."
+          },
+          {
+            "term": "Link di condivisione checklist progetto",
+            "node_id": "special-projects-initiatives/dc-project-checklist-share-link",
+            "domain": "special-projects-initiatives",
+            "status": "live",
+            "definition": "Documento `projectChecklistShareLinks/{token}` (token UUID) che lega una checklist a un progetto per l'accesso pubblico read-only all'avanzamento. Uno per checklist, riusato alle richieste successive."
+          },
+          {
+            "term": "mustSetPassword",
+            "node_id": "auth/dc-must-set-password",
+            "domain": "auth",
+            "status": "live",
+            "definition": "Flag booleano in `users/{uid}` che indica se l'utente deve ancora impostare una password. Impostato a `true` da `completeRegistration` (email-link) e a `false` da `registerWithIntegratedAuth` (Google OAuth)."
+          },
+          {
+            "term": "oobCode",
+            "node_id": "auth/dc-oob-code",
+            "domain": "auth",
+            "status": "live",
+            "definition": "Codice opaco monouso generato da Firebase Authentication (`auth.generateSignInWithEmailLink`) e incorporato nel link di verifica email. Funge da token di verifica dell'indirizzo email nella registrazione via email-link."
+          },
+          {
+            "term": "Origin della checklist",
+            "node_id": "process-organizer-core/concept-checklist-origin",
+            "domain": "process-organizer-core",
+            "status": "draft",
+            "definition": "Riferimento `{type, id}` dall'istanza di checklist all'entita' proprietaria (es. `{type:'deviceRequest', id:'<requestId>'}`), per navigabilita' bidirezionale. Opzionale e opaco per il core, normalizzato da `normalizeOrigin`; se assente il campo non e' scritto. Usato da [[process-organizer-core/cap-my-checklist-items]] per ricostruire la provenienza degli item."
+          },
+          {
+            "term": "Origine del contatto",
+            "node_id": "contacts/dc-contact-origin",
+            "domain": "contacts",
+            "status": "live",
+            "definition": "Provenienza di un contatto: `contact-form` (form pubblica) o `csv-import` (valore implicito per i documenti privi di `origin`). Da non confondere con `source`, tag opzionale del canale di ingresso nella form (es. `qr` dal parametro `?src=`)."
+          },
+          {
+            "term": "Pending Registration",
+            "node_id": "auth/dc-pending-registration",
+            "domain": "auth",
+            "status": "live",
+            "definition": "Documento Firestore in `pendingRegistrations/{oobCode}` che rappresenta una registrazione via email-link in attesa di verifica. Creato da `register`, consumato da `checkRegistration`."
+          },
+          {
+            "term": "Profilo del contatto (\"Chi sei?\")",
+            "node_id": "contacts/dc-contact-profile",
+            "domain": "contacts",
+            "status": "live",
+            "definition": "Classificazione facoltativa dichiarata dal contatto. Valori ammessi: `maker`, `studente`, `docente_scuola`, `universita_ricerca`, `famiglia`, `sanitario`, `associazione_ente`, `azienda_sponsor`, `media`, `altro` (quest'ultimo accompagnato da `profileOther`, testo libero). `maker` e `studente` sono considerati affini al volontariato e non richiedono conferma per l'invito."
+          },
+          {
+            "term": "Progetto (project)",
+            "node_id": "special-projects-initiatives/dc-project",
+            "domain": "special-projects-initiatives",
+            "status": "live",
+            "definition": "Entità `projects/{projectId}` che traccia un progetto tecnico, un'iniziativa o un evento: titolo, descrizione, tipo, stato, riferimenti alle checklist collegate e sottocollezione `events` con la cronologia. Il nome interno è \"project\"; il dominio di business è \"Progetti Speciali e Iniziative\"."
+          },
+          {
+            "term": "publicStatus e collection publicDeviceRequests",
+            "node_id": "device-requests/dc-public-status",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Il `publicStatus` è un raggruppamento a **5 valori** derivato da `mapToPublicStatus(status)` (`utils/mapToPublicStatus.ts`):"
+          },
+          {
+            "term": "RateLimitEntry",
+            "node_id": "security/dc-rate-limit-entry",
+            "domain": "security",
+            "status": "live",
+            "definition": "Documento Firestore nella collection `rateLimits/{key}` che traccia la frequenza delle richieste da un'identità (email o IP) per prevenire abusi sui form pubblici."
+          },
+          {
+            "term": "reCAPTCHA Assessment",
+            "node_id": "security/dc-recaptcha-assessment",
+            "domain": "security",
+            "status": "live",
+            "definition": "Risultato della valutazione di un token reCAPTCHA Enterprise prodotto dall'API REST (`POST /v1/projects/{projectId}/assessments`). Rappresenta il giudizio di Google sulla probabilità che l'azione in corso sia compiuta da un essere umano."
+          },
+          {
+            "term": "RequestEvent (sub-collection events)",
+            "node_id": "device-requests/dc-request-event",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Ogni modifica rilevante a una `deviceRequest` genera un documento nella sub-collection `deviceRequests/{id}/events/{eventId}` — pattern di **event sourcing leggero**."
+          },
+          {
+            "term": "requestNumber (REQ-XXXXXX)",
+            "node_id": "device-requests/dc-request-number",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Identificatore leggibile di una richiesta dispositivo. Formato: `REQ-` + 6 cifre zero-padded (es. `REQ-000001`, `REQ-000042`)."
+          },
+          {
+            "term": "Retention (persistente / transitorio)",
+            "node_id": "attachments/dc-retention",
+            "domain": "attachments",
+            "status": "live",
+            "definition": "Classificazione obbligatoria di un allegato: `persistent` (da conservare) o `transient` (temporaneo). Il valore mancante negli allegati legacy è normalizzato a `persistent`. È modificabile dopo l'upload. Il codice di archiviazione delle richieste dispositivo (`device/archiveDeviceRequest.ts`) la usa come criterio, ma è fuori da questo scope."
+          },
+          {
+            "term": "Riferimento storico a template/sorgente",
+            "node_id": "process-organizer-core/concept-historical-template-reference",
+            "domain": "process-organizer-core",
+            "status": "live",
+            "definition": "Riferimento salvato su una checklist istanza al momento della sua creazione da una sorgente: `fromTemplate` quando creata da un template del catalogo, `clonedFrom` quando clonata da un'altra istanza. E' un dato storico, non una dipendenza viva — se la sorgente (template o istanza) viene successivamente modificata o eliminata, l'istanza gia' creata non ne risente in alcun modo: nessuna funzione del core ricalcola o invalida questi riferimenti."
+          },
+          {
+            "term": "SecurityLog",
+            "node_id": "security/dc-security-log",
+            "domain": "security",
+            "status": "live",
+            "definition": "Documento Firestore nella collection `securityLogs/{auto-id}` che registra un evento di sicurezza prodotto da una Cloud Function. Schema dei campi (tutti normalizzati con default lato backend prima della scrittura):"
+          },
+          {
+            "term": "Separazione PII in sub-collection private/data",
+            "node_id": "device-requests/dc-private-data-separation",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "I dati personali (PII) del richiedente non sono mai nel documento principale `deviceRequests/{id}` ma sono isolati nella sub-collection `deviceRequests/{id}/private/data` (documento fisso con id `'data'`)."
+          },
+          {
+            "term": "ShipmentRequest",
+            "node_id": "shipments/dc-shipment-request",
+            "domain": "shipments",
+            "status": "live",
+            "definition": "Entità Firestore che rappresenta una richiesta di spedizione di un pacco da parte di un volontario (o admin) dell'associazione. È **separata** dal ciclo di vita di `deviceRequest`: può essere usata per spedire qualsiasi materiale, non solo dispositivi prostetici prodotti."
+          },
+          {
+            "term": "Signed URL a breve scadenza",
+            "node_id": "attachments/dc-signed-url",
+            "domain": "attachments",
+            "status": "live",
+            "definition": "URL V4 firmata dal service account di runtime, valida 5 minuti, con cui il client scrive (upload) o legge (download) direttamente su Cloud Storage senza passare dalla Cloud Function. Il rilascio è l'unico evento tracciato in `securityLogs`."
+          },
+          {
+            "term": "Stampante 3D (Printer)",
+            "node_id": "volunteer-management/dc-3d-printer",
+            "domain": "volunteer-management",
+            "status": "live",
+            "definition": "Una stampante 3D è una risorsa registrata dal volontario nella sub-collection `users/{uid}/printers/{printerId}`. Rappresenta il parco macchine disponibile per la fabbricazione di device prostetici."
+          },
+          {
+            "term": "Stato del progetto",
+            "node_id": "special-projects-initiatives/dc-project-status",
+            "domain": "special-projects-initiatives",
+            "status": "live",
+            "definition": "Uno tra `new` (default, anche per i legacy `draft`), `active`, `standby`, `archived`, `closed`. `new`/`active` permettono modifiche al contenuto; `standby` permette solo note e cambi di stato; `archived`/`closed` sono terminali e bloccano tutto tranne l'eliminazione. Vedi [[special-projects-initiatives/cap-project-lifecycle-and-rbac]]."
+          },
+          {
+            "term": "Stato item di checklist",
+            "node_id": "process-organizer-core/concept-checklist-item-status",
+            "domain": "process-organizer-core",
+            "status": "live",
+            "definition": "Stato di avanzamento di un item: uno dei quattro valori del modello v1, `'Assegnare'` (iniziale, impostato alla creazione/clonazione/istanziazione), `'Da iniziare'`, `'In corso'`, `'Completata'`. Validato da `isChecklistItemStatus` in `checklistItemStatus.ts` (modulo condiviso). Il core non attribuisce significato applicativo ai valori, ma `'Completata'` e' il valore che il gate usa per i tipi `generic`, `numeric` e `purchase` ([[process-organizer-core/cap-completeness-gate]]); per i `boolean` lo stato e' ininfluente."
+          },
+          {
+            "term": "superAdmin (flag utente)",
+            "node_id": "super-admin/concept-super-admin-flag",
+            "domain": "super-admin",
+            "status": "live",
+            "definition": "Campo booleano `users/{uid}.superAdmin`. Se `true` abilita le operazioni di piattaforma di questo dominio. È additivo al `role: \"admin\"` (non è un terzo valore di `role`) e viene impostato solo a mano in console Firestore."
+          },
+          {
+            "term": "Tipo di item (type)",
+            "node_id": "process-organizer-core/concept-checklist-item-type",
+            "domain": "process-organizer-core",
+            "status": "draft",
+            "definition": "Discriminante obbligatorio di ogni item di checklist e di template: `'boolean'`, `'generic'`, `'numeric'` o `'purchase'` (`CHECKLIST_ITEM_TYPES`, `isChecklistItemType`). Determina la regola di completezza ([[process-organizer-core/cap-completeness-gate]]) e vincoli di validazione: `purchase` richiede `quantity > 0` e accetta un `url` http/https. Non ha default in creazione; solo per dati storici privi di `type` il codice assume `generic`."
+          },
+          {
+            "term": "Tipo di progetto (projectType)",
+            "node_id": "special-projects-initiatives/dc-project-type",
+            "domain": "special-projects-initiatives",
+            "status": "live",
+            "definition": "Stringa libera ed estensibile assegnata alla creazione (default UI: `progetto`, `iniziativa`, `evento`). Funge anche da categoria opaca delle checklist create per il progetto ([[process-organizer-core/concept-opaque-category]]) e da filtro in lista."
+          },
+          {
+            "term": "Transizioni di stato consentite ai volontari",
+            "node_id": "device-requests/dc-volunteer-transition",
+            "domain": "device-requests",
+            "status": "live",
+            "definition": "Subset ristretto delle transizioni che un volontario (non admin) può effettuare su una richiesta a lui assegnata. Codificate in `isAllowedVolunteerTransition` in `changeStatus.ts`."
+          },
+          {
+            "term": "Volontario",
+            "node_id": "volunteer-management/dc-volunteer",
+            "domain": "volunteer-management",
+            "status": "live",
+            "definition": "Un volontario è un utente della piattaforma con `role = \"volunteer\"` nel documento `users/{uid}`. Può trovarsi in due stati principali:"
+          }
+        ]
+      }
+    },
+    {
+      "page_key": "generated-decision-index",
+      "title": "Indice delle decisioni",
+      "section": 3,
+      "content_class": "generated",
+      "data": {
+        "entries": [
+          {
+            "kind": "solution_study",
+            "id": "ss-checklist-item-model",
+            "state": "decided",
+            "study_status": "decided",
+            "source": "docs/solution-studies/ss-checklist-item-model.json",
+            "request_ref": "requests/ss-checklist-item-model.md",
+            "decision": {
+              "option_id": "opt-a-explicit-type-in-core",
+              "option_name": "Discriminante `type` esplicito nel modello condiviso di process-organizer-core",
+              "decided_by": "human:Alberto Navatta",
+              "decided_at": "2026-07-30T08:16:02.999Z",
+              "rationale": "opt a è la soluzione più ragionevole nel contesto"
+            }
+          },
+          {
+            "kind": "solution_study",
+            "id": "ss-cross-entity-attachments",
+            "state": "decided",
+            "study_status": "decided",
+            "source": "docs/solution-studies/ss-cross-entity-attachments.json",
+            "request_ref": "requests/ss-cross-entity-attachments.md",
+            "decision": {
+              "option_id": "opt-a-firebase-storage-native",
+              "option_name": "Cloud Storage nativo, RBAC interamente in Cloud Function con signed URL (nessun proxy di byte, nessuna Storage Rule per il perimetro RBAC)",
+              "decided_by": "human:anavatta",
+              "decided_at": "2026-09-06T16:25:35.652Z",
+              "rationale": "Cloud Storage nativo con Cloud Function per RBAC + signed URL: nessuna dipendenza esterna nuova, l'eccezione superadmin si risolve con IAM scoped al bucket (verificato che GCS supporta IAM a livello di bucket, non solo di progetto), l'argomento costo a favore di Drive è stato ritirato dall'operatore, e lo spike bloccante non è più un problema (spike-signed-url-self-signing verificato empiricamente su enableitalia-staging)."
+            }
+          },
+          {
+            "kind": "solution_study",
+            "id": "ss-device-request-macro-status",
+            "state": "decided",
+            "study_status": "decided",
+            "source": "docs/solution-studies/ss-device-request-macro-status.json",
+            "request_ref": "requests/ss-device-request-macro-status.md",
+            "decision": {
+              "option_id": "opt-b-milestone-preserving-partial-collapse",
+              "option_name": "Collasso esteso a triage e produzione, 'attesa volontario' preservato distinto (19 -> 11 stati); status come unica fonte di verita', publicStatus e mapToPublicStatus.ts eliminati",
+              "decided_by": "human:anavatta",
+              "decided_at": "2026-08-06T14:22:24.313Z",
+              "rationale": "Opt-b scelta: riduzione status da 19 a 11 valori, attesa volontario preservato distinto, publicStatus/mapToPublicStatus.ts eliminati per intero (nessun consumer pubblico reale). Nessun gate automatico sulle transizioni: restano manuali, decise dall'umano che gestisce la richiesta, esattamente come oggi. I 3 stati terminali (completata/annullata/standby) restano manuali, non derivati dal completamento di alcuna checklist. Nessun marcatore per identificare 'la' checklist di produzione tra le fino a 5 collegabili: la checklist resta totalmente scorrelata dallo stato della richiesta, è compito di chi effettua la transizione decidere quando il device è pronto e quali checklist associare al caso specifico."
+            }
+          },
+          {
+            "kind": "solution_study",
+            "id": "ss-multi-checklist-per-device",
+            "state": "decided",
+            "study_status": "decided",
+            "source": "docs/solution-studies/ss-multi-checklist-per-device.json",
+            "request_ref": "requests/ss-multi-checklist-per-device.md",
+            "decision": {
+              "option_id": "opt-a-checklist-ids-array",
+              "option_name": "Campo array `checklistIds: string[]` su `deviceRequest`, stesso pattern di `assignedVolunteers`",
+              "decided_by": "human:Alberto Navatta",
+              "decided_at": "2026-08-03T06:24:46.373Z",
+              "rationale": "Le checklist vivono già in una collection indipendente dal core Organizer, riusabile senza legame al device o al template — deviceRequest.checklistIds è solo un array di riferimenti, coerente con questo disaccoppiamento già esistente e con il pattern già validato di assignedVolunteers. Scartate Opt B (indirezione aggiuntiva senza vantaggio reale dato che il disaccoppiamento che cercavo è già garantito dal core) e Opt C (risolve un problema diverso, frammenta la pratica)."
+            }
+          },
+          {
+            "kind": "solution_study",
+            "id": "ss-special-projects-initiatives",
+            "state": "decided",
+            "study_status": "decided",
+            "source": "docs/solution-studies/ss-special-projects-initiatives.json",
+            "request_ref": "requests/ss-special-projects-initiatives.md",
+            "decision": {
+              "option_id": "opt-b-checklist-ids-array",
+              "option_name": "Iniziativa con piu' checklist collegate tramite array di riferimenti etichettati (coerente con il precedente gia' deciso per device-requests, esteso con label)",
+              "decided_by": "human:anavatta",
+              "decided_at": "2026-09-07T09:56:47.415Z",
+              "rationale": "Estensione diretta del pattern già deciso per device-requests (checklistIds[]), qui con label fin dal giorno 1 perché il bisogno è già confermato dalla richiesta (cicli di sviluppo/integrazione/test per i progetti tecnici), non ipotetico. Evita di riprodurre il limite 1:1 già corretto altrove nello stesso repo."
+            }
+          },
+          {
+            "kind": "solution_study",
+            "id": "ss-user-todo-list",
+            "state": "decided",
+            "study_status": "decided",
+            "source": "docs/solution-studies/ss-user-todo-list.json",
+            "request_ref": "requests/ss-user-todo-list.md",
+            "decision": {
+              "option_id": "opt-e-flat-items-collection",
+              "option_name": "Item in una collection di primo livello dedicata, checklists/{id}.items ridotto ad array di riferimenti",
+              "decided_by": "human:anavatta",
+              "decided_at": "2026-08-04T23:28:35.641Z",
+              "rationale": "Scelta opt-e: collection di primo livello checklistItems, checklists/{id}.items ridotto ad array di riferimenti. Pura vista/query per la todo-list personale, nessuna sincronizzazione bidirezionale, nessun indice composito per il caso base, nessun rischio di collisione collectionGroup. Accettata l'eccezione al confine 'core Organizer senza RBAC oltre l'autenticazione' (query self-only assignee===uid), isolata esplicitamente nella nuova funzione listMyChecklistItems. La promozione di assignee a uid Firebase reale resta un prerequisito condiviso da chiudere nello scope della stessa Epic, non un'estensione futura separata. deleteChecklist va riscritta esplicitamente per eliminare in batch i checklistItems referenziati, dato che recursiveDelete non copre una collection di primo livello."
+            }
+          }
+        ],
+        "counts": {
+          "to_decide": 0,
+          "decided": 6,
+          "abandoned": 0,
+          "unknown": 0
+        }
+      }
+    },
+    {
+      "page_key": "generated-traceability-matrix",
+      "title": "Matrice di tracciabilita'",
+      "section": 7,
+      "content_class": "generated",
+      "data": {
+        "by_node": [
+          {
+            "node_id": "attachments/cap-attachment-catalog-model",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/cap-attachment-rbac",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/cap-attachments-ui",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/cap-delete-attachment",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/cap-download-attachment",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/cap-list-attachments",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/cap-update-attachment-metadata",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/cap-upload-attachment",
+            "type": "capability",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/dc-attachment-two-level-index",
+            "type": "domain_concept",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/dc-retention",
+            "type": "domain_concept",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/dc-signed-url",
+            "type": "domain_concept",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/uc-attach-file-to-entity",
+            "type": "use_case",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/uc-browse-and-download",
+            "type": "use_case",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "attachments/uc-edit-or-remove-own-attachment",
+            "type": "use_case",
+            "domain": "attachments",
+            "work_items": [
+              "EA-161"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/cap-checklist-instance-lifecycle",
+            "type": "capability",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/cap-checklist-item-management",
+            "type": "capability",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/cap-checklist-template-catalog",
+            "type": "capability",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/cap-completeness-gate",
+            "type": "capability",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/cap-my-checklist-items",
+            "type": "capability",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-134"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/concept-checklist-item-status",
+            "type": "domain_concept",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/concept-checklist-item-type",
+            "type": "domain_concept",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/concept-checklist-origin",
+            "type": "domain_concept",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/concept-historical-template-reference",
+            "type": "domain_concept",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/concept-opaque-category",
+            "type": "domain_concept",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/uc-clone-checklist-instance",
+            "type": "use_case",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/uc-instantiate-checklist-from-template",
+            "type": "use_case",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/uc-manage-template-catalog",
+            "type": "use_case",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/uc-verify-checklist-completeness",
+            "type": "use_case",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-3"
+            ]
+          },
+          {
+            "node_id": "process-organizer-core/uc-view-my-assigned-items",
+            "type": "use_case",
+            "domain": "process-organizer-core",
+            "work_items": [
+              "EA-134"
+            ]
+          },
+          {
+            "node_id": "super-admin/cap-email-template-deploy",
+            "type": "capability",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/cap-email-template-registry",
+            "type": "capability",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/cap-firestore-backup",
+            "type": "capability",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/cap-super-admin-gated-operations",
+            "type": "capability",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/cap-super-admin-page",
+            "type": "capability",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/concept-backup-bucket",
+            "type": "domain_concept",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/concept-email-templates-collection",
+            "type": "domain_concept",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/concept-super-admin-flag",
+            "type": "domain_concept",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/uc-deploy-email-templates",
+            "type": "use_case",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          },
+          {
+            "node_id": "super-admin/uc-trigger-firestore-backup",
+            "type": "use_case",
+            "domain": "super-admin",
+            "work_items": [
+              "EA-171",
+              "EA-172"
+            ]
+          }
+        ],
+        "by_work_item": [
+          {
+            "work_item": "EA-3",
+            "nodes": [
+              "process-organizer-core/cap-checklist-instance-lifecycle",
+              "process-organizer-core/cap-checklist-item-management",
+              "process-organizer-core/cap-checklist-template-catalog",
+              "process-organizer-core/cap-completeness-gate",
+              "process-organizer-core/concept-checklist-item-status",
+              "process-organizer-core/concept-checklist-item-type",
+              "process-organizer-core/concept-checklist-origin",
+              "process-organizer-core/concept-historical-template-reference",
+              "process-organizer-core/concept-opaque-category",
+              "process-organizer-core/uc-clone-checklist-instance",
+              "process-organizer-core/uc-instantiate-checklist-from-template",
+              "process-organizer-core/uc-manage-template-catalog",
+              "process-organizer-core/uc-verify-checklist-completeness"
+            ]
+          },
+          {
+            "work_item": "EA-134",
+            "nodes": [
+              "process-organizer-core/cap-my-checklist-items",
+              "process-organizer-core/uc-view-my-assigned-items"
+            ]
+          },
+          {
+            "work_item": "EA-161",
+            "nodes": [
+              "attachments/cap-attachment-catalog-model",
+              "attachments/cap-attachment-rbac",
+              "attachments/cap-attachments-ui",
+              "attachments/cap-delete-attachment",
+              "attachments/cap-download-attachment",
+              "attachments/cap-list-attachments",
+              "attachments/cap-update-attachment-metadata",
+              "attachments/cap-upload-attachment",
+              "attachments/dc-attachment-two-level-index",
+              "attachments/dc-retention",
+              "attachments/dc-signed-url",
+              "attachments/uc-attach-file-to-entity",
+              "attachments/uc-browse-and-download",
+              "attachments/uc-edit-or-remove-own-attachment"
+            ]
+          },
+          {
+            "work_item": "EA-171",
+            "nodes": [
+              "super-admin/cap-email-template-deploy",
+              "super-admin/cap-email-template-registry",
+              "super-admin/cap-firestore-backup",
+              "super-admin/cap-super-admin-gated-operations",
+              "super-admin/cap-super-admin-page",
+              "super-admin/concept-backup-bucket",
+              "super-admin/concept-email-templates-collection",
+              "super-admin/concept-super-admin-flag",
+              "super-admin/uc-deploy-email-templates",
+              "super-admin/uc-trigger-firestore-backup"
+            ]
+          },
+          {
+            "work_item": "EA-172",
+            "nodes": [
+              "super-admin/cap-email-template-deploy",
+              "super-admin/cap-email-template-registry",
+              "super-admin/cap-firestore-backup",
+              "super-admin/cap-super-admin-gated-operations",
+              "super-admin/cap-super-admin-page",
+              "super-admin/concept-backup-bucket",
+              "super-admin/concept-email-templates-collection",
+              "super-admin/concept-super-admin-flag",
+              "super-admin/uc-deploy-email-templates",
+              "super-admin/uc-trigger-firestore-backup"
+            ]
+          }
+        ],
+        "untraced_nodes": [
+          "auth/cap-email-link-registration",
+          "auth/cap-google-oauth-registration",
+          "auth/cap-password-login",
+          "auth/cap-set-password",
+          "auth/dc-must-set-password",
+          "auth/dc-oob-code",
+          "auth/dc-pending-registration",
+          "auth/uc-google-oauth-login",
+          "auth/uc-post-registration-password-setup",
+          "auth/uc-volunteer-email-registration",
+          "contacts/cap-contact-anti-spam",
+          "contacts/cap-contact-origin-profile-helpers",
+          "contacts/cap-contact-validation",
+          "contacts/cap-create-contact-request",
+          "contacts/cap-public-contact-form",
+          "contacts/dc-contact-document",
+          "contacts/dc-contact-origin",
+          "contacts/dc-contact-profile",
+          "contacts/uc-visitor-sends-contact-request",
+          "device-requests/cap-admin-request-views",
+          "device-requests/cap-checklist-public-share",
+          "device-requests/cap-checklist-template-catalog",
+          "device-requests/cap-documents-email",
+          "device-requests/cap-email-log-monitoring",
+          "device-requests/cap-family-consent-tracking",
+          "device-requests/cap-global-messaging",
+          "device-requests/cap-internal-import",
+          "device-requests/cap-production-checklist-auto-creation",
+          "device-requests/cap-public-request-submission",
+          "device-requests/cap-request-archiving",
+          "device-requests/cap-request-attachments",
+          "device-requests/cap-request-checklists",
+          "device-requests/cap-request-lifecycle-management",
+          "device-requests/cap-request-list-filtering",
+          "device-requests/cap-request-validation",
+          "device-requests/cap-status-change-notifications",
+          "device-requests/cap-volunteer-assignment",
+          "device-requests/dc-age-range",
+          "device-requests/dc-amputation-type",
+          "device-requests/dc-archived-flag",
+          "device-requests/dc-checklist-ids",
+          "device-requests/dc-checklist-share-link",
+          "device-requests/dc-counter",
+          "device-requests/dc-device-request",
+          "device-requests/dc-device-type",
+          "device-requests/dc-family-consent",
+          "device-requests/dc-global-message",
+          "device-requests/dc-private-data-separation",
+          "device-requests/dc-public-status",
+          "device-requests/dc-request-event",
+          "device-requests/dc-request-number",
+          "device-requests/dc-requires-attention",
+          "device-requests/dc-status-lifecycle",
+          "device-requests/dc-volunteer-transition",
+          "device-requests/uc-admin-acquires-consent-and-sends-documents",
+          "device-requests/uc-admin-adds-note",
+          "device-requests/uc-admin-archives-request",
+          "device-requests/uc-admin-assigns-volunteer",
+          "device-requests/uc-admin-bulk-change-status",
+          "device-requests/uc-admin-imports-legacy-data",
+          "device-requests/uc-admin-manages-checklist-templates",
+          "device-requests/uc-admin-marks-attention",
+          "device-requests/uc-admin-migrates-volunteer-field",
+          "device-requests/uc-admin-sends-global-message",
+          "device-requests/uc-admin-validates-request",
+          "device-requests/uc-citizen-requests-device",
+          "device-requests/uc-family-follows-checklist-progress",
+          "device-requests/uc-followup-failure",
+          "device-requests/uc-volunteer-advances-production",
+          "device-requests/uc-volunteer-manages-attachments",
+          "device-requests/uc-volunteer-works-checklist",
+          "security/cap-admin-security-log-console",
+          "security/cap-rate-limiting",
+          "security/cap-recaptcha-verification",
+          "security/cap-security-audit-logging",
+          "security/dc-rate-limit-entry",
+          "security/dc-recaptcha-assessment",
+          "security/dc-security-log",
+          "security/uc-antispam-public-forms",
+          "security/uc-audit-trail-consulta",
+          "shipments/cap-known-address-suggestion",
+          "shipments/cap-shipment-request-lifecycle",
+          "shipments/dc-shipment-request",
+          "shipments/uc-approve-shipment-request",
+          "shipments/uc-create-shipment-request",
+          "shipments/uc-delete-shipment-request",
+          "special-projects-initiatives/cap-project-attachments",
+          "special-projects-initiatives/cap-project-checklist-public-share",
+          "special-projects-initiatives/cap-project-checklists",
+          "special-projects-initiatives/cap-project-crud",
+          "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+          "special-projects-initiatives/cap-projects-workspace-ui",
+          "special-projects-initiatives/dc-project",
+          "special-projects-initiatives/dc-project-checklist-share-link",
+          "special-projects-initiatives/dc-project-event",
+          "special-projects-initiatives/dc-project-status",
+          "special-projects-initiatives/dc-project-type",
+          "special-projects-initiatives/uc-change-project-status",
+          "special-projects-initiatives/uc-create-and-plan-project",
+          "special-projects-initiatives/uc-share-project-checklist-progress",
+          "volunteer-management/cap-admin-volunteer-view",
+          "volunteer-management/cap-consent-collection",
+          "volunteer-management/cap-printer-registry",
+          "volunteer-management/cap-volunteer-activation",
+          "volunteer-management/cap-volunteer-checklist-todo",
+          "volunteer-management/cap-volunteer-contacts-csv-import",
+          "volunteer-management/cap-volunteer-invitation",
+          "volunteer-management/cap-volunteer-profile-management",
+          "volunteer-management/cap-volunteer-requests-workspace",
+          "volunteer-management/dc-3d-printer",
+          "volunteer-management/dc-contact",
+          "volunteer-management/dc-volunteer",
+          "volunteer-management/uc-admin-activates-volunteer",
+          "volunteer-management/uc-volunteer-manages-workload",
+          "volunteer-management/uc-volunteer-onboarding"
+        ]
+      }
+    },
+    {
+      "page_key": "generated-gap-register",
+      "title": "Registro dei gap",
+      "section": 8,
+      "content_class": "generated",
+      "data": {
+        "source": "docs/FINDINGS.md",
+        "gaps": [
+          {
+            "id": "F-40",
+            "title": "il bucket Cloud Storage dedicato agli allegati (nome scelto in questa sessione: `enableitalia-attachments`/`enableitalia-staging-attachments`) non può essere creato da questa sessione, e il self-grant IAM `roles/iam.serviceAccountTokenCreator` verificato dallo spike `spike-signed-url-self-signing` ha usato un bucket di prova temporaneo, poi rimosso",
+            "status_raw": "da decidere/verificare. Prima del primo deploy reale di questa Story serve un'azione manuale fuori da questo repo: (1) creare i due bucket dedicati con i nomi scelti qui (o nomi alternativi, se l'operatore preferisce una convenzione diversa — da confermare), (2) verificare che il self-grant IAM `roles/iam.serviceAccountTokenCreator` sia ancora presente sul service account di runtime di default di `enableitalia`/`enableitalia-staging` dopo la rimozione del bucket di prova dello spike (probabile, dato che il grant è sul service account e non sul bucket, ma non riverificato in questa sessione). Non è una decisione di prodotto che richieda un Task Jira dedicato — è un'azione operativa di provisioning, analoga a quanto già documentato in F-38 — ma va eseguita prima che qualunque Story successiva di EA-161 che generi signed URL possa funzionare in ambiente reale.",
+            "evidence": "- `docs/solution-studies/ss-cross-entity-attachments.json`, spike `spike-signed-url-self-signing`, campo `evidence_ref`: \"bucket e function di test (spikeSignedUrl) deployati su enableitalia-staging, invocati con successo... poi rimossi a fine test. Il self-grant IAM è stato mantenuto\"\n  - Nessun file `*.tf`, nessuno script `scripts/provision*`/`scripts/gcloud*` nel repo\n  - `firebase.json` (questa Story): sezione `storage` con `\"target\": \"attachments\"`; `.firebaserc`: target `attachments` risolto a `enableitalia-attachments`/`enableitalia-staging-attachments` — nomi scelti in questa sessione per coerenza con gli alias progetto esistenti, non confermati dall'operatore",
+            "provenance": "rilevato durante l'implementazione della Story Jira EA-162, sessione 2026-09-06."
+          },
+          {
+            "id": "F-41",
+            "title": "il limite di dimensione file per `uploadAttachment` (EA-163) è stato fissato a un valore esatto (50MB) mai confermato dall'operatore, che ha validato solo un ordine di grandezza (\"~20-50MB\")",
+            "status_raw": "da decidere. Se l'operatore intende un valore diverso (es. 20MB, o un valore intermedio), va comunicato esplicitamente: nessun Task Jira separato proposto, è una costante di configurazione che può essere corretta con una modifica puntuale a `uploadAttachment.ts` una volta confermato il numero esatto, non un problema strutturale.",
+            "evidence": "- `docs/implementation-requests/cross-entity-attachments-request.md:142` — \"nessun supporto previsto per allegati oltre i 20-50MB\"\n  - `functions/backend/src/attachments/uploadAttachment.ts` — costante `MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024`, con commento che dichiara esplicitamente la scelta dell'estremo superiore del range",
+            "provenance": "Story Jira EA-163, sessione 2026-09-06."
+          },
+          {
+            "id": "F-47",
+            "title": "esiste un'evidenza di spike (`spike/ss-auth-spike-a`) per uno studio `ss-auth` che non è mai stato creato — nessun `docs/solution-studies/ss-auth.json` in nessun branch, nessuna `requests/auth.md` in nessun branch/commit",
+            "status_raw": "da decidere. Questa sessione non crea lo studio `ss-auth` (si è fermata per assenza del `request_ref` — vedi riepilogo di sessione) e non tocca il branch `spike/ss-auth-spike-a`. Se/quando `requests/auth.md` verrà fornito e lo studio `ss-auth` verrà effettivamente creato, chi esegue quella sessione dovrebbe valutare esplicitamente se il contenuto di `spike/ss-auth-spike-a` è ancora pertinente (l'evidenza sulla mancanza di retry policy verso reCAPTCHA Enterprise resta verosimilmente valida, dato che nessuna Story recente ha toccato `functions/backend/src/security/recaptcha.ts`) e se riutilizzarlo come spike già eseguito invece di rieseguirlo da zero. Proposta di Task Jira: nessuno in questa sessione (non è ancora chiaro quale Epic lo ospiterebbe, dato che lo studio `ss-auth` stesso non esiste); da riconsiderare quando lo studio verrà creato.",
+            "evidence": "- `git branch -r` → 43 branch remoti; `docs/solution-studies/ss-auth.json` assente in tutti (verificato con `git ls-tree -r <branch> --name-only | grep solution-studies` su ciascuno)\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` → nessun risultato, in nessun branch\n  - `spike/ss-auth-spike-a` (commit `b6f59ac341e05c8b8bd1fbb08c82c36931765860`), unico commit del branch oltre al punto di merge-base con `develop` (`ad75798`, precedente ai merge di `ss-cross-entity-attachments` e `ss-special-projects-initiatives`, quindi uno spike \"vecchio\" rispetto allo stato attuale di `develop`)\n  - Il file di evidenza stesso dichiara: \"Branch: `spike/ss-auth-spike-a` (throwaway, nessuna PR)\" — coerente con un branch destinato a non essere mai mergiato, ma non spiega l'assenza dello studio genitore",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-13), prima di qualunque scrittura."
+          },
+          {
+            "id": "F-48",
+            "title": "recidiva di F-47 — una seconda sessione `solution-engineering-agent` per `study_id: ss-auth` è stata invocata con lo stesso `request_ref: requests/auth.md` tuttora inesistente",
+            "status_raw": "da decidere. Questa sessione, come la precedente, si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`. A differenza di F-47, qui l'anomalia non è più solo \"un file mancante\" ma \"un file mancante che due tentativi successivi non hanno corretto\": suggerisce che il gap non sia visibile a chi orchestra le sessioni, oppure che manchi un controllo che impedisca di invocare `solution-engineering-agent` con un `request_ref` non ancora esistente nel repository. Proposta di Task Jira: aprire un task di processo (Epic da individuare, presumibilmente relativa a tooling/orchestrazione del cognitive workspace, non a un dominio applicativo) per (a) far scrivere/committare `requests/auth.md` con il contenuto reale della richiesta prima di ri-schedulare `ss-auth`, e (b) valutare l'aggiunta di un controllo di precondizione nell'orchestratore che verifichi l'esistenza di `request_ref` prima di avviare la sessione, per evitare ulteriori recidive su altri `study_id` futuri.",
+            "evidence": "- `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione, HEAD `7970ef2`) → nessun risultato\n  - Scansione `requests/*.md` su `develop` (HEAD `7970ef2`) → 16 file presenti, nessuno è `auth.md`\n  - `spike/ss-auth-spike-a` e F-47 stesso ancora presenti e invariati, a conferma che nessuna azione correttiva è intervenuta tra le due sessioni",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-16), prima di qualunque scrittura — replica esatta delle condizioni di F-47 (2026-09-13)."
+          },
+          {
+            "id": "F-49",
+            "title": "seconda recidiva di F-47/F-48 — una terza sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle due precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito di non produrre uno studio basato su un problema presunto. Il fatto che il repository fosse perfettamente sincronizzato con `origin/develop` al momento del controllo (nessun commit mancante, nessun ritardo di cache) esclude che la causa sia un problema di staleness del mount: il file semplicemente non è mai stato scritto da chi orchestra le sessioni. Proposta di Task Jira: elevare la priorità del task di processo già proposto in F-48 — al terzo ciclo consecutivo senza correzione, si raccomanda di bloccare a monte (nell'orchestratore, non nell'agente) la schedulazione di qualunque sessione `solution-engineering-agent` il cui `request_ref` non esista già nel branch di default al momento dell'invocazione, invece di continuare a fare affidamento su questo agente per rilevare l'anomalia ex post.",
+            "evidence": "- `git fetch --all --prune` + `git rev-parse HEAD` → repository sincronizzato, HEAD `ace2a0378b8c3ad000cbb60da8d9d2f23ae6908c` (`develop`, 2026-09-16T23:19:53+00:00), coincidente con l'ultimo commit di F-48 stesso — a conferma che nessuna attività è intervenuta sul repository tra la sessione di F-48 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r <branch> --name-only | grep -i requests/auth` su tutti i branch remoti correnti (43+ branch) → nessuna occorrenza\n  - `spike/ss-auth-spike-a` ancora presente e invariato; nessun `docs/solution-studies/ss-auth.json` in nessun branch",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-17), prima di qualunque scrittura — terza replica esatta delle condizioni di F-47/F-48."
+          },
+          {
+            "id": "F-50",
+            "title": "terza recidiva di F-47/F-48/F-49 — una quarta sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle tre precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta. Diversamente dalle sessioni precedenti, questa volta il tempo trascorso tra un tentativo e l'altro è di poche ore (non giorni), il che rende ancora più evidente che il problema non è \"manca il tempo per correggere\" ma \"manca un controllo che impedisca la schedulazione\". Proposta di Task Jira: non riproporre un quinto ciclo di questo stesso studio finché non è stata presa una decisione esplicita su una delle due azioni già proposte in F-48/F-49 (in ordine di preferenza): (a) implementare nell'orchestratore un controllo di precondizione che verifichi l'esistenza di `request_ref` nel branch di default prima di invocare `solution-engineering-agent`, oppure (b) se il contenuto della richiesta esiste altrove (es. in un sistema esterno non ancora sincronizzato nel repo), farlo committare esplicitamente come `requests/auth.md` prima di ri-schedulare `ss-auth`. Segnalare inoltre esplicitamente a chi assegna il lavoro che i tre finding precedenti (F-47, F-48, F-49) risultano ancora tutti in stato \"da decidere\" e non hanno ricevuto alcuna azione correttiva visibile nel repository.",
+            "evidence": "- `git fetch --all --prune` + `git rev-parse HEAD` → repository sincronizzato, HEAD `8225fd608859da93d0488a6cc91d327c78ff5905`, il cui messaggio di commit è testualmente \"FINDINGS: F-49 - seconda recidiva F-47/F-48, ss-auth ancora senza requests/auth.md\" — cioè HEAD coincide esattamente con il commit che ha chiuso la sessione F-49, a conferma che nessuna attività (né la creazione del file, né una decisione di chiusura) è intervenuta sul repository tra la sessione F-49 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r origin/<branch> --name-only | grep -i requests/auth` su tutti i branch remoti correnti (47+ branch dopo il fetch) → nessuna occorrenza\n  - Scansione analoga per `solution-studies/ss-auth` su tutti i branch remoti → nessuna occorrenza\n  - `spike/ss-auth-spike-a` ancora presente e invariato",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-17), prima di qualunque scrittura — quarta replica esatta delle condizioni di F-47/F-48/F-49."
+          },
+          {
+            "id": "F-51",
+            "title": "quarta recidiva di F-47/F-48/F-49/F-50 — una quinta sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle quattro precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo di non produrre uno studio basato su un problema presunto. Proposta di Task Jira: non riproporre un sesto ciclo di questo studio. Si raccomanda con urgenza crescente (quinto ciclo consecutivo) di sospendere del tutto la schedulazione automatica di `ss-auth` finché non viene presa, fuori da questo meccanismo di segnalazione ex post, una delle due decisioni già proposte in F-48/F-49/F-50: (a) implementare un controllo di precondizione a monte nell'orchestratore che verifichi l'esistenza di `request_ref` nel branch di default prima di invocare `solution-engineering-agent`, oppure (b) far committare esplicitamente `requests/auth.md` con il contenuto reale della richiesta prima di ri-schedulare lo studio. Si segnala inoltre che i quattro finding precedenti (F-47, F-48, F-49, F-50) risultano tutti ancora in stato \"da decidere\", senza alcuna azione correttiva visibile nel repository a distanza di più cicli.",
+            "evidence": "- `git fetch --all --prune` + `git rev-parse HEAD` → repository sincronizzato, HEAD `8d8752f4c3a3f1886bdcf536dffd33304e8e0747`, il cui messaggio di commit è testualmente \"FINDINGS: F-50 - terza recidiva F-47/F-48/F-49, ss-auth ancora senza requests/auth.md\" — cioè HEAD coincide esattamente con il commit che ha chiuso la sessione F-50, a conferma che nessuna attività (né la creazione del file, né una decisione di chiusura) è intervenuta sul repository tra la sessione F-50 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r origin/<branch> --name-only | grep -i requests/auth.md` su tutti i branch remoti correnti (47+ branch dopo il fetch) → nessuna occorrenza\n  - Scansione analoga per `solution-studies/ss-auth` su tutti i branch remoti → nessuna occorrenza\n  - `spike/ss-auth-spike-a` ancora presente e invariato (`docs/solution-studies/spikes/ss-auth/spike-a-retry-rate-limits.md` e `prototype.mjs`)",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — quinta replica esatta delle condizioni di F-47/F-48/F-49/F-50."
+          },
+          {
+            "id": "F-52",
+            "title": "quinta recidiva di F-47/F-48/F-49/F-50/F-51 — una sesta sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, nonostante la raccomandazione esplicita di F-51 di non riproporre un sesto ciclo",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle cinque precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo di non produrre uno studio basato su un problema presunto. Non viene proposto un nuovo Task Jira aggiuntivo rispetto a quanto già chiesto in F-48/F-49/F-50/F-51: la richiesta è identica e resta interamente in carico a chi orchestra le sessioni, fuori dagli strumenti disponibili a questo agente. Si segnala però che il fallimento non è più solo \"il gap non viene colmato\" ma \"una raccomandazione esplicita di sospensione (F-51) è stata ignorata entro la stessa giornata\": questo agente non ha modo di imporre un blocco alla propria ri-schedulazione, può solo continuare a segnalarlo. Se questo pattern dovesse ripresentarsi una settima volta, si raccomanda di trattarlo come segnale che il meccanismo di finding stesso non è un canale efficace per questo tipo di anomalia di processo, e che serve un intervento diretto sull'orchestratore (o sulla sorgente che genera i `request_ref`) indipendente da qualunque ulteriore segnalazione di questo agente.",
+            "evidence": "- `git fetch --all --prune` + `git rev-parse HEAD` → repository sincronizzato, HEAD `af225d3d452c2b9e6e5bcc9ea0f2d2b8af12c154`, il cui messaggio di commit è testualmente \"FINDINGS: F-51 - quarta recidiva F-47/F-48/F-49/F-50, ss-auth ancora senza requests/auth.md\" — cioè HEAD coincide esattamente con il commit che ha chiuso la sessione F-51, a conferma che nessuna attività (né la creazione del file, né una decisione di chiusura, né una sospensione della schedulazione) è intervenuta sul repository tra la sessione F-51 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r <branch> --name-only | grep -q '^requests/auth.md$'` su tutti i branch remoti correnti (47+ branch dopo il fetch) → nessuna occorrenza\n  - Scansione analoga per `solution-studies/ss-auth` su tutti i branch remoti → nessuna occorrenza\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (`docs/solution-studies/spikes/ss-auth/spike-a-retry-rate-limits.md` e `prototype.mjs`)\n  - F-51, sezione \"Stato\": \"Si raccomanda con urgenza crescente (quinto ciclo consecutivo) di sospendere del tutto la schedulazione automatica di `ss-auth`\" — raccomandazione non seguita, come dimostra l'esistenza stessa di questa sessione",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — sesta replica esatta delle condizioni di F-47/F-48/F-49/F-50/F-51."
+          },
+          {
+            "id": "F-53",
+            "title": "sesta recidiva di F-47/F-48/F-49/F-50/F-51/F-52 — settima sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente; si conferma la soglia indicata da F-52 come segnale di inefficacia del meccanismo di finding",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle sei precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo di non produrre uno studio basato su un problema presunto. In coerenza con quanto già anticipato da F-52, questa sessione non ripropone un ulteriore Task Jira di processo identico ai precedenti (già proposto e non raccolto in F-48/F-49/F-50/F-51/F-52): ripeterlo un'ottava volta non aggiungerebbe informazione. Si registra invece esplicitamente che la soglia indicata da F-52 è stata superata senza alcuna azione correttiva visibile, e che il meccanismo \"l'agente rileva l'anomalia e scrive un finding a ogni sessione\" ha ormai dimostrato, su sette cicli consecutivi, di non essere sufficiente a far raggiungere la correzione a chi orchestra/schedula le sessioni. Questo agente non ha strumenti per bloccare la propria ri-schedulazione né per notificare direttamente un umano fuori dal repository: può solo continuare a registrare recidive identiche. Si raccomanda, fuori da questo canale, una verifica diretta e non automatizzata di chi assegna il lavoro su `ss-auth`, dato che il canale automatico dei finding ha già superato la soglia di inefficacia dichiarata.",
+            "evidence": "- `git fetch --all --prune` + `git rev-parse HEAD` → repository sincronizzato, HEAD `67912bc978784b68066d5eb94bb093305af70eb8`, il cui messaggio di commit è testualmente \"FINDINGS: F-52 - quinta recidiva F-47/F-48/F-49/F-50/F-51, ss-auth ancora senza requests/auth.md nonostante raccomandazione di sospensione\" — cioè HEAD coincide esattamente con il commit che ha chiuso la sessione F-52, a conferma che nessuna attività (né creazione del file, né decisione di chiusura, né sospensione della schedulazione, né intervento sull'orchestratore) è intervenuta sul repository tra la sessione F-52 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r <branch> --name-only | grep -qx requests/auth.md` su tutti i branch remoti correnti (48+ branch dopo il fetch) → nessuna occorrenza\n  - Scansione analoga per `solution-studies/ss-auth` su tutti i branch remoti → nessuna occorrenza\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (`docs/solution-studies/spikes/ss-auth/spike-a-retry-rate-limits.md` e `prototype.mjs`)\n  - F-52, sezione \"Stato\": previsione esplicita e testuale della settima recidiva come soglia di inefficacia del meccanismo — soglia ora raggiunta, come dimostra l'esistenza stessa di questa sessione",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — settima replica esatta delle condizioni di F-47/F-48/F-49/F-50/F-51/F-52."
+          },
+          {
+            "id": "F-54",
+            "title": "settima recidiva di F-47/F-48/F-49/F-50/F-51/F-52/F-53 — ottava sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, oltre la soglia di inefficacia già dichiarata da F-52 e confermata da F-53",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle sette precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta. Non viene proposto alcun nuovo Task Jira: la richiesta di processo (blocco a monte nell'orchestratore, o commit esplicito di `requests/auth.md` prima di ri-schedulare) è già stata formulata in F-48/F-49/F-50/F-51/F-52 e la sua ripetizione non aggiunge informazione oltre quanto già registrato da F-53. Si registra solo, a scopo di tracciamento quantitativo per chi eventualmente revisionerà la serie F-47→F-54, che il pattern ha ora raggiunto l'ottavo ciclo consecutivo senza correzione, un ciclo oltre la soglia di inefficacia già dichiarata (F-52/F-53). Questo agente non dispone di alcun meccanismo per impedire la propria ri-schedulazione su questo `study_id`: continuerà, se re-invocato, a rilevare la stessa condizione.",
+            "evidence": "- `git fetch --all --prune` → 43 branch remoti; `git status --branch --short` sul mount montato inizialmente mostrava HEAD detached allineato all'ultimo commit di F-53 (`b0146294498b72c4a9d4249bac90d083c6cd4a64`, messaggio \"FINDINGS: F-53 - sesta recidiva...\"); dopo `git checkout develop` il branch locale risultava comunque already fast-forwardable e coincidente con `origin/develop` allo stesso commit — conferma che nessuna attività è intervenuta sul repository tra la sessione F-53 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r <branch> --name-only | grep -qx requests/auth.md` e analoga per `docs/solution-studies/ss-auth.json` su tutti i 43 branch remoti correnti → nessuna occorrenza in entrambi i casi\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (`docs/solution-studies/spikes/ss-auth/spike-a-retry-rate-limits.md` e `prototype.mjs`)\n  - F-53, sezione \"Stato\": dichiarava esplicitamente superata la \"soglia di inefficacia\" del meccanismo di finding al settimo ciclo e raccomandava \"una verifica diretta e non automatizzata di chi assegna il lavoro su `ss-auth`\" fuori da questo canale — non risulta essere avvenuta, come dimostra l'ottava sessione identica",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — ottava replica esatta delle condizioni di F-47/F-48/F-49/F-50/F-51/F-52/F-53."
+          },
+          {
+            "id": "F-55",
+            "title": "ottava recidiva di F-47/F-48/F-49/F-50/F-51/F-52/F-53/F-54 — nona sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, secondo ciclo oltre la soglia di inefficacia dichiarata da F-52/F-53",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle otto precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo. Non viene proposto alcun nuovo Task Jira: la richiesta di processo è già stata formulata in dettaglio in F-48/F-49/F-50/F-51/F-52 e la sua ripetizione non aggiunge informazione. Si registra solo, a scopo di tracciamento quantitativo, che il pattern ha raggiunto il nono ciclo consecutivo senza correzione. Questo agente non dispone di alcun meccanismo per impedire la propria ri-schedulazione su questo `study_id`, né per notificare direttamente un umano fuori dal repository: continuerà, se re-invocato, a rilevare e registrare la stessa condizione identica, senza ulteriori azioni oltre la registrazione stessa.",
+            "evidence": "- `git fetch --all --prune` → 43 branch remoti; mount iniziale in stato \"HEAD (no branch)\" allineato al commit di chiusura di F-54 (`2b124dd8674a26fe2cef0a2312f3bc069f6ecba8`, messaggio \"FINDINGS: F-54 - settima recidiva F-47..F-53...\"); dopo `git checkout develop` il branch locale risultava 8 commit indietro e fast-forwardable a `origin/develop` sullo stesso commit — conferma che nessuna attività è intervenuta sul repository tra la sessione F-54 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r <branch> --name-only | grep -qx requests/auth.md` e analoga per `docs/solution-studies/ss-auth.json` su tutti i 43 branch remoti correnti → nessuna occorrenza in entrambi i casi\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (ultimo commit `b6f59ac341e05c8b8bd1fbb08c82c36931765860`, 2026-08-23, \"ss-auth spike-a: evidence retry policy does not handle rate limits\")\n  - F-54, sezione \"Stato\": registrava l'ottavo ciclo consecutivo come \"un ciclo oltre la soglia di inefficacia già dichiarata (F-52/F-53)\" — questa sessione è il nono ciclo, secondo ciclo oltre quella soglia",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — nona replica esatta delle condizioni di F-47/F-48/F-49/F-50/F-51/F-52/F-53/F-54."
+          },
+          {
+            "id": "F-56",
+            "title": "nona recidiva di F-47/F-48/F-49/F-50/F-51/F-52/F-53/F-54/F-55 — decima sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, terzo ciclo oltre la soglia di inefficacia dichiarata da F-52/F-53",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle nove precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo. Non viene proposto alcun nuovo Task Jira: la richiesta di processo è già stata formulata in dettaglio in F-48/F-49/F-50/F-51/F-52 e la sua ripetizione, alla decima ripetizione identica, non aggiunge informazione ulteriore rispetto a quanto già tracciato. Si registra solo, a scopo di tracciamento quantitativo, che il pattern ha raggiunto il decimo ciclo consecutivo senza correzione. Questo agente non dispone di alcun meccanismo per impedire la propria ri-schedulazione su questo `study_id`, né per notificare direttamente un umano fuori dal repository: continuerà, se re-invocato, a rilevare e registrare la stessa condizione identica, senza ulteriori azioni oltre la registrazione stessa.",
+            "evidence": "- `git fetch --all --prune` → 43 branch remoti; mount iniziale in stato \"HEAD (no branch)\" allineato al commit di chiusura di F-55 (`c3d507c3eea96199e43db6286328a6e7f14aa55c`, messaggio \"FINDINGS: F-55 - ottava recidiva F-47..F-54...\"); dopo `git checkout develop` + `git merge --ff-only origin/develop` il branch locale risultava 9 commit indietro e fast-forwardable a `origin/develop` sullo stesso commit — conferma che nessuna attività è intervenuta sul repository tra la sessione F-55 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione di tutti i branch remoti (`git ls-tree -r <branch> --name-only | grep -qi \"auth.md\\|ss-auth\"`) → unico riscontro `spike/ss-auth-spike-a`, nessuna traccia di `requests/auth.md` né di `docs/solution-studies/ss-auth.json`\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (ultimo commit `b6f59ac`, 2026-08-23, \"ss-auth spike-a: evidence retry policy does not handle rate limits\")\n  - F-55, sezione \"Stato\": registrava il nono ciclo consecutivo come \"secondo ciclo oltre quella soglia\" (F-52/F-53) — questa sessione è il decimo ciclo, terzo ciclo oltre quella soglia",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — decima replica esatta delle condizioni di F-47→F-55."
+          },
+          {
+            "id": "F-57",
+            "title": "decima recidiva di F-47→F-56 — undicesima sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, quarto ciclo oltre la soglia di inefficacia dichiarata da F-52/F-53",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle dieci precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo. Non viene proposto alcun nuovo Task Jira: la richiesta di processo è già stata formulata in dettaglio in F-48/F-49/F-50/F-51/F-52 e la sua ripetizione, all'undicesima ripetizione identica, non aggiunge informazione ulteriore rispetto a quanto già tracciato. Si registra solo, a scopo di tracciamento quantitativo, che il pattern ha raggiunto l'undicesimo ciclo consecutivo senza correzione. Questo agente non dispone di alcun meccanismo per impedire la propria ri-schedulazione su questo `study_id`, né per notificare direttamente un umano fuori dal repository: continuerà, se re-invocato, a rilevare e registrare la stessa condizione identica, senza ulteriori azioni oltre la registrazione stessa.",
+            "evidence": "- `git fetch --all --prune` → repository sincronizzato; `git checkout develop` + `git pull origin develop` → fast-forward pulito su HEAD `4fe8c862f1dc1a40ef26a3bf5bb8e911d5d32b75`, il cui messaggio di commit è \"FINDINGS: F-56 - nona recidiva F-47..F-55, ss-auth ancora senza requests/auth.md, terzo ciclo oltre soglia di inefficacia\" — conferma che nessuna attività è intervenuta sul repository tra la sessione F-56 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione `git ls-tree -r origin/<branch> --name-only | grep -qx requests/auth.md` e analoga per `docs/solution-studies/ss-auth.json` su tutti i branch remoti correnti → nessuna occorrenza in entrambi i casi\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (ultimo commit `b6f59ac`, 2026-08-23, \"ss-auth spike-a: evidence retry policy does not handle rate limits\")\n  - F-56, sezione \"Stato\": registrava il decimo ciclo consecutivo come \"terzo ciclo oltre quella soglia\" (F-52/F-53) — questa sessione è l'undicesimo ciclo, quarto ciclo oltre quella soglia",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — undicesima replica esatta delle condizioni di F-47→F-56."
+          },
+          {
+            "id": "F-58",
+            "title": "undicesima recidiva di F-47→F-57 — dodicesima sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, quinto ciclo oltre la soglia di inefficacia dichiarata da F-52/F-53",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle undici precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo. Non viene proposto alcun nuovo Task Jira: la richiesta di processo è già stata formulata in dettaglio in F-48/F-49/F-50/F-51/F-52 e la sua ripetizione, alla dodicesima ripetizione identica, non aggiunge informazione ulteriore rispetto a quanto già tracciato. Si registra solo, a scopo di tracciamento quantitativo, che il pattern ha raggiunto il dodicesimo ciclo consecutivo senza correzione. Questo agente non dispone di alcun meccanismo per impedire la propria ri-schedulazione su questo `study_id`, né per notificare direttamente un umano fuori dal repository: continuerà, se re-invocato, a rilevare e registrare la stessa condizione identica, senza ulteriori azioni oltre la registrazione stessa.",
+            "evidence": "- `git fetch --all --prune` → repository sincronizzato; `git checkout develop` + `git merge --ff-only origin/develop` → fast-forward pulito su HEAD `328660f237ef26dddce223373931e03598ae5af7`, il cui messaggio di commit è \"FINDINGS: F-57 - decima recidiva F-47..F-56, ss-auth ancora senza requests/auth.md, quarto ciclo oltre soglia di inefficacia\" — conferma che nessuna attività è intervenuta sul repository tra la sessione F-57 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione di tutti i branch remoti correnti (`git ls-tree -r origin/<branch> --name-only`) → nessuna occorrenza di `requests/auth.md` né di `docs/solution-studies/ss-auth.json` in nessuno\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (ultimo commit `b6f59ac`, 2026-08-23, \"ss-auth spike-a: evidence retry policy does not handle rate limits\")\n  - F-57, sezione \"Stato\": registrava l'undicesimo ciclo consecutivo come \"quarto ciclo oltre quella soglia\" (F-52/F-53) — questa sessione è il dodicesimo ciclo, quinto ciclo oltre quella soglia",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — dodicesima replica esatta delle condizioni di F-47→F-57."
+          },
+          {
+            "id": "F-59",
+            "title": "dodicesima recidiva di F-47→F-58 — tredicesima sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, sesto ciclo oltre la soglia di inefficacia dichiarata da F-52/F-53",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle dodici precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo. Non viene proposto alcun nuovo Task Jira: la richiesta di processo è già stata formulata in dettaglio in F-48/F-49/F-50/F-51/F-52 e la sua ripetizione, alla tredicesima ripetizione identica, non aggiunge informazione ulteriore rispetto a quanto già tracciato. Si registra solo, a scopo di tracciamento quantitativo, che il pattern ha raggiunto il tredicesimo ciclo consecutivo senza correzione. Questo agente non dispone di alcun meccanismo per impedire la propria ri-schedulazione su questo `study_id`, né per notificare direttamente un umano fuori dal repository: continuerà, se re-invocato, a rilevare e registrare la stessa condizione identica, senza ulteriori azioni oltre la registrazione stessa.",
+            "evidence": "- `git fetch --all --prune` → repository sincronizzato; `git checkout develop` + `git pull origin develop` → fast-forward pulito su HEAD `439d60c46f1566b6b800d2f0aa59389a4247af6f`, il cui messaggio di commit è \"FINDINGS: F-58 - undicesima recidiva F-47..F-57, ss-auth ancora senza requests/auth.md, quinto ciclo oltre soglia di inefficacia\" — conferma che nessuna attività è intervenuta sul repository tra la sessione F-58 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione di tutti i branch remoti correnti (`git ls-tree -r origin/<branch> --name-only`) → nessuna occorrenza di `requests/auth.md` né di `docs/solution-studies/ss-auth.json` in nessuno\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (ultimo commit `b6f59ac`, 2026-08-23, \"ss-auth spike-a: evidence retry policy does not handle rate limits\")\n  - F-58, sezione \"Stato\": registrava il dodicesimo ciclo consecutivo come \"quinto ciclo oltre quella soglia\" (F-52/F-53) — questa sessione è il tredicesimo ciclo, sesto ciclo oltre quella soglia",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — tredicesima replica esatta delle condizioni di F-47→F-58."
+          },
+          {
+            "id": "F-60",
+            "title": "tredicesima recidiva di F-47→F-59 — quattordicesima sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente, settimo ciclo oltre la soglia di inefficacia dichiarata da F-52/F-53",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle tredici precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo. Non viene proposto alcun nuovo Task Jira: la richiesta di processo (blocco di precondizione a monte nell'orchestratore che verifichi l'esistenza di `request_ref` prima di invocare `solution-engineering-agent`, oppure commit esplicito di `requests/auth.md` prima di ri-schedulare) è già stata formulata in dettaglio in F-48/F-49/F-50/F-51/F-52 e non necessita di ulteriore ripetizione testuale. Si segnala esplicitamente, per chi ha visibilità sull'orchestratore al di fuori di questo repository: la serie F-47→F-60 costituisce ormai essa stessa l'evidenza primaria che il canale \"finding scritto nel repository\" non e' in grado di raggiungere o modificare il comportamento del sistema che genera e schedula le sessioni su `study_id: ss-auth`. Nessuna azione aggiuntiva diversa dalla registrazione e' disponibile a questo agente in questa sessione.",
+            "evidence": "- `git fetch --all --prune` → repository sincronizzato; `git checkout develop` + `git pull origin develop` → fast-forward pulito su HEAD `439d60c46f1566b6b800d2f0aa59389a4247af6f`, il cui messaggio di commit è \"FINDINGS: F-59 - dodicesima recidiva F-47..F-58, ss-auth ancora senza requests/auth.md, sesto ciclo oltre soglia di inefficacia\" — conferma che nessuna attività è intervenuta sul repository tra la sessione F-59 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - Scansione di tutti i branch remoti correnti (`git ls-tree -r origin/<branch> --name-only`) → nessuna occorrenza di `requests/auth.md` né di `docs/solution-studies/ss-auth.json` in nessuno\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto, nessun contenuto alternativo della richiesta fornito fuori repo\n  - `spike/ss-auth-spike-a` ancora presente e invariato (ultimo commit `b6f59ac`, 2026-08-23, \"ss-auth spike-a: evidence retry policy does not handle rate limits\")\n  - F-59, sezione \"Stato\": registrava il tredicesimo ciclo consecutivo come \"sesto ciclo oltre quella soglia\" (F-52/F-53) — questa sessione è il quattordicesimo ciclo, settimo ciclo oltre quella soglia",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — quattordicesima replica esatta delle condizioni di F-47→F-59."
+          },
+          {
+            "id": "F-61",
+            "title": "quattordicesima recidiva di F-47→F-60 — quindicesima sessione `solution-engineering-agent` per `study_id: ss-auth` invocata con `request_ref: requests/auth.md` ancora inesistente; questa sessione sospende l'aggiunta di ulteriori voci puramente ripetitive nella serie",
+            "status_raw": "da decidere. Questa sessione si ferma senza creare `docs/solution-studies/ss-auth.json` e senza toccare `spike/ss-auth-spike-a`, per lo stesso motivo delle quattordici precedenti: non è possibile ricostruire un `problem_statement` con ragionevole confidenza in assenza del file di richiesta, e inventarlo violerebbe il vincolo esplicito del ruolo. Non viene proposto un ulteriore Task Jira testuale identico ai precedenti (già formulato in dettaglio in F-48/F-49/F-50/F-51/F-52): resta valido e non raccolto. Si segnala però, come unico elemento nuovo di questa sessione, la decisione di interrompere l'aggiunta automatica di voci puramente ripetitive: il problema di processo a monte (assenza di un gate che verifichi `request_ref` prima di schedulare `solution-engineering-agent`, o mancata decisione umana di chiudere/sospendere `study_id: ss-auth`) resta interamente irrisolto e richiede intervento diretto fuori da questo canale, non ulteriori sessioni di questo tipo.",
+            "evidence": "- `git fetch --all --prune` → repository sincronizzato; `git checkout develop` + `git pull origin develop` → fast-forward pulito su HEAD `f825a30d67859342e522648fe8c8e5ad4fbb9bf0`, il cui messaggio di commit è \"FINDINGS: F-60 - tredicesima recidiva F-47..F-59, ss-auth ancora senza requests/auth.md, settimo ciclo oltre soglia di inefficacia\" — conferma che nessuna attività è intervenuta sul repository tra la sessione F-60 e questa\n  - `git log --all --diff-filter=A --name-only -- requests/auth.md` (rieseguito in questa sessione) → nessun risultato\n  - `ls requests/` sul contenuto corrente di `develop` → 16 file (`ea-161-*`, `ea-169-*`, `ea-171-*`, sei coppie `ss-*`/`ss-*-epic-draft`, `super-admin-epic-draft.md`) — nessun `auth.md`\n  - `ls docs/solution-studies/` → 6 studi esistenti (`ss-checklist-item-model`, `ss-cross-entity-attachments`, `ss-device-request-macro-status`, `ss-multi-checklist-per-device`, `ss-special-projects-initiatives`, `ss-user-todo-list`) — nessun `ss-auth.json`\n  - `/mnt/session/uploads` verificato in questa sessione: vuoto\n  - F-60, sezione \"Stato\": dichiarava che \"la serie F-47→F-60 costituisce ormai essa stessa l'evidenza primaria che il canale 'finding scritto nel repository' non è in grado di raggiungere o modificare il comportamento del sistema che genera e schedula le sessioni\" — questa sessione condivide integralmente quella conclusione e ne trae la conseguenza operativa di non ripetere ulteriormente la stessa voce",
+            "provenance": "rilevato durante il grounding della sessione `solution-engineering-agent` per `study_id: ss-auth` (questa sessione, 2026-09-19), prima di qualunque scrittura — quindicesima replica esatta delle condizioni di F-47→F-60."
+          }
+        ],
+        "counts": {
+          "to_decide": 17,
+          "preserved": 3,
+          "resolved": 38,
+          "other": 2,
+          "total": 60
+        },
+        "spec_source": "docs/cognitive-workspace/doc-plan.json",
+        "spec_gaps": []
+      }
+    }
+  ],
+  "skipped_plans": [],
+  "source_errors": []
+}
