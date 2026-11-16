@@ -1,0 +1,648 @@
+[
+  {
+    "id": "special-projects-initiatives/cap-project-crud",
+    "type": "capability",
+    "name": "Gestione progetti/iniziative/eventi",
+    "body": "## What it does\n\nGestisce l'entità `projects/{projectId}` (titolo, descrizione, `projectType`, `status`, array `checklists` di riferimenti `{checklistId,label}`, `createdBy`, timestamp).\n\n- **Creazione** (`createProject`): solo admin; `title` e `projectType` obbligatori, `description` opzionale; stato iniziale sempre `new`, nessuna checklist.\n- **Modifica** (`updateProject`): solo admin, solo `title` (non vuoto) e/o `description`; il `projectType` non è modificabile dopo la creazione. Consentita solo in stato `new`/`active`.\n- **Elenco** (`listProjects`): tutti i progetti ordinati per `createdAt` desc, per qualunque admin/volontario; il filtro per tipo è fatto dal client.\n- **Dettaglio** (`getProject`): progetto + cronologia `events` (desc), staff-only; esposto via callable per non dipendere dalle rules Firestore.\n- **Eliminazione** (`deleteProject`): solo admin, ammessa anche su progetti terminali; elimina le checklist collegate (delegando al core Organizer), gli `events` e il documento.\n- Normalizzazione dei documenti legacy (`name`→`title`, `createdByUid`→`createdBy`, `draft`→`new`, `projectType` mancante).\n\nOgni mutazione scrive un evento di security log (`success`/`blocked`/`failure`).\n\n## Boundaries\n\n- `projectType` è testo libero estensibile; la UI propone `progetto`/`iniziativa`/`evento` ma il backend accetta qualunque stringa non vuota.\n- Non esiste il concetto di \"volontario assegnato al progetto\": la lettura è aperta a ogni staff.\n- La cancellazione delle checklist e del documento non è transazionale (checklist cancellate una a una, poi batch su eventi+progetto).\n\n## Key entry points\n\n- `functions/backend/src/projects/createProject.ts#createProject`\n- `functions/backend/src/projects/updateProject.ts#updateProject`\n- `functions/backend/src/projects/listProjects.ts#listProjects`\n- `functions/backend/src/projects/getProject.ts#getProject`\n- `functions/backend/src/projects/deleteProject.ts#deleteProject`\n- `functions/backend/src/projects/projectAccess.ts#normalizeProjectRecord`\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [
+      "projects"
+    ],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/dc-project",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProject.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/updateProject.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/listProjects.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/getProject.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/deleteProject.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/projectAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+    "type": "capability",
+    "name": "Ciclo di vita dello stato e RBAC del progetto",
+    "body": "## What it does\n\nDefinisce i 5 stati (`new`, `active`, `standby`, `archived`, `closed`) e le regole che ne derivano, centralizzate in `projectAccess.ts`:\n\n- **Contenuto modificabile** (titolo/descrizione, checklist, item, allegati in upload): solo in `new`/`active` (`assertProjectContentWritable` → `failed-precondition`).\n- **`standby`**: contenuto bloccato, ma `changeProjectStatus` resta ammesso (note e transizioni), per evitare un vicolo cieco.\n- **`archived`/`closed`** (terminali): nessuna modifica, nemmeno note o transizioni (`assertProjectNotTerminal`); resta permessa la sola eliminazione admin.\n- **`changeProjectStatus`** (admin): imposta `newStatus` (qualunque dei 5, non c'è una matrice di transizioni oltre al blocco dai terminali) e scrive in batch un evento `projects/{id}/events/{eventId}` `{fromStatus,toStatus,note,createdBy,timestamp}`. Una nota senza cambio di stato si ottiene passando `newStatus` uguale allo stato corrente.\n- **Ruoli**: `requireStaffRole` (admin o volontario) per le letture e le operazioni sugli item; `requireAdmin` per creazione/modifica progetto, creazione/eliminazione/rinomina checklist, cambio stato, eliminazione progetto.\n\n## Boundaries\n\n- Il ruolo è letto da `users/{uid}.role`; non usa custom claims.\n- La UI replica le stesse regole (`CONTENT_WRITABLE_STATUSES`, `TERMINAL_STATUSES` in `ProjectDetail.tsx`) solo per abilitare/disabilitare i comandi: l'enforcement è nel backend.\n\n## Key entry points\n\n- `functions/backend/src/projects/projectAccess.ts#assertProjectContentWritable`\n- `functions/backend/src/projects/projectAccess.ts#assertProjectNotTerminal`\n- `functions/backend/src/projects/projectAccess.ts#requireStaffRole`\n- `functions/backend/src/projects/projectAccess.ts#requireAdmin`\n- `functions/backend/src/projects/changeProjectStatus.ts#changeProjectStatus`\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [
+      "rbac",
+      "status"
+    ],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/dc-project-status",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/projectAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/changeProjectStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/projects/ProjectDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/cap-project-checklists",
+    "type": "capability",
+    "name": "Checklist collegate al progetto (wrapper sul core Organizer)",
+    "body": "## What it does\n\nLayer di callable `*Project*Checklist*` che applica RBAC e regole di stato di progetto e poi delega al core Organizer, nello stesso modo del layer device-requests.\n\n- `createProjectChecklist` (admin, `new`/`active`): crea una checklist vuota o da `templateId` esplicito (nessun auto-lookup per tipo). Categoria = `projectType`; `origin = {type:\"project\", id}`. Aggiunge `{checklistId,label}` a `projects/{id}.checklists` con `arrayUnion`. Un progetto può avere più checklist etichettate.\n- `updateProjectChecklistMetadata` (admin, `new`/`active`): rinomina `label` (mirror) e `title` (documento `checklists/{id}`) in un batch.\n- `deleteProjectChecklist` (admin, `new`/`active`): elimina via core e rimuove il riferimento.\n- `addProjectChecklistItem` / `updateProjectChecklistItem` / `removeProjectChecklistItem` (admin o volontario, `new`/`active`): delegano al core; aprire a ogni volontario è una scelta voluta.\n- `getProjectChecklist` e `getProjectChecklistCompleteness` (staff, sempre, anche in stati bloccati).\n- `listAssignableProjectUsers` (staff): tutti gli admin + volontari attivi con etichetta nome/cognome risolta lato server (`isResolvableProjectAssignee`).\n\nTutte verificano che la checklist sia in `project.checklists` (`assertChecklistBelongsToProject`, `not-found` altrimenti).\n\n## Boundaries\n\n- Semantica degli item, template e completezza sono del core: [[process-organizer-core/cap-checklist-instance-lifecycle]], [[process-organizer-core/cap-checklist-item-management]], [[process-organizer-core/cap-completeness-gate]].\n- Passare `origin` di tipo project fa comparire gli item assegnati negli elenchi \"my checklist items\" dell'utente (comportamento voluto).\n\n## Key entry points\n\n- `functions/backend/src/projects/createProjectChecklist.ts#createProjectChecklist`\n- `functions/backend/src/projects/updateProjectChecklistMetadata.ts#updateProjectChecklistMetadata`\n- `functions/backend/src/projects/deleteProjectChecklist.ts#deleteProjectChecklist`\n- `functions/backend/src/projects/addProjectChecklistItem.ts#addProjectChecklistItem`\n- `functions/backend/src/projects/listAssignableProjectUsers.ts#listAssignableProjectUsers`\n- `functions/backend/src/projects/getProjectChecklistCompleteness.ts#getProjectChecklistCompleteness`\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [
+      "checklist"
+    ],
+    "relates_to": [
+      {
+        "id": "process-organizer-core/cap-checklist-instance-lifecycle",
+        "type": "depends_on"
+      },
+      {
+        "id": "process-organizer-core/cap-checklist-item-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "process-organizer-core/cap-completeness-gate",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProjectChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/updateProjectChecklistMetadata.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/deleteProjectChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/addProjectChecklistItem.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/updateProjectChecklistItem.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/removeProjectChecklistItem.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/getProjectChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/getProjectChecklistCompleteness.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/listAssignableProjectUsers.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/cap-project-checklist-public-share",
+    "type": "capability",
+    "name": "Condivisione pubblica read-only della checklist di progetto",
+    "body": "## What it does\n\n- `createProjectChecklistShareLink` (staff): genera o riusa (un solo link per `checklistId`) un token UUID in `projectChecklistShareLinks/{token}` `{checklistId,projectId,createdAt,createdBy}` e restituisce `{token,url}`; l'URL base dipende dall'ambiente (staging vs produzione) e punta a `/project-checklist-share/:token`.\n- `getProjectChecklistShareStatus` (pubblica, senza autenticazione): dato il token restituisce `percentComplete` (100 se vuota), elenco semplificato degli item (`title`, `completed`, `quantity`/`url` se presenti) e `projectTitle`. Nessun altro dato di progetto o utente è esposto.\n- Il link è consultabile anche con progetto in stato bloccato; il frontend lo serve alla route pubblica `ProjectChecklistShareStatus`.\n\n## Boundaries\n\n- Il token è l'unica credenziale; non sono previsti scadenza né revoca.\n- Gli eventi di security log del lato pubblico registrano l'IP.\n\n## Key entry points\n\n- `functions/backend/src/projects/createProjectChecklistShareLink.ts#createProjectChecklistShareLink`\n- `functions/backend/src/projects/getProjectChecklistShareStatus.ts#getProjectChecklistShareStatus`\n- `enable-device/src/components/checklist/ProjectChecklistPanel.tsx` (dialog di condivisione)\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [
+      "share",
+      "public"
+    ],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-checklists",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProjectChecklistShareLink.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/getProjectChecklistShareStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/checklist/ProjectChecklistPanel.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/cap-project-attachments",
+    "type": "capability",
+    "name": "Allegati del progetto",
+    "body": "## What it does\n\nAdattatori per progetto sopra il modulo allegati condiviso: `uploadProjectAttachment`, `listProjectAttachments`, `downloadProjectAttachment`, `updateProjectAttachmentDescription`, `deleteProjectAttachment`. Passano al modulo generico `entityType: \"project\"`, `entityCollectionPath: \"projects\"`.\n\nRegole (`projectAttachmentAccess.ts`):\n\n- lettura (list/download): qualunque staff, anche su progetti bloccati;\n- upload e modifiche: richiedono progetto `new`/`active`;\n- update/delete: admin su qualunque allegato, volontario solo sui propri (`uploadedBy`); l'allegato deve appartenere al progetto richiesto (`not-found` altrimenti).\n\n## Boundaries\n\n- Catalogo, storage e URL firmati sono del dominio attachments: [[attachments/cap-attachment-catalog-model]], [[attachments/cap-attachment-rbac]].\n- La UI usa il componente `ProjectAttachments` montato in `ProjectDetail`.\n\n## Key entry points\n\n- `functions/backend/src/projects/projectAttachmentAccess.ts#resolveProjectAttachment`\n- `functions/backend/src/projects/uploadProjectAttachment.ts#uploadProjectAttachment`\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [
+      "attachments"
+    ],
+    "relates_to": [
+      {
+        "id": "attachments/cap-attachment-catalog-model",
+        "type": "depends_on"
+      },
+      {
+        "id": "attachments/cap-attachment-rbac",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/projectAttachmentAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/uploadProjectAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/listProjectAttachments.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/downloadProjectAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/updateProjectAttachmentDescription.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/deleteProjectAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/cap-projects-workspace-ui",
+    "type": "capability",
+    "name": "Workspace UI progetti (lista + dettaglio)",
+    "body": "## What it does\n\n- `ProjectsWorkspace`, condiviso tra admin (`/admin/projects[/:id]`, `canManage`) e volontario (`projects[/:id]`): su desktop (≥1200px) split view lista (420px) + dettaglio; su mobile/tablet pagine separate guidate dalla route.\n- `ProjectsListPage`: tabella da `listProjects`, filtro per tipo (default `progetto`/`iniziativa`/`evento` più i tipi presenti nei dati), dialog di creazione (solo con `canManage`).\n- `ProjectDetail`: dati e stato (tag con etichette), cronologia eventi con nomi utente risolti, modifica titolo/descrizione, cambio stato con nota, eliminazione con conferma; comandi disabilitati in base a stato terminale/contenuto non modificabile.\n- `ProjectChecklists` (elenco etichettato, creazione con scelta template o \"nessun template\", rinomina, eliminazione) e `ProjectChecklistPanel` (item, assegnatari, completezza, condivisione), con `isAdmin={canManage}`; `ProjectAttachments` per gli allegati.\n\n## Boundaries\n\n- Nessuna logica di autorizzazione autoritativa nella UI.\n\n## Key entry points\n\n- `enable-device/src/pages/admin/projects/ProjectsWorkspace.tsx`\n- `enable-device/src/pages/admin/projects/ProjectsListPage.tsx`\n- `enable-device/src/pages/admin/projects/ProjectDetail.tsx`\n- `enable-device/src/components/checklist/ProjectChecklists.tsx`\n- `enable-device/src/components/checklist/ProjectChecklistPanel.tsx`\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [
+      "ui"
+    ],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-crud",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-checklists",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-attachments",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/projects/ProjectsWorkspace.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/projects/ProjectsListPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/projects/ProjectDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/checklist/ProjectChecklists.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/checklist/ProjectChecklistPanel.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/uc-create-and-plan-project",
+    "type": "use_case",
+    "name": "Creare un progetto e pianificarne le checklist",
+    "body": "## Scenario\n\n1. Un admin crea un progetto indicando titolo, tipo e descrizione: nasce `new` senza checklist.\n2. Aggiunge una o più checklist etichettate (es. \"Logistica\"), da template o vuote.\n3. Admin e volontari aggiungono item, li assegnano a admin/volontari attivi e li completano.\n4. Un volontario carica allegati; lo staff condivide un link pubblico di avanzamento.\n\n## Depends on capabilities\n\n- [[special-projects-initiatives/cap-project-crud]]\n- [[special-projects-initiatives/cap-project-checklists]]\n- [[special-projects-initiatives/cap-project-attachments]]\n- [[special-projects-initiatives/cap-project-checklist-public-share]]\n\n## Known gaps\n\n- Nessun cambio di `projectType` dopo la creazione.\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-crud",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-checklists",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-attachments",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-checklist-public-share",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProject.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProjectChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/uc-change-project-status",
+    "type": "use_case",
+    "name": "Mettere in standby, archiviare o chiudere un progetto",
+    "body": "## Scenario\n\n1. L'admin apre il dettaglio e cambia stato, opzionalmente con una nota; viene registrato un evento in cronologia.\n2. In `standby` il contenuto diventa non modificabile ma si possono ancora aggiungere note o riattivare il progetto.\n3. Con `archived`/`closed` ogni modifica è bloccata; l'unica azione residua è l'eliminazione admin.\n\n## Depends on capabilities\n\n- [[special-projects-initiatives/cap-project-lifecycle-and-rbac]]\n- [[special-projects-initiatives/cap-project-crud]]\n\n## Known gaps\n\n- Nessuna matrice di transizioni: da `new`/`active`/`standby` si può andare direttamente a qualsiasi stato.\n- Non c'è reopen da stato terminale.\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "type": "depends_on"
+      },
+      {
+        "id": "special-projects-initiatives/cap-project-crud",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/changeProjectStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/projectAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/uc-share-project-checklist-progress",
+    "type": "use_case",
+    "name": "Condividere l'avanzamento di una checklist con esterni",
+    "body": "## Scenario\n\n1. Lo staff chiede il link di condivisione dal pannello checklist; viene copiato l'URL.\n2. Un esterno apre l'URL senza login e vede percentuale di completamento, elenco item (con quantità e link) e titolo del progetto.\n\n## Depends on capabilities\n\n- [[special-projects-initiatives/cap-project-checklist-public-share]]\n\n## Known gaps\n\n- Nessuna revoca/scadenza del token.\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-checklist-public-share",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProjectChecklistShareLink.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/getProjectChecklistShareStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/dc-project",
+    "type": "domain_concept",
+    "name": "Progetto (project)",
+    "body": "## Definition\n\nEntità `projects/{projectId}` che traccia un progetto tecnico, un'iniziativa o un evento: titolo, descrizione, tipo, stato, riferimenti alle checklist collegate e sottocollezione `events` con la cronologia. Il nome interno è \"project\"; il dominio di business è \"Progetti Speciali e Iniziative\".\n\n## Also known as\n\nIniziativa, evento (valori di `projectType`); \"Progetti speciali\".\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/dc-project-status",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/projectAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/dc-project-status",
+    "type": "domain_concept",
+    "name": "Stato del progetto",
+    "body": "## Definition\n\nUno tra `new` (default, anche per i legacy `draft`), `active`, `standby`, `archived`, `closed`. `new`/`active` permettono modifiche al contenuto; `standby` permette solo note e cambi di stato; `archived`/`closed` sono terminali e bloccano tutto tranne l'eliminazione. Vedi [[special-projects-initiatives/cap-project-lifecycle-and-rbac]].\n\n## Also known as\n\n`ProjectStatus`, \"stato terminale\" (archived/closed).\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/projectAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/dc-project-type",
+    "type": "domain_concept",
+    "name": "Tipo di progetto (projectType)",
+    "body": "## Definition\n\nStringa libera ed estensibile assegnata alla creazione (default UI: `progetto`, `iniziativa`, `evento`). Funge anche da categoria opaca delle checklist create per il progetto ([[process-organizer-core/concept-opaque-category]]) e da filtro in lista.\n\n## Also known as\n\nCategoria del progetto.\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "process-organizer-core/concept-opaque-category",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProject.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProjectChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/projects/ProjectsListPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/dc-project-event",
+    "type": "domain_concept",
+    "name": "Evento di cronologia del progetto",
+    "body": "## Definition\n\nDocumento `projects/{id}/events/{eventId}` con `fromStatus`, `toStatus`, `note`, `createdBy`, `timestamp`. Creato da ogni `changeProjectStatus`; una nota pura ha `fromStatus === toStatus`.\n\n## Also known as\n\nNota di stato, cronologia.\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/changeProjectStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/getProject.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "special-projects-initiatives/dc-project-checklist-share-link",
+    "type": "domain_concept",
+    "name": "Link di condivisione checklist progetto",
+    "body": "## Definition\n\nDocumento `projectChecklistShareLinks/{token}` (token UUID) che lega una checklist a un progetto per l'accesso pubblico read-only all'avanzamento. Uno per checklist, riusato alle richieste successive.\n\n## Also known as\n\nShare token, link pubblico.\n",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "special-projects-initiatives/cap-project-checklist-public-share",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/projects/createProjectChecklistShareLink.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  }
+]
