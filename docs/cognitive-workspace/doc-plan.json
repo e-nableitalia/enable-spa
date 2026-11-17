@@ -1,6 +1,6 @@
 {
-  "status": "approved",
-  "generated_at": "2026-07-09T00:00:00Z",
+  "status": "draft",
+  "generated_at": "2026-11-17T00:00:00Z",
   "entries": [
     {
       "page_key": "home",
@@ -12,9 +12,19 @@
         "domain:device-requests",
         "domain:volunteer-management",
         "domain:shipments",
-        "domain:security"
+        "domain:security",
+        "section-0",
+        "section-1",
+        "section-3",
+        "section-4",
+        "section-5",
+        "section-6",
+        "section-7",
+        "section-8",
+        "section-9"
       ],
-      "confluence_page_id": "2949223"
+      "confluence_page_id": "2949223",
+      "narrative_stale": true
     },
     {
       "page_key": "domain:auth",
@@ -33,7 +43,8 @@
         "node:auth/dc-pending-registration",
         "node:auth/dc-must-set-password"
       ],
-      "confluence_page_id": "2719812"
+      "confluence_page_id": "2719812",
+      "narrative_stale": true
     },
     {
       "page_key": "domain:device-requests",
@@ -45,7 +56,8 @@
         "group:device-requests:admin-ops",
         "group:device-requests:messaging"
       ],
-      "confluence_page_id": "3211265"
+      "confluence_page_id": "3211265",
+      "narrative_stale": true
     },
     {
       "page_key": "group:device-requests:lifecycle",
@@ -74,7 +86,8 @@
         "node:device-requests/dc-requires-attention",
         "node:device-requests/dc-counter"
       ],
-      "confluence_page_id": "3145754"
+      "confluence_page_id": "3145754",
+      "narrative_stale": true
     },
     {
       "page_key": "group:device-requests:admin-ops",
@@ -91,7 +104,8 @@
         "node:device-requests/dc-device-type",
         "node:device-requests/dc-age-range"
       ],
-      "confluence_page_id": "3244033"
+      "confluence_page_id": "3244033",
+      "narrative_stale": true
     },
     {
       "page_key": "group:device-requests:messaging",
@@ -104,7 +118,8 @@
         "node:device-requests/uc-admin-sends-global-message",
         "node:device-requests/dc-global-message"
       ],
-      "confluence_page_id": "3276801"
+      "confluence_page_id": "3276801",
+      "narrative_stale": true
     },
     {
       "page_key": "domain:volunteer-management",
@@ -116,7 +131,8 @@
         "group:volunteer-management:profile",
         "node:volunteer-management/cap-admin-volunteer-view"
       ],
-      "confluence_page_id": "3244053"
+      "confluence_page_id": "3244053",
+      "narrative_stale": true
     },
     {
       "page_key": "group:volunteer-management:onboarding",
@@ -131,7 +147,8 @@
         "node:volunteer-management/uc-admin-activates-volunteer",
         "node:volunteer-management/dc-contact"
       ],
-      "confluence_page_id": "2818136"
+      "confluence_page_id": "2818136",
+      "narrative_stale": true
     },
     {
       "page_key": "group:volunteer-management:profile",
@@ -145,7 +162,8 @@
         "node:volunteer-management/dc-volunteer",
         "node:volunteer-management/dc-3d-printer"
       ],
-      "confluence_page_id": "2687058"
+      "confluence_page_id": "2687058",
+      "narrative_stale": true
     },
     {
       "page_key": "domain:shipments",
@@ -160,7 +178,8 @@
         "node:shipments/uc-delete-shipment-request",
         "node:shipments/dc-shipment-request"
       ],
-      "confluence_page_id": "3309569"
+      "confluence_page_id": "3309569",
+      "narrative_stale": true
     },
     {
       "page_key": "domain:security",
@@ -178,7 +197,8 @@
         "node:security/dc-rate-limit-entry",
         "node:security/dc-recaptcha-assessment"
       ],
-      "confluence_page_id": "3112981"
+      "confluence_page_id": "3112981",
+      "narrative_stale": true
     },
     {
       "page_key": "node:auth/cap-email-link-registration",
@@ -593,6 +613,1755 @@
       "type": "node",
       "source_ref": "volunteer-management/uc-volunteer-onboarding",
       "confluence_page_id": "2981889"
+    },
+    {
+      "page_key": "section-0",
+      "type": "structural",
+      "title": "Reading guide",
+      "section": 0,
+      "content_class": "narrative",
+      "purpose": "Tell each reader profile where to start in this space.",
+      "audience": "All readers",
+      "reading_order": 0,
+      "reading_path": [
+        "committente",
+        "architetto",
+        "sviluppatore",
+        "operations",
+        "test"
+      ],
+      "children": [],
+      "narrative": "This space documents enable-spa, the web portal of e-Nable Italia for managing requests for 3D-printed prosthetic devices and for coordinating the association's volunteers. The documentation is organised in numbered sections, from context to references, and the reading paths below tell you where to begin.\n\n- **Sponsor / association board**: start from Context and objectives (section 1), then the Architecture overview (section 3) and the chapters of the domains you care about; open points are collected in section 8.\n- **Architect**: Architecture overview and the domain chapters in section 3, then the decision index (also section 3) and the interface cards in section 5.\n- **Developer**: the domain chapters, the functional specifications of section 4 for the flows you are touching, and the node reference pages of section 9 for the detailed capabilities, use cases and domain concepts.\n- **Operations**: section 6 (installation, configuration, runbooks) together with the Super Admin and Security chapters.\n- **Test**: functional specifications (section 4) for scenarios and the traceability matrix in section 7.\n\nChapters of the architecture section follow a deliberate order, not an alphabetical one: cross-cutting foundations first, then the domains that build on them. No approved project plan exists yet, so the order is a proposal motivated in the plan revision log."
+    },
+    {
+      "page_key": "section-1",
+      "type": "structural",
+      "title": "Context and objectives",
+      "section": 1,
+      "content_class": "narrative",
+      "purpose": "Scope, constraints and shared vocabulary of the system.",
+      "audience": "Sponsor, architect",
+      "reading_order": 1,
+      "reading_path": [
+        "committente",
+        "architetto"
+      ],
+      "children": [
+        "generated-glossary"
+      ],
+      "grounding": [
+        "security/cap-rate-limiting"
+      ],
+      "narrative": "enable-spa is a single-page application on Firebase (Hosting, Authentication, Firestore, Cloud Functions v2 in europe-west1) serving three audiences: citizens who request a device through a public form, volunteers who build and ship devices, and administrators who coordinate everything. The discovery context records the shared constraints that shape every domain: personal data of requesters is always kept separate from the main request document, every callable logs to the security log, emails are queued through the Trigger Email extension rather than sent directly, and access is governed by a two-role RBAC model with a separate super-admin flag for platform operations.\n\nThe glossary page, computed from the workspace, collects the terms used across domains. This section deliberately does not restate the project scope beyond this: the perimeter of each domain is described in its own chapter in section 3. The workspace does not document business goals, success metrics or non-functional targets; this gap is reported in section 8."
+    },
+    {
+      "page_key": "section-3",
+      "type": "structural",
+      "title": "Architecture",
+      "section": 3,
+      "content_class": "narrative",
+      "purpose": "Architectural overview of the domains and one chapter per domain.",
+      "audience": "Architect, developer",
+      "reading_order": 2,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "children": [
+        "arch-overview",
+        "domain:contacts",
+        "domain:process-organizer-core",
+        "domain:attachments",
+        "domain:special-projects-initiatives",
+        "domain:super-admin",
+        "generated-decision-index"
+      ],
+      "narrative": "This section presents the system from the top: first an overview of how the ten domains relate, then one chapter per domain with its intent, boundaries and entry points, and finally the index of design decisions computed from the solution studies. Chapters (the existing ones for security, authentication, volunteers, device requests and shipments join this section once the proposed moves are approved) are ordered from cross-cutting foundations (security, authentication) through the people-facing domains, then the two generic modules (checklists and attachments), then the domains that consume them, and finally platform operations."
+    },
+    {
+      "page_key": "arch-overview",
+      "type": "structural",
+      "title": "Architecture overview",
+      "section": 3,
+      "content_class": "narrative",
+      "purpose": "Show how domains depend on each other and how data flows end to end.",
+      "audience": "Architect, developer",
+      "reading_order": 3,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "grounding": [
+        "security/cap-rate-limiting",
+        "security/cap-recaptcha-verification",
+        "security/cap-security-audit-logging",
+        "process-organizer-core/cap-checklist-instance-lifecycle",
+        "attachments/cap-attachment-catalog-model",
+        "special-projects-initiatives/cap-project-checklists",
+        "super-admin/cap-super-admin-gated-operations"
+      ],
+      "page_status": "as-built",
+      "narrative": "The system is a React single-page application that talks exclusively to Firebase callable functions. Two ideas organise the domains.\n\n**Cross-cutting foundations.** The security module (RBAC, rate limiting, reCAPTCHA, audit log) is not a business domain: it is used by the entry points of authentication, device requests, volunteers, shipments, contacts and, through the shared super-admin gate, by platform operations. Documenting it first explains why every other chapter mentions the same guards.\n\n**Generic modules reused by business domains.** The checklist module (process-organizer-core) and the attachments module are deliberately agnostic of their consumers. Device requests use both; special projects use both through thin wrappers. The workspace records these dependencies explicitly in the relates_to links of the special-projects capabilities, which depend on the checklist lifecycle, the completeness gate and the attachment catalog and RBAC. The reverse direction does not exist: the generic modules know nothing about their consumers.\n\nThe diagrams show the dependency structure and the two main end-to-end flows. The identity flow (registration to activation) and the device request flow (public submission to completion) are those documented in the discovery context; the interaction between the contacts form and volunteer invitations is only partially documented: invitations are sent from the contacts list in the volunteer-management area, as stated in the contacts domain summary.\n\nImplementation status per slot is not available because no approved project plan exists; see section 8.",
+      "diagrams": [
+        {
+          "title": "Domain dependencies",
+          "derived_from": [
+            "special-projects-initiatives/cap-project-checklists",
+            "special-projects-initiatives/cap-project-attachments",
+            "super-admin/cap-super-admin-gated-operations",
+            "attachments/uc-attach-file-to-entity",
+            "discover-context"
+          ],
+          "mermaid": "flowchart TD\n  SEC[security]\n  AUTH[auth] --> SEC\n  CON[contacts] --> SEC\n  VOL[volunteer-management] --> SEC\n  DEV[device-requests] --> SEC\n  SHP[shipments] --> SEC\n  PRJ[special-projects-initiatives] --> SEC\n  SA[super-admin] --> SEC\n  DEV --> POC[process-organizer-core]\n  DEV --> ATT[attachments]\n  PRJ --> POC\n  PRJ --> ATT"
+        },
+        {
+          "title": "Request and onboarding flows",
+          "derived_from": [
+            "discover-context"
+          ],
+          "mermaid": "sequenceDiagram\n  participant C as Citizen\n  participant F as Public form\n  participant B as Callable backend\n  participant A as Admin\n  participant V as Volunteer\n  C->>F: Fill device request\n  F->>B: createDeviceRequest\n  B->>B: reCAPTCHA and rate limit\n  B-->>A: Notification\n  A->>B: Validate and assign volunteer\n  V->>B: Advance production status\n  A->>B: Ship and complete"
+        }
+      ]
+    },
+    {
+      "page_key": "domain:contacts",
+      "type": "structural",
+      "title": "Contacts",
+      "section": 3,
+      "content_class": "narrative",
+      "purpose": "Architectural chapter of the contacts domain.",
+      "audience": "Architect, developer",
+      "reading_order": 5,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "grounding": [
+        "contacts/cap-public-contact-form",
+        "contacts/cap-create-contact-request",
+        "contacts/cap-contact-validation",
+        "contacts/cap-contact-anti-spam",
+        "contacts/cap-contact-origin-profile-helpers",
+        "contacts/uc-visitor-sends-contact-request",
+        "contacts/dc-contact-document",
+        "contacts/dc-contact-profile",
+        "contacts/dc-contact-origin"
+      ],
+      "page_status": "as-built",
+      "narrative": "The contacts domain is the public entry point for people who want to get in touch with the association: a form at /contatti, a callable that validates and stores the request, and an anti-spam layer shared with the rest of the platform. Its boundary is deliberately narrow. Administration of contacts (status, invitation to join the community) is not part of this domain: the contacts list lives under the volunteer-management paths, and the domain summary states that no further administrative management is planned. The contact document carries a profile (\"who are you\") and an origin, which front-end helpers use to present and classify requests.\n\nThe workspace does not document how a contact request is notified to administrators; the flow beyond persistence is therefore not described here.",
+      "diagrams": [
+        {
+          "title": "Contact request flow",
+          "derived_from": [
+            "contacts/cap-public-contact-form",
+            "contacts/cap-create-contact-request",
+            "contacts/cap-contact-validation",
+            "contacts/cap-contact-anti-spam",
+            "contacts/dc-contact-document"
+          ],
+          "mermaid": "flowchart LR\n  V[Visitor] --> F[Contact form]\n  F --> C[createContactRequest]\n  C --> AS[Anti-spam]\n  C --> VAL[Validation]\n  C --> DOC[(contacts document)]"
+        }
+      ]
+    },
+    {
+      "page_key": "domain:process-organizer-core",
+      "type": "structural",
+      "title": "Process Organizer Core",
+      "section": 3,
+      "content_class": "narrative",
+      "purpose": "Architectural chapter of the process-organizer-core domain.",
+      "audience": "Architect, developer",
+      "reading_order": 7,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "grounding": [
+        "process-organizer-core/cap-checklist-instance-lifecycle",
+        "process-organizer-core/cap-checklist-item-management",
+        "process-organizer-core/cap-checklist-template-catalog",
+        "process-organizer-core/cap-completeness-gate",
+        "process-organizer-core/uc-instantiate-checklist-from-template",
+        "process-organizer-core/uc-clone-checklist-instance",
+        "process-organizer-core/uc-verify-checklist-completeness",
+        "process-organizer-core/uc-manage-template-catalog",
+        "process-organizer-core/concept-checklist-item-status",
+        "process-organizer-core/concept-opaque-category",
+        "process-organizer-core/concept-historical-template-reference",
+        "process-organizer-core/cap-my-checklist-items",
+        "process-organizer-core/uc-view-my-assigned-items",
+        "process-organizer-core/concept-checklist-item-type",
+        "process-organizer-core/concept-checklist-origin"
+      ],
+      "page_status": "as-built",
+      "narrative": "Process Organizer Core is the generic checklist engine. It owns checklist instances, items with a status and a type, a catalog of reusable templates and a completeness gate. Its design choice is opacity: the category that links a template to a use (for example a device type) is an opaque string, and each checklist keeps a historical reference to the template or source it was created from, so later template edits never rewrite existing instances. The gate reports whether a checklist is complete but never blocks a transition by itself; the consumer decides how to use it, as stated in the checklist lifecycle described in the discovery context.\n\nA cross-consumer aggregation, \"My items\", lists the items assigned to a user across all checklists, using the checklist origin to tell where each one comes from. Consumers are device requests (production checklists per device type) and special projects (labelled to-do lists). The module is the foundation on which both build their domain-specific wrappers and RBAC.",
+      "diagrams": [
+        {
+          "title": "Checklist module structure",
+          "derived_from": [
+            "process-organizer-core/cap-checklist-template-catalog",
+            "process-organizer-core/cap-checklist-instance-lifecycle",
+            "process-organizer-core/cap-checklist-item-management",
+            "process-organizer-core/cap-completeness-gate",
+            "process-organizer-core/cap-my-checklist-items"
+          ],
+          "mermaid": "flowchart TD\n  TPL[Template catalog] --> INST[Checklist instance]\n  INST --> ITEM[Items]\n  ITEM --> GATE[Completeness gate]\n  ITEM --> MY[My items]\n  DEV[device-requests] --> INST\n  PRJ[special projects] --> INST"
+        }
+      ]
+    },
+    {
+      "page_key": "domain:attachments",
+      "type": "structural",
+      "title": "Attachments",
+      "section": 3,
+      "content_class": "narrative",
+      "purpose": "Architectural chapter of the attachments domain.",
+      "audience": "Architect, developer",
+      "reading_order": 8,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "grounding": [
+        "attachments/cap-attachment-catalog-model",
+        "attachments/cap-upload-attachment",
+        "attachments/cap-list-attachments",
+        "attachments/cap-download-attachment",
+        "attachments/cap-update-attachment-metadata",
+        "attachments/cap-delete-attachment",
+        "attachments/cap-attachment-rbac",
+        "attachments/cap-attachments-ui",
+        "attachments/uc-attach-file-to-entity",
+        "attachments/uc-browse-and-download",
+        "attachments/uc-edit-or-remove-own-attachment",
+        "attachments/dc-retention",
+        "attachments/dc-attachment-two-level-index",
+        "attachments/dc-signed-url"
+      ],
+      "page_status": "as-built",
+      "narrative": "Attachments is a generic capability for attaching files to higher-level entities, visible to staff only (administrators and volunteers). It stores metadata in two places written atomically, a top-level catalog and an index under the owning entity, and moves file content directly between the client and Cloud Storage through short-lived signed URLs, so file bytes never pass through a Cloud Function. The module does not know its consumers: entity type, id and collection path are opaque parameters, and RBAC is enforced by the callables, with a differentiated rule for owner versus administrator. Only the issue of a signed URL is recorded in the security log.\n\nDevice requests and special projects integrate the module through their own thin wrappers. Open operational points (bucket provisioning, the 50 MB size limit that the operator never confirmed) are tracked as findings in the gap register of section 8.",
+      "diagrams": [
+        {
+          "title": "Upload and download with signed URLs",
+          "derived_from": [
+            "attachments/cap-upload-attachment",
+            "attachments/cap-download-attachment",
+            "attachments/dc-signed-url",
+            "attachments/cap-attachment-catalog-model"
+          ],
+          "mermaid": "sequenceDiagram\n  participant U as Staff user\n  participant CF as Attachment callable\n  participant FS as Firestore\n  participant GCS as Cloud Storage\n  U->>CF: uploadAttachment\n  CF->>CF: RBAC and audit\n  CF-->>U: Signed URL\n  U->>GCS: Upload file\n  CF->>FS: Catalog and entity index"
+        }
+      ]
+    },
+    {
+      "page_key": "domain:special-projects-initiatives",
+      "type": "structural",
+      "title": "Special Projects and Initiatives",
+      "section": 3,
+      "content_class": "narrative",
+      "purpose": "Architectural chapter of the special-projects-initiatives domain.",
+      "audience": "Architect, developer",
+      "reading_order": 10,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "grounding": [
+        "special-projects-initiatives/cap-project-crud",
+        "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "special-projects-initiatives/cap-project-checklists",
+        "special-projects-initiatives/cap-project-checklist-public-share",
+        "special-projects-initiatives/cap-project-attachments",
+        "special-projects-initiatives/cap-projects-workspace-ui",
+        "special-projects-initiatives/uc-create-and-plan-project",
+        "special-projects-initiatives/uc-change-project-status",
+        "special-projects-initiatives/uc-share-project-checklist-progress",
+        "special-projects-initiatives/dc-project",
+        "special-projects-initiatives/dc-project-status",
+        "special-projects-initiatives/dc-project-type",
+        "special-projects-initiatives/dc-project-event",
+        "special-projects-initiatives/dc-project-checklist-share-link"
+      ],
+      "page_status": "as-built",
+      "narrative": "This domain tracks technical projects, initiatives and events as a \"project\" entity with an extensible type and a five-value status (new, active, standby, archived, closed). Edits are restricted in standby, archived and closed states, creation is admin-only and item assignment is open to volunteers. A project does not implement its own task engine: it holds one or more labelled to-do lists as checklists of the Process Organizer Core, with a public read-only share link for sharing progress with outsiders, and it uses the attachments module for its files. The relates_to links of its capabilities make these dependencies explicit and one-directional.\n\nThe design came from the special-projects solution study listed in the decision index of this section.",
+      "diagrams": [
+        {
+          "title": "Project composition",
+          "derived_from": [
+            "special-projects-initiatives/cap-project-crud",
+            "special-projects-initiatives/cap-project-checklists",
+            "special-projects-initiatives/cap-project-attachments",
+            "special-projects-initiatives/cap-project-checklist-public-share",
+            "special-projects-initiatives/cap-projects-workspace-ui"
+          ],
+          "mermaid": "flowchart TD\n  UI[Projects workspace] --> P[Project]\n  P --> LC[Lifecycle and RBAC]\n  P --> CL[Checklists]\n  P --> AT[Attachments]\n  CL --> POC[process-organizer-core]\n  AT --> ATT[attachments module]\n  CL --> SH[Public share link]"
+        }
+      ]
+    },
+    {
+      "page_key": "domain:super-admin",
+      "type": "structural",
+      "title": "Super Admin",
+      "section": 3,
+      "content_class": "narrative",
+      "purpose": "Architectural chapter of the super-admin domain.",
+      "audience": "Architect, developer",
+      "reading_order": 11,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "grounding": [
+        "super-admin/cap-email-template-deploy",
+        "super-admin/cap-email-template-registry",
+        "super-admin/cap-firestore-backup",
+        "super-admin/cap-super-admin-gated-operations",
+        "super-admin/cap-super-admin-page",
+        "super-admin/uc-deploy-email-templates",
+        "super-admin/uc-trigger-firestore-backup",
+        "super-admin/concept-super-admin-flag",
+        "super-admin/concept-email-templates-collection",
+        "super-admin/concept-backup-bucket"
+      ],
+      "page_status": "as-built",
+      "narrative": "Super Admin groups the platform operations that only a user flagged superAdmin may run: deploying the versioned email template registry to Firestore and triggering a native Firestore export to a dedicated bucket with a 30-day lifecycle. The flag is additive to the admin role and is never a third role value; it is bootstrapped by hand in the Firestore console, and no function writes it on behalf of other users. The shared gate lives in the security module, so this domain contains only the operations and the page that exposes them. The gate is enforced by the backend: the UI page remains reachable by menu or URL for any admin.\n\nTemplate deployment is forward-only: the registry in code is the source of truth and deployment copies it into the emailTemplates collection.",
+      "diagrams": [
+        {
+          "title": "Super-admin gated operations",
+          "derived_from": [
+            "super-admin/cap-super-admin-gated-operations",
+            "super-admin/cap-email-template-deploy",
+            "super-admin/cap-firestore-backup",
+            "super-admin/cap-super-admin-page"
+          ],
+          "mermaid": "flowchart LR\n  PAGE[Super Admin page] --> GATE{superAdmin gate}\n  GATE --> DEP[Deploy email templates]\n  GATE --> BK[Trigger Firestore backup]\n  REG[Template registry in code] --> DEP\n  DEP --> COL[(emailTemplates)]\n  BK --> BUC[(Backup bucket)]"
+        }
+      ]
+    },
+    {
+      "page_key": "section-4",
+      "type": "structural",
+      "title": "Functional specifications",
+      "section": 4,
+      "content_class": "narrative",
+      "purpose": "Functional areas of the system and the flows that cross domains.",
+      "audience": "Sponsor, developer, test",
+      "reading_order": 20,
+      "reading_path": [
+        "committente",
+        "sviluppatore",
+        "test"
+      ],
+      "children": [
+        "func-onboarding",
+        "func-device-requests",
+        "func-checklists",
+        "func-projects-attachments",
+        "func-shipments",
+        "func-platform-operations"
+      ],
+      "narrative": "Functional specifications are grouped by area rather than by domain, because users experience flows that cross domains. Each page explains the flow and its actors; the indexes of capabilities and use cases are generated from the grounding and link to the reference pages in section 9. Areas follow the same order as the architecture chapters."
+    },
+    {
+      "page_key": "func-onboarding",
+      "type": "structural",
+      "title": "Registration, contacts and volunteer onboarding",
+      "section": 4,
+      "content_class": "narrative",
+      "purpose": "Explain the functional flows of this area.",
+      "audience": "Sponsor, developer, test",
+      "reading_order": 21,
+      "reading_path": [
+        "committente",
+        "sviluppatore",
+        "test"
+      ],
+      "grounding": [
+        "auth/cap-email-link-registration",
+        "auth/cap-google-oauth-registration",
+        "auth/cap-password-login",
+        "auth/cap-set-password",
+        "auth/uc-volunteer-email-registration",
+        "auth/uc-google-oauth-login",
+        "auth/uc-post-registration-password-setup",
+        "contacts/cap-public-contact-form",
+        "contacts/cap-create-contact-request",
+        "contacts/cap-contact-validation",
+        "contacts/cap-contact-anti-spam",
+        "contacts/cap-contact-origin-profile-helpers",
+        "contacts/uc-visitor-sends-contact-request",
+        "volunteer-management/cap-volunteer-activation",
+        "volunteer-management/cap-volunteer-profile-management",
+        "volunteer-management/cap-printer-registry",
+        "volunteer-management/cap-consent-collection",
+        "volunteer-management/cap-volunteer-invitation",
+        "volunteer-management/cap-admin-volunteer-view",
+        "volunteer-management/uc-volunteer-onboarding",
+        "volunteer-management/uc-admin-activates-volunteer",
+        "volunteer-management/uc-volunteer-manages-workload",
+        "volunteer-management/cap-volunteer-requests-workspace",
+        "volunteer-management/cap-volunteer-checklist-todo",
+        "volunteer-management/cap-volunteer-contacts-csv-import"
+      ],
+      "page_status": "as-built",
+      "narrative": "A volunteer reaches the system either through the public contact form, followed by an invitation sent by an administrator, or directly through registration. Registration offers two paths that converge on the same user model: an email link carrying a one-time code, or Google sign-in; only the email path requires setting a password afterwards. New accounts are created inactive with the volunteer role. Before sensitive operations the volunteer must accept the privacy and operational consents, and an administrator then activates the account. The security guards (reCAPTCHA, rate limit, audit log) apply to the public steps. Day-to-day volunteer work (profile, printers, request workspace, personal to-do list, CSV import of contacts by administrators) is covered by the volunteer-management use cases linked from this page."
+    },
+    {
+      "page_key": "func-device-requests",
+      "type": "structural",
+      "title": "Device request handling",
+      "section": 4,
+      "content_class": "narrative",
+      "purpose": "Explain the functional flows of this area.",
+      "audience": "Sponsor, developer, test",
+      "reading_order": 22,
+      "reading_path": [
+        "committente",
+        "sviluppatore",
+        "test"
+      ],
+      "grounding": [
+        "device-requests/cap-public-request-submission",
+        "device-requests/cap-request-lifecycle-management",
+        "device-requests/cap-request-validation",
+        "device-requests/cap-volunteer-assignment",
+        "device-requests/cap-admin-request-views",
+        "device-requests/cap-internal-import",
+        "device-requests/cap-global-messaging",
+        "device-requests/cap-email-log-monitoring",
+        "device-requests/uc-citizen-requests-device",
+        "device-requests/uc-admin-validates-request",
+        "device-requests/uc-admin-assigns-volunteer",
+        "device-requests/uc-volunteer-advances-production",
+        "device-requests/uc-admin-marks-attention",
+        "device-requests/uc-admin-adds-note",
+        "device-requests/uc-admin-bulk-change-status",
+        "device-requests/uc-admin-imports-legacy-data",
+        "device-requests/uc-admin-migrates-volunteer-field",
+        "device-requests/uc-admin-sends-global-message",
+        "device-requests/uc-followup-failure",
+        "device-requests/cap-request-archiving",
+        "device-requests/cap-family-consent-tracking",
+        "device-requests/cap-documents-email",
+        "device-requests/cap-request-checklists",
+        "device-requests/cap-checklist-template-catalog",
+        "device-requests/cap-production-checklist-auto-creation",
+        "device-requests/cap-checklist-public-share",
+        "device-requests/cap-request-attachments",
+        "device-requests/cap-status-change-notifications",
+        "device-requests/cap-request-list-filtering",
+        "device-requests/uc-admin-archives-request",
+        "device-requests/uc-admin-acquires-consent-and-sends-documents",
+        "device-requests/uc-volunteer-works-checklist",
+        "device-requests/uc-admin-manages-checklist-templates",
+        "device-requests/uc-family-follows-checklist-progress",
+        "device-requests/uc-volunteer-manages-attachments"
+      ],
+      "page_status": "as-built",
+      "narrative": "The central flow of the product: a citizen submits a public request, an administrator validates it and assigns volunteers, volunteers advance production through restricted status transitions, and the request ends with shipment and a follow-up with the family. Around this backbone the area covers administrative views and bulk operations, legacy data import, global messaging and email log monitoring, family consent and document emails, archiving, status-change notifications and per-request attachments and checklists. Public status and private status are kept separate so that the requester sees a simplified view. Status values and transitions are described in the reference pages of the status lifecycle concept; the area deliberately does not repeat them."
+    },
+    {
+      "page_key": "func-checklists",
+      "type": "structural",
+      "title": "Checklists and to-do lists",
+      "section": 4,
+      "content_class": "narrative",
+      "purpose": "Explain the functional flows of this area.",
+      "audience": "Sponsor, developer, test",
+      "reading_order": 23,
+      "reading_path": [
+        "sviluppatore",
+        "test"
+      ],
+      "grounding": [
+        "process-organizer-core/cap-checklist-instance-lifecycle",
+        "process-organizer-core/cap-checklist-item-management",
+        "process-organizer-core/cap-checklist-template-catalog",
+        "process-organizer-core/cap-completeness-gate",
+        "process-organizer-core/uc-instantiate-checklist-from-template",
+        "process-organizer-core/uc-clone-checklist-instance",
+        "process-organizer-core/uc-verify-checklist-completeness",
+        "process-organizer-core/uc-manage-template-catalog",
+        "process-organizer-core/cap-my-checklist-items",
+        "process-organizer-core/uc-view-my-assigned-items"
+      ],
+      "page_status": "as-built",
+      "narrative": "Checklists cut across device requests and projects. An administrator maintains templates by category; a checklist is instantiated for a request according to its device type, or cloned; items are assigned and progress through statuses; the completeness gate tells a consumer whether the list is ready; and each user sees their assigned items in a single aggregated view. Families and external parties can follow progress through a public read-only link. The flow bound to device requests is described in the discovery context; the corresponding project flow is in the projects area."
+    },
+    {
+      "page_key": "func-projects-attachments",
+      "type": "structural",
+      "title": "Projects and attachments",
+      "section": 4,
+      "content_class": "narrative",
+      "purpose": "Explain the functional flows of this area.",
+      "audience": "Sponsor, developer, test",
+      "reading_order": 24,
+      "reading_path": [
+        "committente",
+        "sviluppatore",
+        "test"
+      ],
+      "grounding": [
+        "special-projects-initiatives/cap-project-crud",
+        "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "special-projects-initiatives/cap-project-checklists",
+        "special-projects-initiatives/cap-project-checklist-public-share",
+        "special-projects-initiatives/cap-project-attachments",
+        "special-projects-initiatives/cap-projects-workspace-ui",
+        "special-projects-initiatives/uc-create-and-plan-project",
+        "special-projects-initiatives/uc-change-project-status",
+        "special-projects-initiatives/uc-share-project-checklist-progress",
+        "attachments/cap-attachment-catalog-model",
+        "attachments/cap-upload-attachment",
+        "attachments/cap-list-attachments",
+        "attachments/cap-download-attachment",
+        "attachments/cap-update-attachment-metadata",
+        "attachments/cap-delete-attachment",
+        "attachments/cap-attachment-rbac",
+        "attachments/cap-attachments-ui",
+        "attachments/uc-attach-file-to-entity",
+        "attachments/uc-browse-and-download",
+        "attachments/uc-edit-or-remove-own-attachment"
+      ],
+      "page_status": "as-built",
+      "narrative": "Administrators create projects, initiatives and events, plan them with checklists and attach files; volunteers can take items. Status changes (standby, archive, close) restrict later edits. Attachments follow the same rules everywhere: staff only, description and retention mandatory, owner or administrator can edit or delete. Public progress sharing exposes only the checklist, not the project."
+    },
+    {
+      "page_key": "func-shipments",
+      "type": "structural",
+      "title": "Shipments",
+      "section": 4,
+      "content_class": "narrative",
+      "purpose": "Explain the functional flows of this area.",
+      "audience": "Sponsor, developer, test",
+      "reading_order": 25,
+      "reading_path": [
+        "sviluppatore",
+        "test"
+      ],
+      "grounding": [
+        "shipments/cap-shipment-request-lifecycle",
+        "shipments/cap-known-address-suggestion",
+        "shipments/uc-create-shipment-request",
+        "shipments/uc-approve-shipment-request",
+        "shipments/uc-delete-shipment-request"
+      ],
+      "page_status": "as-built",
+      "narrative": "Shipment requests are a separate entity from the device request lifecycle: a sender, recipient and package dimensions are recorded, an administrator approves or deletes the request, and known addresses are suggested to speed up entry. The workspace does not document the link between a shipment request and a device request; this is reported in section 8."
+    },
+    {
+      "page_key": "func-platform-operations",
+      "type": "structural",
+      "title": "Platform and security operations",
+      "section": 4,
+      "content_class": "narrative",
+      "purpose": "Explain the functional flows of this area.",
+      "audience": "Sponsor, developer, test",
+      "reading_order": 26,
+      "reading_path": [
+        "operations",
+        "sviluppatore",
+        "test"
+      ],
+      "grounding": [
+        "security/cap-rate-limiting",
+        "security/cap-recaptcha-verification",
+        "security/cap-security-audit-logging",
+        "security/cap-admin-security-log-console",
+        "security/uc-antispam-public-forms",
+        "security/uc-audit-trail-consulta",
+        "super-admin/cap-email-template-deploy",
+        "super-admin/cap-email-template-registry",
+        "super-admin/cap-firestore-backup",
+        "super-admin/cap-super-admin-gated-operations",
+        "super-admin/cap-super-admin-page",
+        "super-admin/uc-deploy-email-templates",
+        "super-admin/uc-trigger-firestore-backup"
+      ],
+      "page_status": "as-built",
+      "narrative": "Operational flows for people running the platform: consulting the security audit trail from the administrator console, understanding how anti-spam on public forms behaves, deploying email templates and triggering a Firestore backup as super administrator."
+    },
+    {
+      "page_key": "section-5",
+      "type": "structural",
+      "title": "Interfaces",
+      "section": 5,
+      "content_class": "narrative",
+      "purpose": "Entry point for interface specifications.",
+      "audience": "Developer, architect",
+      "reading_order": 30,
+      "reading_path": [
+        "sviluppatore",
+        "architetto"
+      ],
+      "children": [
+        "iface-callables",
+        "iface-data-model",
+        "iface-integrations"
+      ],
+      "narrative": "The system exposes no formal interface description: there is no OpenAPI or JSON Schema source in the repository, since all business logic is published as Firebase callable functions. Interface specifications are therefore planned as detailed deliverables produced by a dedicated session, each grounded on the workspace nodes listed in its card."
+    },
+    {
+      "page_key": "iface-callables",
+      "type": "structural",
+      "title": "Callable function catalog",
+      "section": 5,
+      "content_class": "deliverable",
+      "purpose": "Specify each callable function: input, output, errors, role required and secrets, grouped by domain. Source declared only in code (functions/backend/src/index.ts).",
+      "audience": "Developer, test",
+      "grounding": [
+        "file:functions/backend/src/index.ts",
+        "attachments/cap-attachment-rbac",
+        "contacts/cap-create-contact-request",
+        "security/cap-rate-limiting"
+      ],
+      "page_status": "da produrre",
+      "reading_order": 31,
+      "reading_path": [
+        "sviluppatore",
+        "test"
+      ]
+    },
+    {
+      "page_key": "iface-data-model",
+      "type": "structural",
+      "title": "Firestore data model",
+      "section": 5,
+      "content_class": "deliverable",
+      "purpose": "Describe collections, sub-collections, key fields and access rules, including the separation of private data and the catalog plus index model of attachments.",
+      "audience": "Developer, architect",
+      "grounding": [
+        "file:firestore.rules",
+        "file:storage.rules",
+        "device-requests/dc-device-request",
+        "device-requests/dc-private-data-separation",
+        "attachments/dc-attachment-two-level-index",
+        "special-projects-initiatives/dc-project"
+      ],
+      "page_status": "da produrre",
+      "reading_order": 32,
+      "reading_path": [
+        "sviluppatore",
+        "architetto"
+      ]
+    },
+    {
+      "page_key": "iface-integrations",
+      "type": "structural",
+      "title": "External integrations and email contracts",
+      "section": 5,
+      "content_class": "deliverable",
+      "purpose": "Specify the contracts with reCAPTCHA Enterprise, the Telegram notification channel and the Trigger Email extension, including the email templates registry.",
+      "audience": "Developer, operations",
+      "grounding": [
+        "security/cap-recaptcha-verification",
+        "device-requests/cap-status-change-notifications",
+        "super-admin/cap-email-template-registry",
+        "super-admin/concept-email-templates-collection"
+      ],
+      "page_status": "da produrre",
+      "reading_order": 33,
+      "reading_path": [
+        "sviluppatore",
+        "operations"
+      ]
+    },
+    {
+      "page_key": "section-6",
+      "type": "structural",
+      "title": "Operations",
+      "section": 6,
+      "content_class": "narrative",
+      "purpose": "Installation, configuration and runbooks.",
+      "audience": "Operations",
+      "reading_order": 40,
+      "reading_path": [
+        "operations"
+      ],
+      "children": [
+        "ops-runbook-backup",
+        "ops-runbook-email-templates",
+        "ops-configuration",
+        "ops-monitoring"
+      ],
+      "narrative": "Operational documentation is planned as deliverable cards, since the workspace records the behaviour of the operations but not the procedures. The cards reference the nodes and findings that the producing session must use as sources."
+    },
+    {
+      "page_key": "ops-runbook-backup",
+      "type": "structural",
+      "title": "Runbook — Firestore backup",
+      "section": 6,
+      "content_class": "deliverable",
+      "purpose": "Step-by-step procedure to trigger and verify a Firestore export and to check the retention of the backup bucket.",
+      "audience": "Operations",
+      "grounding": [
+        "super-admin/cap-firestore-backup",
+        "super-admin/uc-trigger-firestore-backup",
+        "super-admin/concept-backup-bucket",
+        "F-40"
+      ],
+      "page_status": "da produrre",
+      "reading_order": 41,
+      "reading_path": [
+        "operations"
+      ]
+    },
+    {
+      "page_key": "ops-runbook-email-templates",
+      "type": "structural",
+      "title": "Runbook — Email template deployment",
+      "section": 6,
+      "content_class": "deliverable",
+      "purpose": "Procedure to deploy the versioned email template registry after a change in the repository, including the forward-only rule.",
+      "audience": "Operations",
+      "grounding": [
+        "super-admin/cap-email-template-deploy",
+        "super-admin/uc-deploy-email-templates",
+        "super-admin/concept-email-templates-collection"
+      ],
+      "page_status": "da produrre",
+      "reading_order": 42,
+      "reading_path": [
+        "operations"
+      ]
+    },
+    {
+      "page_key": "ops-configuration",
+      "type": "structural",
+      "title": "Installation and configuration",
+      "section": 6,
+      "content_class": "deliverable",
+      "purpose": "Installation of the Firebase project, secrets (reCAPTCHA, Telegram, mail sender), buckets and bootstrap of the first super administrator.",
+      "audience": "Operations, developer",
+      "grounding": [
+        "file:docs/cognitive-workspace/discover-context.json",
+        "super-admin/concept-super-admin-flag",
+        "attachments/dc-signed-url",
+        "F-40"
+      ],
+      "page_status": "da produrre",
+      "reading_order": 43,
+      "reading_path": [
+        "operations",
+        "sviluppatore"
+      ]
+    },
+    {
+      "page_key": "ops-monitoring",
+      "type": "structural",
+      "title": "Monitoring and audit logs",
+      "section": 6,
+      "content_class": "deliverable",
+      "purpose": "How to use the security log console and the email log page to monitor the platform and investigate incidents.",
+      "audience": "Operations",
+      "grounding": [
+        "security/cap-admin-security-log-console",
+        "security/uc-audit-trail-consulta",
+        "device-requests/cap-email-log-monitoring"
+      ],
+      "page_status": "da produrre",
+      "reading_order": 44,
+      "reading_path": [
+        "operations"
+      ]
+    },
+    {
+      "page_key": "section-7",
+      "type": "structural",
+      "title": "Quality and verification",
+      "section": 7,
+      "content_class": "narrative",
+      "purpose": "Traceability between workspace nodes and work items, and the state of test documentation.",
+      "audience": "Test, sponsor",
+      "reading_order": 50,
+      "reading_path": [
+        "test",
+        "committente"
+      ],
+      "children": [
+        "generated-traceability-matrix"
+      ],
+      "narrative": "This section hosts the traceability matrix computed from the workspace, which links nodes to the epics and stories that implemented them and lists the nodes without a work item. The workspace contains no test strategy, test scenario catalog or coverage data: testing is not described anywhere in the sources used for this plan, and this is reported as a documentation gap in section 8. Acceptance scenarios can be derived from the use cases in section 4 once a test strategy exists."
+    },
+    {
+      "page_key": "section-8",
+      "type": "structural",
+      "title": "Open points",
+      "section": 8,
+      "content_class": "narrative",
+      "purpose": "Gaps, risks and open design points.",
+      "audience": "All readers",
+      "reading_order": 60,
+      "reading_path": [
+        "committente",
+        "architetto",
+        "test"
+      ],
+      "children": [
+        "generated-gap-register",
+        "doc-gaps"
+      ],
+      "narrative": "Open points are of two kinds: findings recorded during the project (the generated gap register, which also tracks resolved ones), and gaps of this documentation space, described in the next page."
+    },
+    {
+      "page_key": "doc-gaps",
+      "type": "structural",
+      "title": "Documentation gaps",
+      "section": 8,
+      "content_class": "narrative",
+      "purpose": "List what the workspace does not document.",
+      "audience": "Sponsor, architect",
+      "reading_order": 61,
+      "reading_path": [
+        "committente",
+        "architetto"
+      ],
+      "grounding": [
+        "F-40",
+        "F-41",
+        "F-47"
+      ],
+      "page_status": "as-built",
+      "narrative": "The following gaps limit what this space can state.\n\n- **No approved project plan.** There is no docs/project-plans directory, so the chapter order is a proposal and there are no sequence, critical path or implementation status pages for slots.\n- **No ingested design documents.** No design specification has been ingested into the repository, so no paragraph of a design document can be cited or traced.\n- **No formal interface sources.** No OpenAPI or JSON Schema file exists; interface pages are deliverable cards in section 5.\n- **Test documentation is absent.** No test strategy, scenario catalog or coverage information is recorded in the workspace.\n- **Business context is thin.** Goals, success measures and non-functional targets are not in the workspace; section 1 is limited to the shared constraints.\n- **Cross-domain links not documented.** The link between shipment requests and device requests, and the notification path of the contact form, are not described in the nodes.\n- **Study ss-auth.** The gap register records repeated sessions started for a study ss-auth that was never created (findings F-47 and following); it is an open process issue, not a design decision.\n- **Attachments.** Findings F-40 and F-41 record the unconfirmed bucket provisioning and the unconfirmed upload size limit.\n- **Language of existing pages.** The pre-existing pages of this space were written in Italian; the revision log proposes aligning titles and marks their narratives to be refreshed in English."
+    },
+    {
+      "page_key": "section-9",
+      "type": "structural",
+      "title": "References",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Reference pages for every workspace node, grouped by domain.",
+      "audience": "Developer, architect",
+      "reading_order": 70,
+      "reading_path": [
+        "sviluppatore",
+        "architetto"
+      ],
+      "children": [
+        "reference:security",
+        "reference:auth",
+        "reference:contacts",
+        "reference:volunteer-management",
+        "reference:process-organizer-core",
+        "reference:attachments",
+        "reference:device-requests",
+        "reference:shipments",
+        "reference:special-projects-initiatives",
+        "reference:super-admin"
+      ],
+      "narrative": "Each workspace node (capability, use case, domain concept) has a reference page, grouped here by domain in the same order as the architecture chapters. Narrative pages in sections 1 to 8 cite these pages rather than reproducing them. No design documents are ingested and no domain contains decision nodes, so there are no decision-log groups yet; design decisions are listed in the generated decision index in section 3."
+    },
+    {
+      "page_key": "node:contacts/cap-public-contact-form",
+      "type": "node",
+      "source_ref": "contacts/cap-public-contact-form",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/cap-create-contact-request",
+      "type": "node",
+      "source_ref": "contacts/cap-create-contact-request",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/cap-contact-validation",
+      "type": "node",
+      "source_ref": "contacts/cap-contact-validation",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/cap-contact-anti-spam",
+      "type": "node",
+      "source_ref": "contacts/cap-contact-anti-spam",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/cap-contact-origin-profile-helpers",
+      "type": "node",
+      "source_ref": "contacts/cap-contact-origin-profile-helpers",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/uc-visitor-sends-contact-request",
+      "type": "node",
+      "source_ref": "contacts/uc-visitor-sends-contact-request",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/dc-contact-document",
+      "type": "node",
+      "source_ref": "contacts/dc-contact-document",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/dc-contact-profile",
+      "type": "node",
+      "source_ref": "contacts/dc-contact-profile",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:contacts/dc-contact-origin",
+      "type": "node",
+      "source_ref": "contacts/dc-contact-origin",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:volunteer-management/cap-volunteer-requests-workspace",
+      "type": "node",
+      "source_ref": "volunteer-management/cap-volunteer-requests-workspace",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:volunteer-management/cap-volunteer-checklist-todo",
+      "type": "node",
+      "source_ref": "volunteer-management/cap-volunteer-checklist-todo",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:volunteer-management/cap-volunteer-contacts-csv-import",
+      "type": "node",
+      "source_ref": "volunteer-management/cap-volunteer-contacts-csv-import",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/cap-checklist-instance-lifecycle",
+      "type": "node",
+      "source_ref": "process-organizer-core/cap-checklist-instance-lifecycle",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/cap-checklist-item-management",
+      "type": "node",
+      "source_ref": "process-organizer-core/cap-checklist-item-management",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/cap-checklist-template-catalog",
+      "type": "node",
+      "source_ref": "process-organizer-core/cap-checklist-template-catalog",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/cap-completeness-gate",
+      "type": "node",
+      "source_ref": "process-organizer-core/cap-completeness-gate",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/uc-instantiate-checklist-from-template",
+      "type": "node",
+      "source_ref": "process-organizer-core/uc-instantiate-checklist-from-template",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/uc-clone-checklist-instance",
+      "type": "node",
+      "source_ref": "process-organizer-core/uc-clone-checklist-instance",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/uc-verify-checklist-completeness",
+      "type": "node",
+      "source_ref": "process-organizer-core/uc-verify-checklist-completeness",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/uc-manage-template-catalog",
+      "type": "node",
+      "source_ref": "process-organizer-core/uc-manage-template-catalog",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/concept-checklist-item-status",
+      "type": "node",
+      "source_ref": "process-organizer-core/concept-checklist-item-status",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/concept-opaque-category",
+      "type": "node",
+      "source_ref": "process-organizer-core/concept-opaque-category",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/concept-historical-template-reference",
+      "type": "node",
+      "source_ref": "process-organizer-core/concept-historical-template-reference",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/cap-my-checklist-items",
+      "type": "node",
+      "source_ref": "process-organizer-core/cap-my-checklist-items",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/uc-view-my-assigned-items",
+      "type": "node",
+      "source_ref": "process-organizer-core/uc-view-my-assigned-items",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/concept-checklist-item-type",
+      "type": "node",
+      "source_ref": "process-organizer-core/concept-checklist-item-type",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:process-organizer-core/concept-checklist-origin",
+      "type": "node",
+      "source_ref": "process-organizer-core/concept-checklist-origin",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-attachment-catalog-model",
+      "type": "node",
+      "source_ref": "attachments/cap-attachment-catalog-model",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-upload-attachment",
+      "type": "node",
+      "source_ref": "attachments/cap-upload-attachment",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-list-attachments",
+      "type": "node",
+      "source_ref": "attachments/cap-list-attachments",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-download-attachment",
+      "type": "node",
+      "source_ref": "attachments/cap-download-attachment",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-update-attachment-metadata",
+      "type": "node",
+      "source_ref": "attachments/cap-update-attachment-metadata",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-delete-attachment",
+      "type": "node",
+      "source_ref": "attachments/cap-delete-attachment",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-attachment-rbac",
+      "type": "node",
+      "source_ref": "attachments/cap-attachment-rbac",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/cap-attachments-ui",
+      "type": "node",
+      "source_ref": "attachments/cap-attachments-ui",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/uc-attach-file-to-entity",
+      "type": "node",
+      "source_ref": "attachments/uc-attach-file-to-entity",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/uc-browse-and-download",
+      "type": "node",
+      "source_ref": "attachments/uc-browse-and-download",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/uc-edit-or-remove-own-attachment",
+      "type": "node",
+      "source_ref": "attachments/uc-edit-or-remove-own-attachment",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/dc-retention",
+      "type": "node",
+      "source_ref": "attachments/dc-retention",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/dc-attachment-two-level-index",
+      "type": "node",
+      "source_ref": "attachments/dc-attachment-two-level-index",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:attachments/dc-signed-url",
+      "type": "node",
+      "source_ref": "attachments/dc-signed-url",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-request-archiving",
+      "type": "node",
+      "source_ref": "device-requests/cap-request-archiving",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-family-consent-tracking",
+      "type": "node",
+      "source_ref": "device-requests/cap-family-consent-tracking",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-documents-email",
+      "type": "node",
+      "source_ref": "device-requests/cap-documents-email",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-request-checklists",
+      "type": "node",
+      "source_ref": "device-requests/cap-request-checklists",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-checklist-template-catalog",
+      "type": "node",
+      "source_ref": "device-requests/cap-checklist-template-catalog",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-production-checklist-auto-creation",
+      "type": "node",
+      "source_ref": "device-requests/cap-production-checklist-auto-creation",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-checklist-public-share",
+      "type": "node",
+      "source_ref": "device-requests/cap-checklist-public-share",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-request-attachments",
+      "type": "node",
+      "source_ref": "device-requests/cap-request-attachments",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-status-change-notifications",
+      "type": "node",
+      "source_ref": "device-requests/cap-status-change-notifications",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/cap-request-list-filtering",
+      "type": "node",
+      "source_ref": "device-requests/cap-request-list-filtering",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/uc-admin-archives-request",
+      "type": "node",
+      "source_ref": "device-requests/uc-admin-archives-request",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/uc-admin-acquires-consent-and-sends-documents",
+      "type": "node",
+      "source_ref": "device-requests/uc-admin-acquires-consent-and-sends-documents",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/uc-volunteer-works-checklist",
+      "type": "node",
+      "source_ref": "device-requests/uc-volunteer-works-checklist",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/uc-admin-manages-checklist-templates",
+      "type": "node",
+      "source_ref": "device-requests/uc-admin-manages-checklist-templates",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/uc-family-follows-checklist-progress",
+      "type": "node",
+      "source_ref": "device-requests/uc-family-follows-checklist-progress",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/uc-volunteer-manages-attachments",
+      "type": "node",
+      "source_ref": "device-requests/uc-volunteer-manages-attachments",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/dc-archived-flag",
+      "type": "node",
+      "source_ref": "device-requests/dc-archived-flag",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/dc-checklist-ids",
+      "type": "node",
+      "source_ref": "device-requests/dc-checklist-ids",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/dc-checklist-share-link",
+      "type": "node",
+      "source_ref": "device-requests/dc-checklist-share-link",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:device-requests/dc-family-consent",
+      "type": "node",
+      "source_ref": "device-requests/dc-family-consent",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/cap-project-crud",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/cap-project-crud",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/cap-project-lifecycle-and-rbac",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/cap-project-lifecycle-and-rbac",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/cap-project-checklists",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/cap-project-checklists",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/cap-project-checklist-public-share",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/cap-project-checklist-public-share",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/cap-project-attachments",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/cap-project-attachments",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/cap-projects-workspace-ui",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/cap-projects-workspace-ui",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/uc-create-and-plan-project",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/uc-create-and-plan-project",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/uc-change-project-status",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/uc-change-project-status",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/uc-share-project-checklist-progress",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/uc-share-project-checklist-progress",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/dc-project",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/dc-project",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/dc-project-status",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/dc-project-status",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/dc-project-type",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/dc-project-type",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/dc-project-event",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/dc-project-event",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:special-projects-initiatives/dc-project-checklist-share-link",
+      "type": "node",
+      "source_ref": "special-projects-initiatives/dc-project-checklist-share-link",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/cap-email-template-deploy",
+      "type": "node",
+      "source_ref": "super-admin/cap-email-template-deploy",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/cap-email-template-registry",
+      "type": "node",
+      "source_ref": "super-admin/cap-email-template-registry",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/cap-firestore-backup",
+      "type": "node",
+      "source_ref": "super-admin/cap-firestore-backup",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/cap-super-admin-gated-operations",
+      "type": "node",
+      "source_ref": "super-admin/cap-super-admin-gated-operations",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/cap-super-admin-page",
+      "type": "node",
+      "source_ref": "super-admin/cap-super-admin-page",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/uc-deploy-email-templates",
+      "type": "node",
+      "source_ref": "super-admin/uc-deploy-email-templates",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/uc-trigger-firestore-backup",
+      "type": "node",
+      "source_ref": "super-admin/uc-trigger-firestore-backup",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/concept-super-admin-flag",
+      "type": "node",
+      "source_ref": "super-admin/concept-super-admin-flag",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/concept-email-templates-collection",
+      "type": "node",
+      "source_ref": "super-admin/concept-email-templates-collection",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "node:super-admin/concept-backup-bucket",
+      "type": "node",
+      "source_ref": "super-admin/concept-backup-bucket",
+      "section": 9,
+      "content_class": "reference",
+      "page_status": "as-built"
+    },
+    {
+      "page_key": "reference:security",
+      "type": "structural",
+      "title": "Sicurezza e Anti-abuso — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the security domain.",
+      "audience": "Developer",
+      "children": [],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the security domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:auth",
+      "type": "structural",
+      "title": "Autenticazione e Registrazione — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the auth domain.",
+      "audience": "Developer",
+      "children": [],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the auth domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:contacts",
+      "type": "structural",
+      "title": "Richieste di Contatto — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the contacts domain.",
+      "audience": "Developer",
+      "children": [
+        "node:contacts/cap-public-contact-form",
+        "node:contacts/cap-create-contact-request",
+        "node:contacts/cap-contact-validation",
+        "node:contacts/cap-contact-anti-spam",
+        "node:contacts/cap-contact-origin-profile-helpers",
+        "node:contacts/uc-visitor-sends-contact-request",
+        "node:contacts/dc-contact-document",
+        "node:contacts/dc-contact-profile",
+        "node:contacts/dc-contact-origin"
+      ],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the contacts domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:volunteer-management",
+      "type": "structural",
+      "title": "Gestione Volontari — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the volunteer-management domain.",
+      "audience": "Developer",
+      "children": [
+        "node:volunteer-management/cap-volunteer-requests-workspace",
+        "node:volunteer-management/cap-volunteer-checklist-todo",
+        "node:volunteer-management/cap-volunteer-contacts-csv-import"
+      ],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the volunteer-management domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:process-organizer-core",
+      "type": "structural",
+      "title": "Organizer — motore checklist generico — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the process-organizer-core domain.",
+      "audience": "Developer",
+      "children": [
+        "node:process-organizer-core/cap-checklist-instance-lifecycle",
+        "node:process-organizer-core/cap-checklist-item-management",
+        "node:process-organizer-core/cap-checklist-template-catalog",
+        "node:process-organizer-core/cap-completeness-gate",
+        "node:process-organizer-core/uc-instantiate-checklist-from-template",
+        "node:process-organizer-core/uc-clone-checklist-instance",
+        "node:process-organizer-core/uc-verify-checklist-completeness",
+        "node:process-organizer-core/uc-manage-template-catalog",
+        "node:process-organizer-core/concept-checklist-item-status",
+        "node:process-organizer-core/concept-opaque-category",
+        "node:process-organizer-core/concept-historical-template-reference",
+        "node:process-organizer-core/cap-my-checklist-items",
+        "node:process-organizer-core/uc-view-my-assigned-items",
+        "node:process-organizer-core/concept-checklist-item-type",
+        "node:process-organizer-core/concept-checklist-origin"
+      ],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the process-organizer-core domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:attachments",
+      "type": "structural",
+      "title": "Allegati — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the attachments domain.",
+      "audience": "Developer",
+      "children": [
+        "node:attachments/cap-attachment-catalog-model",
+        "node:attachments/cap-upload-attachment",
+        "node:attachments/cap-list-attachments",
+        "node:attachments/cap-download-attachment",
+        "node:attachments/cap-update-attachment-metadata",
+        "node:attachments/cap-delete-attachment",
+        "node:attachments/cap-attachment-rbac",
+        "node:attachments/cap-attachments-ui",
+        "node:attachments/uc-attach-file-to-entity",
+        "node:attachments/uc-browse-and-download",
+        "node:attachments/uc-edit-or-remove-own-attachment",
+        "node:attachments/dc-retention",
+        "node:attachments/dc-attachment-two-level-index",
+        "node:attachments/dc-signed-url"
+      ],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the attachments domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:device-requests",
+      "type": "structural",
+      "title": "Richieste Dispositivo — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the device-requests domain.",
+      "audience": "Developer",
+      "children": [
+        "node:device-requests/cap-request-archiving",
+        "node:device-requests/cap-family-consent-tracking",
+        "node:device-requests/cap-documents-email",
+        "node:device-requests/cap-request-checklists",
+        "node:device-requests/cap-checklist-template-catalog",
+        "node:device-requests/cap-production-checklist-auto-creation",
+        "node:device-requests/cap-checklist-public-share",
+        "node:device-requests/cap-request-attachments",
+        "node:device-requests/cap-status-change-notifications",
+        "node:device-requests/cap-request-list-filtering",
+        "node:device-requests/uc-admin-archives-request",
+        "node:device-requests/uc-admin-acquires-consent-and-sends-documents",
+        "node:device-requests/uc-volunteer-works-checklist",
+        "node:device-requests/uc-admin-manages-checklist-templates",
+        "node:device-requests/uc-family-follows-checklist-progress",
+        "node:device-requests/uc-volunteer-manages-attachments",
+        "node:device-requests/dc-archived-flag",
+        "node:device-requests/dc-checklist-ids",
+        "node:device-requests/dc-checklist-share-link",
+        "node:device-requests/dc-family-consent"
+      ],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the device-requests domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:shipments",
+      "type": "structural",
+      "title": "Spedizioni — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the shipments domain.",
+      "audience": "Developer",
+      "children": [],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the shipments domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:special-projects-initiatives",
+      "type": "structural",
+      "title": "Progetti Speciali e Iniziative — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the special-projects-initiatives domain.",
+      "audience": "Developer",
+      "children": [
+        "node:special-projects-initiatives/cap-project-crud",
+        "node:special-projects-initiatives/cap-project-lifecycle-and-rbac",
+        "node:special-projects-initiatives/cap-project-checklists",
+        "node:special-projects-initiatives/cap-project-checklist-public-share",
+        "node:special-projects-initiatives/cap-project-attachments",
+        "node:special-projects-initiatives/cap-projects-workspace-ui",
+        "node:special-projects-initiatives/uc-create-and-plan-project",
+        "node:special-projects-initiatives/uc-change-project-status",
+        "node:special-projects-initiatives/uc-share-project-checklist-progress",
+        "node:special-projects-initiatives/dc-project",
+        "node:special-projects-initiatives/dc-project-status",
+        "node:special-projects-initiatives/dc-project-type",
+        "node:special-projects-initiatives/dc-project-event",
+        "node:special-projects-initiatives/dc-project-checklist-share-link"
+      ],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the special-projects-initiatives domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "reference:super-admin",
+      "type": "structural",
+      "title": "Super Admin — Operazioni di Piattaforma — reference",
+      "section": 9,
+      "content_class": "narrative",
+      "purpose": "Node reference pages of the super-admin domain.",
+      "audience": "Developer",
+      "children": [
+        "node:super-admin/cap-email-template-deploy",
+        "node:super-admin/cap-email-template-registry",
+        "node:super-admin/cap-firestore-backup",
+        "node:super-admin/cap-super-admin-gated-operations",
+        "node:super-admin/cap-super-admin-page",
+        "node:super-admin/uc-deploy-email-templates",
+        "node:super-admin/uc-trigger-firestore-backup",
+        "node:super-admin/concept-super-admin-flag",
+        "node:super-admin/concept-email-templates-collection",
+        "node:super-admin/concept-backup-bucket"
+      ],
+      "narrative": "Reference pages of the capabilities, use cases and domain concepts of the super-admin domain. The architectural reading is in the domain chapter of section 3."
+    },
+    {
+      "page_key": "generated-glossary",
+      "type": "structural",
+      "title": "Glossario",
+      "section": 1,
+      "content_class": "generated"
+    },
+    {
+      "page_key": "generated-decision-index",
+      "type": "structural",
+      "title": "Indice delle decisioni",
+      "section": 3,
+      "content_class": "generated"
+    },
+    {
+      "page_key": "generated-traceability-matrix",
+      "type": "structural",
+      "title": "Matrice di tracciabilita'",
+      "section": 7,
+      "content_class": "generated"
+    },
+    {
+      "page_key": "generated-gap-register",
+      "type": "structural",
+      "title": "Registro dei gap",
+      "section": 8,
+      "content_class": "generated"
     }
-  ]
+  ],
+  "revision": 1
 }
