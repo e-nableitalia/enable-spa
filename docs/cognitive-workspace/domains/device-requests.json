@@ -1370,5 +1370,781 @@
         "added_at": "2026-07-08T10:00:00Z"
       }
     ]
+  },
+  {
+    "id": "device-requests/cap-request-archiving",
+    "type": "capability",
+    "name": "Archiviazione e ripristino richieste",
+    "body": "## What it does\n\nPermette all'admin di togliere dalle liste operative le richieste terminali senza cambiarne lo status.\n\n- `archiveDeviceRequest`: ammessa solo per richieste in stato `completata` o `annullata` e non già archiviate. In transazione imposta `archived: true`, `archivedAt`, `archivedBy` e scrive un evento `archive` in `events` (fromStatus = toStatus). Opzionalmente (`purgeTransientAttachments`) elimina da Storage e da Firestore gli allegati con retention `transient`; gli errori di purge sono restituiti in `purgeErrors` senza annullare l'archiviazione.\n- `restoreDeviceRequest`: rimuove il flag (`archived: false`, cancella `archivedAt/By`) e scrive un evento `restore`. Gli allegati già eliminati non tornano.\n- Il flag funge da guardia trasversale: `assertDeviceRequestNotArchived` è invocata da changeStatus, consenso, invio documenti, checklist e allegati in scrittura, che rifiutano con `failed-precondition` finché la richiesta non è ripristinata.\n- Lato UI, `AdminArchived` mostra le richieste archiviate in sola lettura; il dettaglio offre archiviazione (con checkbox di purge) e ripristino.\n\n## Boundaries\n\n- Solo admin (`users/{uid}.role === \"admin\"`); i volontari non possono archiviare né ripristinare.\n- Non introduce un nuovo status: vedi [[device-requests/dc-archived-flag]].\n- La cancellazione fisica degli allegati transient delega al modello della capability Attachments (`attachments/attachmentModel`).\n\n## Key entry points\n\n- `functions/backend/src/device/archiveDeviceRequest.ts#archiveDeviceRequest`\n- `functions/backend/src/device/archiveDeviceRequest.ts#restoreDeviceRequest`\n- `functions/backend/src/device/deviceRequestArchive.ts#assertDeviceRequestNotArchived`\n- `enable-device/src/pages/admin/requests/AdminArchived.tsx`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-archived-flag",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/cap-request-attachments",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/archiveDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/deviceRequestArchive.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/AdminArchived.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-family-consent-tracking",
+    "type": "capability",
+    "name": "Acquisizione liberatorie familiari",
+    "body": "## What it does\n\nL'admin registra sulla richiesta l'avvenuta acquisizione di due documenti: scarico di responsabilità (`waiver`) e liberatoria foto (`photoRelease`), tramite `setDeviceRequestConsent`.\n\n- Scrive sul documento `deviceRequests/{id}` i campi `{type}Acquired`, `{type}AcquiredDate` (server timestamp) e `{type}AcquiredBy` (uid admin).\n- In transazione aggiunge un evento in `events` (`set_waiver_consent` / `set_photo_release_consent`) con status invariato, così compare nella timeline come aggiornamento/nota.\n- Registra un security event (`set_waiver_acquired` / `set_photo_release_acquired`) con esito success/failure.\n- Il dettaglio admin mostra chi ha acquisito il documento risolvendo il nome da `*AcquiredBy`.\n\n## Boundaries\n\n- Solo admin: il volontario assegnato NON è autorizzato, a differenza di checklist e cambio stato.\n- Rifiutata su richieste archiviate. Non carica il documento firmato (solo flag di acquisizione).\n- L'invio dei documenti alla famiglia è in [[device-requests/cap-documents-email]].\n\n## Key entry points\n\n- `functions/backend/src/device/setDeviceRequestConsent.ts#setDeviceRequestConsent`\n- `enable-device/src/pages/admin/requests/RequestDetail.tsx` (savingWaiver / savingPhotoRelease)",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/dc-family-consent",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-request-event",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/setDeviceRequestConsent.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-documents-email",
+    "type": "capability",
+    "name": "Invio email documenti alla famiglia",
+    "body": "## What it does\n\n`sendDocumentsEmail` accoda via estensione Trigger Email (collection `mail`, template `deviceRequestDocumentsTransmission`) l'email con i documenti da firmare e le informazioni di sicurezza, destinata all'email del richiedente letta da `deviceRequests/{id}/private/data`.\n\n- Idempotente: scrittura del documento `mail` e claim del flag `documentsEmailSent: true` avvengono nella stessa transazione; un secondo invio (anche concorrente) fallisce con `failed-precondition` ed è tracciato come `blocked`.\n- Errore `failed-precondition` se l'email non è valorizzata.\n- Security event `send_documents_email` (success/failure/blocked).\n\n## Boundaries\n\n- Solo admin; rifiutata su richieste archiviate.\n- Nessun re-invio previsto: il flag non viene azzerato da codice. La UI del dettaglio disabilita l'azione quando il flag è già vero.\n\n## Key entry points\n\n- `functions/backend/src/device-requests/sendDocumentsEmail.ts#sendDocumentsEmail`\n- `enable-device/src/pages/admin/requests/RequestDetail.tsx#handleSendDocumentsEmail`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-family-consent-tracking",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/dc-private-data-separation",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/sendDocumentsEmail.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-request-checklists",
+    "type": "capability",
+    "name": "Checklist operative di richiesta",
+    "body": "## What it does\n\nLayer di integrazione device-requests sopra il core Organizer: una richiesta può avere fino a 5 checklist (`checklistIds`, relazione 1:N con `arrayUnion`) e le Cloud Function wrapper applicano RBAC e appartenenza prima di delegare al core.\n\n- Creazione (`createDeviceRequestChecklist`): item espliciti (precedenza), da template scelto (`templateId` stringa), vuota (`templateId: null`) oppure auto-lookup legacy del primo template con `category === devicetype`. Scrive sempre `origin: {type:\"deviceRequest\", id}` per la To Do List.\n- Clonazione da altra richiesta (`cloneDeviceRequestChecklist`, `sourceChecklistId` deve appartenere alla sorgente), eliminazione (`deleteDeviceRequestChecklist`, solo admin, rimuove l'id e gli item), rinomina titolo.\n- Item: aggiungi/aggiorna/rimuovi; l'`assignee` deve essere un uid risolvibile (volontario assegnato o admin, `isResolvableChecklistAssignee`).\n- `listAssignableChecklistUsers` restituisce lato server assegnatari possibili (volontari assegnati + tutti gli admin) con etichette risolte via Admin SDK.\n- `getDeviceRequestChecklistCompleteness` espone l'indicatore di completezza type-aware (`boolean`/`numeric`/`generic`).\n- UI: `DeviceRequestChecklists` (tab per checklist, scelta template/clone) e `ChecklistPanel` (item, assegnatari, share link).\n\n## Boundaries\n\n- RBAC: admin o volontario in `assignedVolunteers` (stesso perimetro di changeStatus); eliminazione solo admin.\n- Scritture rifiutate su richieste archiviate; la lettura no.\n- La checklist è tracciamento: non vincola le transizioni di stato.\n- Il core Organizer non conosce deviceRequest.\n\n## Key entry points\n\n- `functions/backend/src/device-requests/deviceRequestChecklistAccess.ts#resolveDeviceRequestChecklistAccess`\n- `functions/backend/src/device-requests/createDeviceRequestChecklist.ts#createDeviceRequestChecklist`\n- `functions/backend/src/device-requests/cloneDeviceRequestChecklist.ts#cloneDeviceRequestChecklist`\n- `functions/backend/src/device-requests/getDeviceRequestChecklistCompleteness.ts`\n- `enable-device/src/components/checklist/DeviceRequestChecklists.tsx`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/dc-checklist-ids",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-checklist-template-catalog",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-volunteer-assignment",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/createDeviceRequestChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/deviceRequestChecklistAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/cloneDeviceRequestChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/deleteDeviceRequestChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/listAssignableChecklistUsers.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/getDeviceRequestChecklistCompleteness.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/checklist/DeviceRequestChecklists.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/checklist/ChecklistPanel.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-checklist-template-catalog",
+    "type": "capability",
+    "name": "Catalogo template di checklist",
+    "body": "## What it does\n\nGli admin gestiscono i template di checklist per tipo di dispositivo (campo `category` = `devicetype`) tramite `createDeviceChecklistTemplate`, `updateChecklistTemplate`, `deleteDeviceChecklistTemplate`, che aggiungono il controllo `role === \"admin\"` e delegano al core Organizer (che verifica solo l'autenticazione). La pagina `AdminChecklistTemplatesPage` elenca per categoria e crea/modifica/elimina; i template sono poi proposti da [[device-requests/cap-request-checklists]] alla creazione di una checklist.\n\n## Boundaries\n\n- Solo admin in scrittura. `category` è opaca per il core; per \"Altro\" è testo libero.\n- Il template è copiato all'istanziazione: modifiche successive non toccano le checklist già create.\n\n## Key entry points\n\n- `functions/backend/src/device-requests/createChecklistTemplate.ts`\n- `functions/backend/src/device-requests/updateChecklistTemplate.ts`\n- `functions/backend/src/device-requests/deleteChecklistTemplate.ts`\n- `enable-device/src/pages/admin/AdminChecklistTemplatesPage.tsx`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-checklists",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/createChecklistTemplate.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/updateChecklistTemplate.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/deleteChecklistTemplate.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminChecklistTemplatesPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-production-checklist-auto-creation",
+    "type": "capability",
+    "name": "Auto-creazione checklist di produzione",
+    "body": "## What it does\n\nQuando una richiesta transita allo status `in produzione`, `autoCreateProductionChecklistOnTransition` (chiamata da changeStatus) crea la checklist «Checklist di produzione» con 5 item `generic`: Scelta device e dimensionamento, Personalizzazione, Attesa materiali, Fabbricazione, Fitting (le ex-fasi granulari collassate in EA-148).\n\n- Idempotenza tramite flag `productionChecklistCreated` su `deviceRequests/{id}`, reclamato in transazione PRIMA della creazione (compare-and-swap): transizioni concorrenti o successive (es. dopo standby) non duplicano.\n- Rollback del flag solo per errori provabilmente pre-scrittura (`unauthenticated`, `invalid-argument`, `not-found`, `failed-precondition`, `permission-denied`); per altri errori il flag resta per non rischiare duplicati.\n- Riusa `createDeviceRequestChecklist` (stessi RBAC e limite di 5 checklist).\n\n## Boundaries\n\n- Nessun gate: ogni fallimento è solo loggato e la transizione di stato resta valida.\n- Nessun marcatore identifica quale checklist sia quella di produzione.\n\n## Key entry points\n\n- `functions/backend/src/device-requests/autoCreateProductionChecklist.ts#autoCreateProductionChecklistOnTransition`\n- `functions/backend/src/device-requests/productionChecklistItems.ts`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-request-checklists",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/autoCreateProductionChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/productionChecklistItems.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-checklist-public-share",
+    "type": "capability",
+    "name": "Condivisione pubblica avanzamento checklist",
+    "body": "## What it does\n\n- `createChecklistShareLink` (admin o volontario assegnato) genera, o riusa se esiste già per quel `checklistId`, un token UUID in `checklistShareLinks/{token}` e restituisce l'URL `/checklist-share/{token}` (host staging o `app.e-nableitalia.it` in base al progetto GCP). Un link per checklist; non scade e non è revocabile.\n- `getChecklistShareStatus` è callable pubblica senza autenticazione: risolve il token e restituisce `percentComplete`, `requestNumber` (letto da `publicDeviceRequests`) e un elenco semplificato di item (`title`, `completed`, `quantity`, `url`). Il completamento usa il gate type-aware condiviso.\n\n## Boundaries\n\n- Mai esposti assegnatari, note, status grezzo o dati privati: rispetta [[device-requests/dc-private-data-separation]].\n- Creazione soggetta ad archiviazione (scrittura rifiutata se archiviata); la lettura pubblica no.\n\n## Key entry points\n\n- `functions/backend/src/device-requests/createChecklistShareLink.ts`\n- `functions/backend/src/device-requests/getChecklistShareStatus.ts`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/dc-checklist-share-link",
+        "type": "relates_to"
+      },
+      {
+        "id": "device-requests/cap-request-checklists",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/createChecklistShareLink.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/getChecklistShareStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-request-attachments",
+    "type": "capability",
+    "name": "Allegati della richiesta",
+    "body": "## What it does\n\nWrapper device-requests della capability generica Attachments: upload, lista, download, aggiornamento descrizione ed eliminazione allegati collegati a una richiesta. Ogni wrapper risolve l'accesso (`resolveDeviceRequestAttachmentAccess`) e poi delega via `.run()` alla funzione generica, fissando `entityType: \"deviceRequest\"`, `entityId` e `entityCollectionPath: \"deviceRequests\"` (il chiamante non li fornisce).\n\n- Per operazioni su un `attachmentId` esistente verifica che l'allegato appartenga davvero a `requestId`, altrimenti `not-found` (evita attacchi cross-request).\n- Le scritture sono bloccate su richieste archiviate.\n\n## Boundaries\n\n- RBAC più stretto del generico: admin o volontario assegnato (`assignedVolunteers`). L'RBAC interno delle funzioni generiche resta in vigore.\n- I file con retention `transient` possono essere purgati da [[device-requests/cap-request-archiving]].\n\n## Key entry points\n\n- `functions/backend/src/device-requests/deviceRequestAttachmentAccess.ts`\n- `functions/backend/src/device-requests/uploadDeviceRequestAttachment.ts`\n- `functions/backend/src/device-requests/downloadDeviceRequestAttachment.ts`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-archiving",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/deviceRequestAttachmentAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/uploadDeviceRequestAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/listDeviceRequestAttachments.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/downloadDeviceRequestAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/deleteDeviceRequestAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/updateDeviceRequestAttachmentDescription.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-status-change-notifications",
+    "type": "capability",
+    "name": "Notifiche post cambio stato",
+    "body": "## What it does\n\nDopo una transizione (o un aggiornamento senza cambio di stato) di `changeStatus`, `sendChangeStatusNotifications` invia in base alle opzioni `notifica` (`admin`, `volunteers`, `telegram`): email agli admin del device, email ai volontari assegnati con email valorizzata, messaggio Telegram. L'etichetta usa `requestNumber` letto da `publicDeviceRequests` (fallback requestId). Oggetto e testo distinguono cambio stato da semplice aggiornamento e includono la nota.\n\nLa scrittura atomica di stato ed evento è separata in `applyStatusChangeTransaction` (aggiorna `status`/`updatedAt` e crea l'evento `status_change`).\n\n## Boundaries\n\n- `Promise.allSettled`: il fallimento di un canale non blocca gli altri né la transizione.\n- Nessun I/O in `applyStatusChangeTransaction`: l'atomicità è del chiamante.\n\n## Key entry points\n\n- `functions/backend/src/device/changeStatusNotifications.ts#sendChangeStatusNotifications`\n- `functions/backend/src/device/applyStatusChangeTransaction.ts#applyStatusChangeTransaction`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-lifecycle-management",
+        "type": "implements"
+      },
+      {
+        "id": "device-requests/dc-request-event",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/changeStatusNotifications.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/applyStatusChangeTransaction.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/cap-request-list-filtering",
+    "type": "capability",
+    "name": "Filtri e modalità vista delle liste richieste",
+    "body": "## What it does\n\nModello di filtri client condiviso dalle liste admin e volontario (`RequestListFilters`): filtri base sempre visibili (id sequenziale, nome, cognome, stati) ed estesi in pannello collassabile (numero richiesta, destinatario, provincia, volontari assegnati, età, genere, tipo amputazione, tipo dispositivo, stato pubblico, richiede attenzione, intervalli di date creazione/aggiornamento). `RequestFiltersPanel` li rende; `useRequestsViewMode` gestisce la vista split lista+dettaglio (solo se larghezza >= 1200px) o lista a tutta larghezza, persistita in localStorage (`requestsViewMode`).\n\n## Boundaries\n\n- Filtraggio lato client sui dati già caricati.\n- Le viste per stato (`AdminPending`, `AdminProduction`, ...) sono in [[device-requests/cap-admin-request-views]].\n\n## Key entry points\n\n- `enable-device/src/components/requests/requestListFilters.ts`\n- `enable-device/src/components/requests/RequestFiltersPanel.tsx`\n- `enable-device/src/components/requests/useRequestsViewMode.ts`",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-admin-request-views",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/requestListFilters.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/RequestFiltersPanel.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/requests/useRequestsViewMode.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/uc-admin-archives-request",
+    "type": "use_case",
+    "name": "Admin archivia e ripristina una richiesta",
+    "body": "## Scenario\n\n1. L'admin apre il dettaglio di una richiesta `completata` o `annullata`.\n2. Sceglie Archivia, decidendo se eliminare gli allegati transient (default attivo).\n3. La richiesta sparisce dalle liste operative e compare in \"Richieste archiviate\" (sola lettura); la timeline mostra l'evento `archive`.\n4. Se serve intervenire, dal dettaglio la ripristina: evento `restore`, status invariato.\n\n## Depends on capabilities\n\n- [[device-requests/cap-request-archiving]]\n- [[device-requests/cap-request-attachments]]\n\n## Known gaps\n\n- Gli allegati purgati non sono recuperabili al ripristino.\n- Un errore parziale di purge non annulla l'archiviazione: va letto in `purgeErrors`.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-archiving",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/archiveDeviceRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/uc-admin-acquires-consent-and-sends-documents",
+    "type": "use_case",
+    "name": "Admin acquisisce liberatorie e invia documenti",
+    "body": "## Scenario\n\n1. L'admin invia alla famiglia l'email con i documenti da firmare.\n2. Ricevuti i documenti firmati, marca nel dettaglio lo scarico di responsabilità e/o la liberatoria foto come acquisiti.\n3. La timeline riporta gli eventi e il dettaglio mostra chi e quando.\n\n## Depends on capabilities\n\n- [[device-requests/cap-documents-email]]\n- [[device-requests/cap-family-consent-tracking]]\n\n## Known gaps\n\n- Nessun upload del documento firmato legato al flag.\n- Invio documenti non ripetibile (`documentsEmailSent` non azzerabile).",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-documents-email",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-family-consent-tracking",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/sendDocumentsEmail.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/setDeviceRequestConsent.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/requests/RequestDetail.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/uc-volunteer-works-checklist",
+    "type": "use_case",
+    "name": "Volontario lavora sulla checklist di produzione",
+    "body": "## Scenario\n\n1. La richiesta passa a `in produzione`: viene auto-creata la checklist di produzione.\n2. Il volontario assegnato (o l'admin) apre il tab checklist, aggiunge item, assegna item a colleghi o admin e li completa.\n3. Può creare ulteriori checklist da template o clonandone una di un'altra richiesta (max 5).\n4. Consulta l'indicatore di completezza.\n\n## Depends on capabilities\n\n- [[device-requests/cap-production-checklist-auto-creation]]\n- [[device-requests/cap-request-checklists]]\n\n## Known gaps\n\n- Solo l'admin può eliminare una checklist.\n- Il limite di 5 checklist è un valore proposto, non confermato.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-checklists",
+        "type": "depends_on"
+      },
+      {
+        "id": "device-requests/cap-production-checklist-auto-creation",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/autoCreateProductionChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/components/checklist/ChecklistPanel.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/uc-admin-manages-checklist-templates",
+    "type": "use_case",
+    "name": "Admin gestisce i template di checklist",
+    "body": "## Scenario\n\n1. L'admin apre la pagina template e filtra per categoria (tipo dispositivo).\n2. Crea, modifica o elimina un template.\n3. Alla creazione di una checklist su una richiesta di quel tipo il template è proposto.\n\n## Depends on capabilities\n\n- [[device-requests/cap-checklist-template-catalog]]\n\n## Known gaps\n\n- Le checklist già istanziate non seguono le modifiche al template.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-checklist-template-catalog",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/AdminChecklistTemplatesPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/createChecklistTemplate.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/uc-family-follows-checklist-progress",
+    "type": "use_case",
+    "name": "Famiglia segue l'avanzamento via link",
+    "body": "## Scenario\n\n1. Admin o volontario assegnato genera il link di condivisione dal pannello checklist.\n2. Lo invia alla famiglia.\n3. La pagina pubblica `/checklist-share/{token}` mostra numero richiesta, percentuale e elenco item completati/da fare, senza login.\n\n## Depends on capabilities\n\n- [[device-requests/cap-checklist-public-share]]\n\n## Known gaps\n\n- Il link non scade né è revocabile (scelta confermata in refinement).",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-checklist-public-share",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/createChecklistShareLink.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/getChecklistShareStatus.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/uc-volunteer-manages-attachments",
+    "type": "use_case",
+    "name": "Volontario gestisce gli allegati della richiesta",
+    "body": "## Scenario\n\n1. Il volontario assegnato carica un file (con categoria, descrizione, retention).\n2. Lo ritrova nella lista, lo scarica o ne aggiorna la descrizione.\n3. Può eliminarlo; se la richiesta è archiviata le scritture sono bloccate.\n\n## Depends on capabilities\n\n- [[device-requests/cap-request-attachments]]\n\n## Known gaps\n\n- Non verificato qui chi, tra admin e volontario, possa eliminare: dipende dalla funzione generica delegata.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "device-requests/cap-request-attachments",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/uploadDeviceRequestAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/deleteDeviceRequestAttachment.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/dc-archived-flag",
+    "type": "domain_concept",
+    "name": "Archiviata (flag)",
+    "body": "## Definition\n\nCampo booleano `archived` (con `archivedAt`, `archivedBy`) su `deviceRequests/{id}`, applicabile solo a richieste `completata` o `annullata`. Non è uno status: lo status resta invariato. Una richiesta archiviata è in sola lettura per tutte le scritture \"live\".\n\n## Also known as\n\nRichiesta archiviata; soft archive.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/deviceRequestArchive.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/dc-checklist-ids",
+    "type": "domain_concept",
+    "name": "checklistIds",
+    "body": "## Definition\n\nCampo array su `deviceRequests/{id}` con gli id delle checklist Organizer collegate (max 5). Fa da controllo di appartenenza per RBAC/accesso. Sostituisce il vecchio campo singolare `checklistId`, senza coesistenza.\n\n## Also known as\n\nChecklist collegate; `productionChecklistCreated` è un flag distinto di sola idempotenza.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/deviceRequestChecklistAccess.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/createDeviceRequestChecklist.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/dc-checklist-share-link",
+    "type": "domain_concept",
+    "name": "Link di condivisione checklist",
+    "body": "## Definition\n\nDocumento `checklistShareLinks/{token}` (checklistId, requestId, createdAt, createdBy) con token UUID, non scadente e non revocabile, che abilita la lettura pubblica del solo avanzamento di una checklist.\n\n## Also known as\n\nShare token; URL `/checklist-share/{token}`.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device-requests/createChecklistShareLink.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "device-requests/dc-family-consent",
+    "type": "domain_concept",
+    "name": "Liberatorie familiari",
+    "body": "## Definition\n\nDue documenti tracciati come flag sulla richiesta: scarico di responsabilità (`waiverAcquired*`) e liberatoria foto (`photoReleaseAcquired*`), con data e admin acquirente. Distinti da `consentPrivacy` del form pubblico.\n\n## Also known as\n\nWaiver; photo release.",
+    "status": "draft",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/device/setDeviceRequestConsent.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
   }
 ]

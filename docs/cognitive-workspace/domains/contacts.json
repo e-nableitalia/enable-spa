@@ -1,0 +1,308 @@
+[
+  {
+    "id": "contacts/cap-public-contact-form",
+    "type": "capability",
+    "name": "Form pubblica di contatto (/contatti)",
+    "body": "## What it does\n\nPagina pubblica `/contatti` (raggiungibile anche da QR code con `?src=qr`) in cui chiunque lascia i propri dati per essere ricontattato dai volontari di e-Nable Italia. Campi: nome e cognome (obbligatori), telefono ed email (almeno uno), profilo \"Chi sei?\" (facoltativo, con campo \"Specifica\" se `altro`), motivo del contatto/note (max 2000 caratteri) e consenso privacy obbligatorio con informativa art. 13 GDPR (titolare Energy Family Project APS, conservazione dichiarata 24 mesi).\n\nLato client la form fa una validazione preliminare ([[contacts/cap-contact-validation]]), ottiene un token reCAPTCHA per l'azione `create_contact_request`, invia i dati alla callable [[contacts/cap-create-contact-request]] insieme a campo trappola `website`, tempo trascorso dall'apertura (`elapsedMs`) e `source`. A successo mostra un messaggio di ringraziamento e svuota la form; a errore un toast generico (nessun dettaglio sul motivo del rifiuto).\n\nSe si seleziona il profilo `famiglia` compare una nota che rimanda al modulo `/request-device` per chi vuole richiedere un device.\n\n## Boundaries\n\n- Solo lato pubblico: la gestione amministrativa dei contatti (lista, stato, invito a unirsi alla community) sta in `ContactsList.tsx`, nel dominio `volunteer-management`.\n- Nessun login richiesto; la protezione è affidata ad anti-spam ([[contacts/cap-contact-anti-spam]]).\n\n## Key entry points\n\n- `enable-device/src/pages/ContactRequest.tsx#ContactRequest`\n- `enable-device/src/helpers/contactProfiles.ts#readContactSource`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "contacts/cap-create-contact-request",
+        "type": "depends_on"
+      },
+      {
+        "id": "contacts/cap-contact-validation",
+        "type": "depends_on"
+      },
+      {
+        "id": "contacts/cap-contact-anti-spam",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/ContactRequest.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/helpers/contactProfiles.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/cap-create-contact-request",
+    "type": "capability",
+    "name": "Callable createContactRequest",
+    "body": "## What it does\n\nCloud Function callable (region `europe-west1`, secrets `RECAPTCHA_API_KEY` e `RECAPTCHA_SITE_KEY`) che riceve la richiesta dalla form pubblica e salva un documento in `contacts/{id}` (id auto-generato). Sequenza:\n\n1. euristiche anti-bot ([[contacts/cap-contact-anti-spam]]): se scattano risponde `{success:true}` senza salvare;\n2. verifica del token reCAPTCHA Enterprise;\n3. validazione e normalizzazione ([[contacts/cap-contact-validation]]);\n4. rate limit per IP (scope `contact`) e per contatto;\n5. scrittura del documento con `origin: \"contact-form\"`, `status: \"new\"`, `consentPrivacy: true`, `recaptchaScore`, `deleted: false`, `receivedAt`/`createdAt`/`updatedAt` server timestamp, più i campi della form (`firstName`, `lastName`, `email`, `phone`, `profile`, `profileOther`, `description`, `source`).\n\nRisponde sempre `{ success: true }`. Ogni `HttpsError` viene rilanciata; qualsiasi altro errore diventa `internal`.\n\n## Boundaries\n\n- Crea soltanto: non legge, aggiorna né cancella contatti, e non invia email di notifica.\n- La callable non richiede autenticazione.\n- Non applica RBAC: la lettura/gestione della collection `contacts` è delle regole Firestore e delle funzioni admin del dominio volunteer-management.\n\n## Key entry points\n\n- `functions/backend/src/contact/createContactRequest.ts#createContactRequest`\n- `functions/backend/src/security/rateLimit.ts#checkContactRateLimit`\n- `functions/backend/src/security/recaptcha.ts#verifyRecaptcha`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "contacts/cap-contact-anti-spam",
+        "type": "depends_on"
+      },
+      {
+        "id": "contacts/cap-contact-validation",
+        "type": "depends_on"
+      },
+      {
+        "id": "contacts/dc-contact-document",
+        "type": "implements"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/createContactRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/cap-contact-validation",
+    "type": "capability",
+    "name": "Validazione e normalizzazione richiesta contatto",
+    "body": "## What it does\n\nValidazione server (`validateContactRequest`) dei dati della form, con replica client (`validateContactForm`) per dare feedback immediato. Regole:\n\n- nome e cognome obbligatori (max 100);\n- telefono (max 30, pattern `+?[0-9 ()./-]{6,}`) ed email (max 254, minuscolizzata, pattern base) facoltativi ma almeno uno presente;\n- consenso privacy esattamente `true`;\n- `profile` deve essere uno dei valori di [[contacts/dc-contact-profile]] (stringa vuota/null = nessun profilo); `profileOther` (max 100) è conservato solo se il profilo è `altro`;\n- `description` max 2000, `source` max 50 e valido solo se `[a-zA-Z0-9_-]+` (altrimenti scartato silenziosamente a `null`).\n\nLa pulizia rimuove caratteri di controllo (esclusi a capo e tab) e spazi ai bordi; stringhe vuote diventano `null`; tipi non stringa o lunghezze eccedenti producono `invalid-argument`. `contactRateLimitKey` produce la chiave di rate limit: `email:<email>` o `phone:<sole cifre>`.\n\n## Boundaries\n\n- L'elenco profili e i pattern sono duplicati tra backend e frontend e devono restare allineati a mano (commento nel codice); non c'è un modulo condiviso.\n- Il client non verifica il profilo né `source`, che sono validati solo lato server.\n\n## Key entry points\n\n- `functions/backend/src/contact/contactRequestValidation.ts#validateContactRequest`\n- `functions/backend/src/contact/contactRequestValidation.ts#contactRateLimitKey`\n- `enable-device/src/helpers/contactProfiles.ts#validateContactForm`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "contacts/dc-contact-profile",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/contactRequestValidation.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/helpers/contactProfiles.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/cap-contact-anti-spam",
+    "type": "capability",
+    "name": "Protezione anti-spam della form contatti",
+    "body": "## What it does\n\nQuattro livelli sovrapposti:\n\n1. **Honeypot**: campo `website` nascosto (fuori schermo, `tabIndex -1`); se compilato la richiesta è un bot.\n2. **Tempo minimo di compilazione**: `elapsedMs` (apertura pagina → invio) inferiore a `MIN_FILL_TIME_MS` (3000 ms), mancante o non numerico equivale a bot. Honeypot e tempo sono scartati in silenzio con `{success:true}` e un evento `securityLogs` (`contact_request_honeypot`, outcome `blocked`).\n3. **reCAPTCHA Enterprise**: azione `create_contact_request`, soglia di score 0.6; sotto soglia `permission-denied` (\"Spam detected\"). Ogni verifica è tracciata (`contact_request_recaptcha`).\n4. **Rate limit**: per IP (scope `contact`, separato da quello della form richiesta device) e per contatto (email, o telefono ridotto alle cifre), con chiave hashata SHA-256 in `rateLimits`; una seconda richiesta dello stesso contatto entro la finestra dà `resource-exhausted`.\n\n## Boundaries\n\n- Il rate limit per contatto aggiorna `lastRequest` anche se la scrittura successiva fallisce.\n- Il riconoscimento del bot ritorna successo: l'utente umano che invia troppo in fretta vede il ringraziamento ma il contatto non viene salvato.\n\n## Key entry points\n\n- `functions/backend/src/contact/contactRequestValidation.ts#isLikelyBot`\n- `functions/backend/src/contact/createContactRequest.ts#createContactRequest`\n- `functions/backend/src/security/rateLimit.ts#checkIpRateLimit`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "contacts/cap-create-contact-request",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/contactRequestValidation.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/createContactRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/cap-contact-origin-profile-helpers",
+    "type": "capability",
+    "name": "Helper frontend su origine e profilo dei contatti",
+    "body": "## What it does\n\nFunzioni condivise con la UI admin (`ContactsList`) per interpretare i documenti `contacts`:\n\n- `contactProfileLabel`: etichetta leggibile del profilo;\n- `contactOrigin`: i contatti senza `origin` (importati da CSV) valgono `csv-import`, altrimenti `contact-form`; `CONTACT_ORIGIN_LABELS` ne dà le etichette;\n- `contactsNeedingInviteConfirmation`: tra i contatti selezionati per \"Invita\" (registrazione come volontario), individua quelli arrivati dalla form con profilo diverso da `maker` o `studente` (`VOLUNTEER_LIKE_PROFILES`), per cui l'admin deve confermare.\n\n## Boundaries\n\n- Sono solo helper puri; la UI che li usa è fuori scope (dominio `volunteer-management`).\n- La regola \"maker/studente = profilo affine al volontariato\" è una convenzione codificata nel frontend, non presente nel backend.\n\n## Key entry points\n\n- `enable-device/src/helpers/contactProfiles.ts#contactOrigin`\n- `enable-device/src/helpers/contactProfiles.ts#contactsNeedingInviteConfirmation`\n- `enable-device/src/helpers/contactProfiles.ts#contactProfileLabel`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "contacts/dc-contact-profile",
+        "type": "relates_to"
+      },
+      {
+        "id": "contacts/dc-contact-origin",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/helpers/contactProfiles.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/uc-visitor-sends-contact-request",
+    "type": "use_case",
+    "name": "Un visitatore lascia una richiesta di contatto",
+    "body": "## Scenario\n\nUna persona (es. scansionando il QR code su `/contatti?src=qr`) apre la pagina, compila nome, cognome e un recapito, sceglie facoltativamente il profilo, scrive il motivo e accetta l'informativa. All'invio la richiesta supera i controlli anti-spam e la validazione e viene salvata come contatto `new` con `origin: contact-form` e `source: qr`. L'utente vede la conferma \"Grazie, abbiamo ricevuto la tua richiesta!\"; un volontario lo ricontatterà.\n\nVarianti: profilo `famiglia` → la UI suggerisce il modulo richiesta device; profilo `altro` → si specifica il dettaglio; stesso contatto che reinvia a breve → errore generico di rate limit.\n\n## Depends on capabilities\n\n- [[contacts/cap-public-contact-form]]\n- [[contacts/cap-create-contact-request]]\n- [[contacts/cap-contact-validation]]\n- [[contacts/cap-contact-anti-spam]]\n\n## Known gaps\n\n- Nessuna notifica ai volontari alla ricezione di un contatto.\n- L'informativa dichiara 24 mesi di conservazione, ma nel dominio non c'è alcun job di cancellazione/scadenza dei contatti.\n- Gli errori di validazione server sono mostrati all'utente come messaggio generico.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "contacts/cap-public-contact-form",
+        "type": "depends_on"
+      },
+      {
+        "id": "contacts/cap-create-contact-request",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/ContactRequest.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/createContactRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/dc-contact-document",
+    "type": "domain_concept",
+    "name": "Contatto (documento contacts)",
+    "body": "## Definition\n\nDocumento della collection Firestore `contacts/{contactId}`: una persona che ha chiesto di essere ricontattata (o importata da CSV, nel dominio volunteer-management). Quando creato dalla form contiene nome, cognome, email/telefono, profilo, note, `source`, `origin: contact-form`, `status` iniziale `new`, consenso privacy, `recaptchaScore`, flag `deleted` (soft delete, `false` alla creazione) e timestamp `receivedAt`/`createdAt`/`updatedAt`. Le transizioni di `status` e l'invito sono gestiti lato admin.\n\n## Also known as\n\nRichiesta di contatto, contact request, lead.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [
+      {
+        "id": "contacts/dc-contact-profile",
+        "type": "relates_to"
+      },
+      {
+        "id": "contacts/dc-contact-origin",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/createContactRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/dc-contact-profile",
+    "type": "domain_concept",
+    "name": "Profilo del contatto (\"Chi sei?\")",
+    "body": "## Definition\n\nClassificazione facoltativa dichiarata dal contatto. Valori ammessi: `maker`, `studente`, `docente_scuola`, `universita_ricerca`, `famiglia`, `sanitario`, `associazione_ente`, `azienda_sponsor`, `media`, `altro` (quest'ultimo accompagnato da `profileOther`, testo libero). `maker` e `studente` sono considerati affini al volontariato e non richiedono conferma per l'invito.\n\n## Also known as\n\n`profile`, `CONTACT_PROFILES`, \"Chi sei?\".",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/contactRequestValidation.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "enable-device/src/helpers/contactProfiles.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "contacts/dc-contact-origin",
+    "type": "domain_concept",
+    "name": "Origine del contatto",
+    "body": "## Definition\n\nProvenienza di un contatto: `contact-form` (form pubblica) o `csv-import` (valore implicito per i documenti privi di `origin`). Da non confondere con `source`, tag opzionale del canale di ingresso nella form (es. `qr` dal parametro `?src=`).\n\n## Also known as\n\n`origin`, `source` (canale).",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [],
+    "tags": [],
+    "relates_to": [],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/helpers/contactProfiles.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/contact/createContactRequest.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  }
+]

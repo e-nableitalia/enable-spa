@@ -1,0 +1,406 @@
+[
+  {
+    "id": "super-admin/cap-email-template-deploy",
+    "type": "capability",
+    "name": "Deploy forward-only dei template email",
+    "body": "## What it does\n\nCallable `deployEmailTemplates` (europe-west1) che applica il registro in codice `EMAIL_TEMPLATES` alla collection Firestore `emailTemplates` del progetto su cui è deployata la funzione.\n\n- Verifica autenticazione, poi `requireSuperAdmin` (vedi [[super-admin/cap-super-admin-gated-operations]]).\n- Scrive in un unico `batch` un `set` (sovrascrittura completa) per ogni id del registro; risponde `{ templateIds }`.\n- Direzione unica repo → Firestore: non legge mai i template da Firestore e non li riporta nel repo.\n- Nessuna scelta di ambiente: ogni deploy opera solo sul proprio progetto (staging o prod).\n- Ogni esito (`success`/`blocked`/`failure`) è tracciato con `logSecurityEvent` (type `system`, severità low/medium/high).\n\n## Boundaries\n\n- Non elimina documenti presenti in `emailTemplates` ma assenti dal registro.\n- Non invia email né modifica i sender: questi usano solo gli id del registro (vedi [[super-admin/cap-email-template-registry]]).\n- Errori inattesi sono mascherati al client come `internal`.\n\n## Key entry points\n\n- `functions/backend/src/emailTemplates/deployEmailTemplates.ts#deployEmailTemplates`\n- `functions/backend/src/index.ts` (export della callable)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "email",
+      "callable"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-email-template-registry",
+        "type": "depends_on"
+      },
+      {
+        "id": "super-admin/cap-super-admin-gated-operations",
+        "type": "depends_on"
+      },
+      {
+        "id": "super-admin/concept-email-templates-collection",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/emailTemplates/deployEmailTemplates.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/index.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/cap-email-template-registry",
+    "type": "capability",
+    "name": "Registro versionato dei template email",
+    "body": "## What it does\n\nModulo `registry.ts` che è la fonte versionata dei template nativi dell'estensione Firebase \"Trigger Email\" (`firestore-send-email`).\n\n- `EMAIL_TEMPLATE_IDS`: 5 id reali già usati dai sender (`attivazioneVolontario`, `confermaRicezione`, `inviteVolunteer`, `shipmentRequest`, `device-request-documents-transmission`). L'ultimo è kebab-case a differenza degli altri: il valore rispecchia quello realmente referenziato.\n- `EmailTemplateId`: tipo derivato, per verifica a compile-time degli id nei sender al posto di stringhe libere in `template.name`.\n- `EMAIL_TEMPLATES: Record<EmailTemplateId, {subject, html, text?}>`: contenuto; i primi 4 materializzati in sola lettura dal progetto live il 2026-09-08, il quinto scritto ex novo (chiude F-38).\n\n## Boundaries\n\n- Aggiungere un id richiede di aggiornare sia `EMAIL_TEMPLATE_IDS` sia `EMAIL_TEMPLATES` (il `Record` lo impone a compile-time).\n- Non scrive su Firestore: lo fa [[super-admin/cap-email-template-deploy]].\n\n## Key entry points\n\n- `functions/backend/src/emailTemplates/registry.ts#EMAIL_TEMPLATE_IDS`\n- `functions/backend/src/emailTemplates/registry.ts#EMAIL_TEMPLATES`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "email",
+      "registry"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/concept-email-templates-collection",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/emailTemplates/registry.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/cap-firestore-backup",
+    "type": "capability",
+    "name": "Trigger backup/export nativo Firestore",
+    "body": "## What it does\n\nCallable `triggerFirestoreBackup` (europe-west1, timeout 60s) che avvia l'export nativo di Firestore verso un bucket GCS dedicato.\n\n- Autenticazione + `requireSuperAdmin`.\n- Risolve il progetto da `GCLOUD_PROJECT`/`GOOGLE_CLOUD_PROJECT` (se assente: `internal`, esito `failure`).\n- Bucket `{projectId}-firestore-backups`; prefisso `gs://<bucket>/<timestamp ISO con : e . sostituiti da ->`.\n- Chiama `FirestoreAdminClient.exportDocuments` sul database `(default)` e risponde `{ outputUriPrefix, operationName }` senza attendere il completamento (operazione long-running).\n- Esiti tracciati via `logSecurityEvent`.\n\n## Boundaries\n\n- Solo export; nessun import/restore.\n- Bucket, lifecycle di eliminazione a 30 giorni e ruoli IAM (`roles/datastore.importExportAdmin`, `roles/storage.objectAdmin` sul bucket) sono infrastruttura esterna al codice, decisa dalla spike IAM EA-172: il codice li presuppone.\n- Esporta l'intero database, senza filtri per collection.\n\n## Key entry points\n\n- `functions/backend/src/backup/triggerFirestoreBackup.ts#triggerFirestoreBackup`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "backup",
+      "callable"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-super-admin-gated-operations",
+        "type": "depends_on"
+      },
+      {
+        "id": "super-admin/concept-backup-bucket",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/backup/triggerFirestoreBackup.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/index.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/cap-super-admin-gated-operations",
+    "type": "capability",
+    "name": "Gating superAdmin delle operazioni di piattaforma",
+    "body": "## What it does\n\nLe due callable del dominio condividono lo stesso schema di protezione: utente autenticato, poi `requireSuperAdmin(db, uid)` che legge `users/{uid}.superAdmin === true`; in caso contrario `permission-denied`. Il flag è additivo a `role: \"admin\"` e viene impostato solo manualmente in console Firestore.\n\nOgni tentativo produce un evento di sicurezza: `blocked` (non autenticato / permission-denied), `failure`, `success`.\n\n## Boundaries\n\n- L'helper `requireSuperAdmin` risiede in `functions/backend/src/security/superAdmin.ts`, coperto dal dominio `security`; qui è solo consumato.\n- La UI non applica alcun controllo client: l'RBAC è solo backend (vedi [[super-admin/cap-super-admin-page]]).\n\n## Key entry points\n\n- `functions/backend/src/security/superAdmin.ts#requireSuperAdmin` (fuori scope, citato)\n- `functions/backend/src/backup/triggerFirestoreBackup.ts#logOutcome`\n- `functions/backend/src/emailTemplates/deployEmailTemplates.ts#logOutcome`",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "security",
+      "rbac"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-email-template-deploy",
+        "type": "relates_to"
+      },
+      {
+        "id": "super-admin/cap-firestore-backup",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/backup/triggerFirestoreBackup.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/emailTemplates/deployEmailTemplates.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/cap-super-admin-page",
+    "type": "capability",
+    "name": "Pagina UI Super Admin",
+    "body": "## What it does\n\n`SuperAdminPage` (route `/admin/superadmin`, voce nel layout admin) mostra un `Panel` \"Super Admin\" con due azioni, ciascuna con dialog di conferma, stato `loading` e `Toast` di esito:\n\n- \"Deploy template email\" → callable `deployEmailTemplates`; successo mostra gli id aggiornati.\n- \"Backup Firestore\" → callable `triggerFirestoreBackup`; successo mostra l'`outputUriPrefix`.\n- Gli errori mostrano `err.message` o un messaggio di fallback.\n\n## Boundaries\n\n- Nessun controllo client sul flag `superAdmin`: un admin non super vede la pagina, ma le callable rispondono `permission-denied`.\n- Non mostra lo stato di completamento dell'export né elenca i backup.\n- Il file proviene da `AdminMaintenanceRequests.tsx`, rinominato e spostato (F-46, risolto).\n\n## Key entry points\n\n- `enable-device/src/pages/admin/superadmin/SuperAdminPage.tsx#SuperAdminPage`\n- `enable-device/src/components/layout/AdminLayout.tsx` (navigazione, fuori scope)",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "ui"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-email-template-deploy",
+        "type": "depends_on"
+      },
+      {
+        "id": "super-admin/cap-firestore-backup",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/superadmin/SuperAdminPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/uc-deploy-email-templates",
+    "type": "use_case",
+    "name": "Deploy dei template email dopo una modifica nel repo",
+    "body": "## Scenario\n\nUn super admin, dopo il rilascio di una modifica al registro, apre la pagina Super Admin, clicca \"Deploy template email\" e conferma il dialog (che avverte che le prossime email useranno il nuovo contenuto). La funzione sovrascrive i documenti di `emailTemplates` e la UI mostra gli id aggiornati. Se l'utente non ha il flag, la callable risponde `permission-denied` e la UI mostra l'errore.\n\n## Depends on capabilities\n\n- [[super-admin/cap-super-admin-page]]\n- [[super-admin/cap-email-template-deploy]]\n- [[super-admin/cap-email-template-registry]]\n\n## Known gaps\n\n- Nessuna anteprima/diff rispetto al contenuto live prima della sovrascrittura.\n- Nessun rollback automatico: il ripristino richiede un nuovo deploy del registro.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "email"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-email-template-deploy",
+        "type": "depends_on"
+      },
+      {
+        "id": "super-admin/cap-super-admin-page",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/superadmin/SuperAdminPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/emailTemplates/deployEmailTemplates.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/uc-trigger-firestore-backup",
+    "type": "use_case",
+    "name": "Avvio di un backup Firestore on demand",
+    "body": "## Scenario\n\nPrima di un'operazione rischiosa, un super admin apre Super Admin, clicca \"Backup Firestore\" e conferma. La callable avvia l'export e la UI mostra `gs://<progetto>-firestore-backups/<timestamp>`. Gli export scadono dopo 30 giorni per lifecycle del bucket.\n\n## Depends on capabilities\n\n- [[super-admin/cap-super-admin-page]]\n- [[super-admin/cap-firestore-backup]]\n\n## Known gaps\n\n- Il trigger non attende né riporta l'esito finale dell'operazione long-running.\n- Nessun restore dal sistema; nessuna schedulazione automatica nello scope.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "backup"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-firestore-backup",
+        "type": "depends_on"
+      },
+      {
+        "id": "super-admin/cap-super-admin-page",
+        "type": "depends_on"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "enable-device/src/pages/admin/superadmin/SuperAdminPage.tsx",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/backup/triggerFirestoreBackup.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/concept-super-admin-flag",
+    "type": "domain_concept",
+    "name": "superAdmin (flag utente)",
+    "body": "## Definition\n\nCampo booleano `users/{uid}.superAdmin`. Se `true` abilita le operazioni di piattaforma di questo dominio. È additivo al `role: \"admin\"` (non è un terzo valore di `role`) e viene impostato solo a mano in console Firestore.\n\n## Also known as\n\nSuper admin; flag EA-171.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "security"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-super-admin-gated-operations",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/backup/triggerFirestoreBackup.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/emailTemplates/deployEmailTemplates.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/concept-email-templates-collection",
+    "type": "domain_concept",
+    "name": "Collection emailTemplates",
+    "body": "## Definition\n\nCollection Firestore letta dall'estensione Firebase \"Trigger Email\" (`firestore-send-email`): il documento con id = nome template contiene `subject`, `html`, opzionale `text`. Il suo contenuto è governato dal registro in codice e sincronizzato forward-only da [[super-admin/cap-email-template-deploy]].\n\n## Also known as\n\nTemplate email nativi; `EMAIL_TEMPLATES`.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "email"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-email-template-registry",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/emailTemplates/registry.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      },
+      {
+        "type": "code",
+        "ref": "functions/backend/src/emailTemplates/deployEmailTemplates.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "super-admin/concept-backup-bucket",
+    "type": "domain_concept",
+    "name": "Bucket di backup Firestore",
+    "body": "## Definition\n\nBucket GCS dedicato per progetto, nome `{projectId}-firestore-backups`, regione EU, con lifecycle di eliminazione a 30 giorni. Ogni export crea un prefisso timestamp (`gs://<bucket>/<ISO-timestamp>`). Il bucket è infrastruttura esterna, non creata dal codice.\n\n## Also known as\n\n`outputUriPrefix`; backup Firestore.",
+    "status": "live",
+    "owner_team": "<da assegnare>",
+    "source_epics": [
+      "EA-171",
+      "EA-172"
+    ],
+    "tags": [
+      "backup"
+    ],
+    "relates_to": [
+      {
+        "id": "super-admin/cap-firestore-backup",
+        "type": "relates_to"
+      }
+    ],
+    "last_reviewed": null,
+    "confluence_page_id": null,
+    "pending_review": false,
+    "possible_duplicate_of": null,
+    "sources": [
+      {
+        "type": "code",
+        "ref": "functions/backend/src/backup/triggerFirestoreBackup.ts",
+        "agent": "deep-dive-agent",
+        "added_at": "2026-11-17T00:00:00Z"
+      }
+    ]
+  }
+]
