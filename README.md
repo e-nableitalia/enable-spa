@@ -7,6 +7,25 @@ This repository contains two main sub-projects:
 
 ---
 
+## Documentation
+
+Project documentation lives in [`docs/space/`](docs/space/README.md). Start from the [Home](docs/space/0-home/home.md) or the [reading guide](docs/space/0-home/section-0.md), which suggests a path for each role.
+
+| Section | What it covers |
+| --- | --- |
+| [1 · Context and objectives](docs/space/1-contesto-e-obiettivi/README.md) | Purpose, scope and glossary |
+| [3 · Architecture](docs/space/3-architettura/README.md) | Architecture overview and one chapter per domain |
+| [4 · Functional specifications](docs/space/4-specifiche-funzionali/README.md) | Functional flows by area |
+| [5 · Interfaces](docs/space/5-interfacce/README.md) | Callable functions, Firestore data model, integrations |
+| [6 · Operations](docs/space/6-esercizio/README.md) | Runbooks, configuration, monitoring |
+| [7 · Quality and verification](docs/space/7-qualita-e-verifica/README.md) | Quality and traceability |
+| [8 · Open points](docs/space/8-punti-aperti/README.md) | Documentation gaps and the gap register |
+| [9 · References](docs/space/9-riferimenti/README.md) | One page per capability, use case and domain concept |
+
+Note: the reference pages in section 9 (and the node titles listed in the section 4 tables) are written in Italian.
+
+---
+
 ## 1. enable-device
 
 A Vite + React TypeScript web application for managing device requests, volunteer activities, and administrative tasks.
