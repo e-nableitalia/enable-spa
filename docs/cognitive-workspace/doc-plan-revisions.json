@@ -1174,7 +1174,12 @@
         }
       ],
       "notes_addressed": [],
-      "decision": null
+      "decision": {
+        "value": "approved",
+        "notes": "Approved by the operator: apply the proposed moves and section assignments in a follow-up plan-docs session; documentation language is English.",
+        "decided_at": "2026-11-17T00:43:07Z",
+        "decided_by": "Alberto Navatta"
+      }
     }
   ]
 }
