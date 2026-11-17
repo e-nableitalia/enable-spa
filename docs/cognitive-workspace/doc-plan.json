@@ -6,13 +6,8 @@
       "page_key": "home",
       "type": "structural",
       "title": "Cognitive Workspace",
-      "narrative": "Punto di ingresso alla mappa dei domini di enable-spa. Ogni dominio raccoglie le capability, i casi d'uso e i concetti di dominio scoperti dal codice — segui i link sotto per esplorare.",
+      "narrative": "enable-spa is the web portal of e-Nable Italia for managing requests for 3D-printed prosthetic devices and for coordinating the association's volunteers. This space is organised on a numbered skeleton: context and objectives (1), architecture (3), functional specifications (4), interfaces (5), operations (6), quality and verification (7), open points (8) and node references (9). Section 0 holds the reading guide with a path for each role; the domain chapters, including the five that were first documented before the skeleton existed, now live in section 3 and are ordered from cross-cutting foundations to the domains that build on them. Section 2 (plan and status) is not present because no approved project plan exists yet.",
       "children": [
-        "domain:auth",
-        "domain:device-requests",
-        "domain:volunteer-management",
-        "domain:shipments",
-        "domain:security",
         "section-0",
         "section-1",
         "section-3",
@@ -24,181 +19,299 @@
         "section-9"
       ],
       "confluence_page_id": "2949223",
-      "narrative_stale": true
+      "section": 0,
+      "content_class": "narrative",
+      "reading_order": 0,
+      "reading_path": [
+        "committente",
+        "architetto",
+        "sviluppatore",
+        "operations",
+        "test"
+      ]
     },
     {
       "page_key": "domain:auth",
       "type": "structural",
       "title": "Autenticazione e Registrazione",
-      "narrative": "Due percorsi di ingresso (email-link e Google OAuth) convergono sullo stesso modello utente. L'impostazione password riguarda solo il percorso email-link.",
-      "children": [
-        "node:auth/cap-email-link-registration",
-        "node:auth/cap-google-oauth-registration",
-        "node:auth/cap-password-login",
-        "node:auth/cap-set-password",
-        "node:auth/uc-volunteer-email-registration",
-        "node:auth/uc-google-oauth-login",
-        "node:auth/uc-post-registration-password-setup",
-        "node:auth/dc-oob-code",
-        "node:auth/dc-pending-registration",
-        "node:auth/dc-must-set-password"
-      ],
+      "narrative": "Two entry paths converge on the same user model: registration through an email link (a single-use oobCode stored as a pending registration) and sign-in or auto-provisioning through Google OAuth. Setting a password afterwards applies only to the email-link path, and the mustSetPassword flag is what forces it. Password login is the third, returning-user path and writes to the security audit log. The chapter sits right after security because every public entry point of authentication relies on the anti-abuse mechanisms described there, and before volunteer management because a registered user is the precondition of the onboarding flow.",
+      "children": [],
       "confluence_page_id": "2719812",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "reading_order": 4,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "page_status": "as-built",
+      "grounding": [
+        "auth/cap-email-link-registration",
+        "auth/cap-google-oauth-registration",
+        "auth/cap-password-login",
+        "auth/cap-set-password"
+      ],
+      "diagrams": [
+        {
+          "title": "Authentication paths",
+          "derived_from": [
+            "auth/cap-email-link-registration",
+            "auth/cap-google-oauth-registration",
+            "auth/cap-set-password",
+            "auth/cap-password-login",
+            "auth/dc-must-set-password"
+          ],
+          "mermaid": "flowchart TD\n  A[New user] --> B[Email link registration]\n  A --> C[Google OAuth]\n  B --> D[Set password]\n  C --> E[User account]\n  D --> E\n  E --> F[Password login]"
+        }
+      ]
     },
     {
       "page_key": "domain:device-requests",
       "type": "structural",
       "title": "Richieste Dispositivo",
-      "narrative": "Il dominio più esteso del workspace: il ciclo di vita di una richiesta dispositivo, dalla sottomissione pubblica alla chiusura. Suddiviso in tre gruppi per navigabilità — vedi le sotto-pagine.",
+      "narrative": "This is the largest domain of the workspace: the life of a device request from the public submission by a citizen to completion or closure. A request moves through internal statuses that are deliberately distinct from the status shown publicly: a triage phase handled by admins, a production phase handled by the assigned volunteer, and terminal statuses. Admins may move a request between any two statuses, while volunteers have only a small set of allowed transitions. The pages below are split in three groups for navigation: lifecycle and assignment, administrative operations and historical data, and messaging. Later deep-dives added archiving, family consent and documents, operational checklists and attachments; these depend on the generic checklist and attachment modules documented in their own chapters. The per-node pages are in the device-requests reference group of section 9, and the per-slot implementation state is not available because there is no approved plan.",
       "children": [
         "group:device-requests:lifecycle",
         "group:device-requests:admin-ops",
         "group:device-requests:messaging"
       ],
       "confluence_page_id": "3211265",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "reading_order": 9,
+      "reading_path": [
+        "committente",
+        "architetto",
+        "sviluppatore",
+        "test"
+      ],
+      "page_status": "as-built",
+      "grounding": [
+        "device-requests/dc-status-lifecycle",
+        "device-requests/cap-request-lifecycle-management",
+        "device-requests/cap-volunteer-assignment"
+      ],
+      "diagrams": [
+        {
+          "title": "Request phases",
+          "derived_from": [
+            "device-requests/dc-status-lifecycle",
+            "device-requests/cap-volunteer-assignment",
+            "device-requests/cap-request-validation"
+          ],
+          "mermaid": "flowchart LR\n  S[Public submission] --> T[Triage and validation]\n  T --> W[Volunteer assignment]\n  W --> P[Production]\n  P --> H[Shipped]\n  H --> C[Completed]\n  T --> X[Closed or cancelled]"
+        }
+      ]
     },
     {
       "page_key": "group:device-requests:lifecycle",
       "type": "structural",
       "title": "Ciclo di vita e assegnazione",
-      "narrative": "Il cuore del dominio: sottomissione, validazione, assegnazione volontari, avanzamento stato fino a completamento o chiusura come non completabile.",
-      "children": [
-        "node:device-requests/cap-public-request-submission",
-        "node:device-requests/cap-request-lifecycle-management",
-        "node:device-requests/cap-request-validation",
-        "node:device-requests/cap-volunteer-assignment",
-        "node:device-requests/uc-citizen-requests-device",
-        "node:device-requests/uc-admin-validates-request",
-        "node:device-requests/uc-admin-assigns-volunteer",
-        "node:device-requests/uc-volunteer-advances-production",
-        "node:device-requests/uc-admin-marks-attention",
-        "node:device-requests/uc-admin-adds-note",
-        "node:device-requests/uc-followup-failure",
-        "node:device-requests/dc-device-request",
-        "node:device-requests/dc-status-lifecycle",
-        "node:device-requests/dc-public-status",
-        "node:device-requests/dc-volunteer-transition",
-        "node:device-requests/dc-request-event",
-        "node:device-requests/dc-private-data-separation",
-        "node:device-requests/dc-request-number",
-        "node:device-requests/dc-requires-attention",
-        "node:device-requests/dc-counter"
-      ],
+      "narrative": "The core of the domain: public submission, validation, volunteer assignment and status progression up to completion or closure as not feasible. It also holds the concepts that make the lifecycle work, such as the internal status model, the public status, the separation of private data and the request number. Read it first when you need to understand how a request travels from a citizen to a volunteer.",
+      "children": [],
       "confluence_page_id": "3145754",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "grounding": [
+        "device-requests/cap-public-request-submission",
+        "device-requests/cap-request-lifecycle-management",
+        "device-requests/cap-request-validation",
+        "device-requests/cap-volunteer-assignment",
+        "device-requests/dc-counter",
+        "device-requests/dc-device-request",
+        "device-requests/dc-private-data-separation",
+        "device-requests/dc-public-status",
+        "device-requests/dc-request-event",
+        "device-requests/dc-request-number",
+        "device-requests/dc-requires-attention",
+        "device-requests/dc-status-lifecycle",
+        "device-requests/dc-volunteer-transition",
+        "device-requests/uc-admin-adds-note",
+        "device-requests/uc-admin-assigns-volunteer",
+        "device-requests/uc-admin-marks-attention",
+        "device-requests/uc-admin-validates-request",
+        "device-requests/uc-citizen-requests-device",
+        "device-requests/uc-followup-failure",
+        "device-requests/uc-volunteer-advances-production"
+      ],
+      "page_status": "as-built"
     },
     {
       "page_key": "group:device-requests:admin-ops",
       "type": "structural",
       "title": "Operazioni amministrative e dati storici",
-      "narrative": "Viste amministrative aggregate e le operazioni di importazione/migrazione da sorgenti legacy — funzionalità di supporto, non parte del flusso di vita standard di una richiesta.",
-      "children": [
-        "node:device-requests/cap-admin-request-views",
-        "node:device-requests/cap-internal-import",
-        "node:device-requests/uc-admin-bulk-change-status",
-        "node:device-requests/uc-admin-imports-legacy-data",
-        "node:device-requests/uc-admin-migrates-volunteer-field",
-        "node:device-requests/dc-amputation-type",
-        "node:device-requests/dc-device-type",
-        "node:device-requests/dc-age-range"
-      ],
+      "narrative": "Aggregated administrative views and the import and migration operations from legacy sources. These are supporting functions, not part of the standard life of a request, and they are grouped apart so that the lifecycle pages stay readable.",
+      "children": [],
       "confluence_page_id": "3244033",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "grounding": [
+        "device-requests/cap-admin-request-views",
+        "device-requests/cap-internal-import",
+        "device-requests/dc-age-range",
+        "device-requests/dc-amputation-type",
+        "device-requests/dc-device-type",
+        "device-requests/uc-admin-bulk-change-status",
+        "device-requests/uc-admin-imports-legacy-data",
+        "device-requests/uc-admin-migrates-volunteer-field"
+      ],
+      "page_status": "as-built"
     },
     {
       "page_key": "group:device-requests:messaging",
       "type": "structural",
       "title": "Messaggistica e monitoraggio email",
-      "narrative": "Comunicazione verso volontari/admin e osservabilità della coda email — trasversale al ciclo di vita ma raggruppata qui perché condivide la stessa infrastruttura (collection mail).",
-      "children": [
-        "node:device-requests/cap-global-messaging",
-        "node:device-requests/cap-email-log-monitoring",
-        "node:device-requests/uc-admin-sends-global-message",
-        "node:device-requests/dc-global-message"
-      ],
+      "narrative": "Communication towards volunteers and admins, and observability of the email queue. The group is cross-cutting with respect to the lifecycle but is kept together because it shares the same infrastructure, the mail collection.",
+      "children": [],
       "confluence_page_id": "3276801",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "grounding": [
+        "device-requests/cap-email-log-monitoring",
+        "device-requests/cap-global-messaging",
+        "device-requests/dc-global-message",
+        "device-requests/uc-admin-sends-global-message"
+      ],
+      "page_status": "as-built"
     },
     {
       "page_key": "domain:volunteer-management",
       "type": "structural",
       "title": "Gestione Volontari",
-      "narrative": "Dal primo contatto CRM all'attività quotidiana del volontario attivo. Tre gruppi: reclutamento/attivazione, profilo/attrezzatura, vista amministrativa.",
+      "narrative": "From the first CRM contact to the daily activity of an active volunteer. Three areas are covered: recruiting and activation, the profile and equipment of the volunteer, and the aggregated administrative view. The domain depends on authentication for the account and on the device-requests domain for the work a volunteer carries out, which is why it follows security and authentication and precedes the request-handling chapters. Recent deep-dives added the volunteer requests workspace, the personal to-do list of checklist items and the CSV import of contacts used by admins for maintenance; the to-do list in turn relies on the generic checklist module.",
       "children": [
         "group:volunteer-management:onboarding",
-        "group:volunteer-management:profile",
-        "node:volunteer-management/cap-admin-volunteer-view"
+        "group:volunteer-management:profile"
       ],
       "confluence_page_id": "3244053",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "reading_order": 6,
+      "reading_path": [
+        "committente",
+        "architetto",
+        "sviluppatore"
+      ],
+      "page_status": "as-built",
+      "grounding": [
+        "volunteer-management/cap-volunteer-invitation",
+        "volunteer-management/cap-volunteer-activation",
+        "volunteer-management/uc-volunteer-onboarding",
+        "volunteer-management/cap-admin-volunteer-view"
+      ],
+      "diagrams": [
+        {
+          "title": "Volunteer onboarding",
+          "derived_from": [
+            "volunteer-management/cap-volunteer-invitation",
+            "volunteer-management/cap-consent-collection",
+            "volunteer-management/cap-volunteer-activation",
+            "volunteer-management/uc-volunteer-manages-workload"
+          ],
+          "mermaid": "flowchart LR\n  C[Contact] --> I[Invitation]\n  I --> R[Registration]\n  R --> K[Consent and profile]\n  K --> A[Admin activation]\n  A --> W[Daily workload]"
+        }
+      ]
     },
     {
       "page_key": "group:volunteer-management:onboarding",
       "type": "structural",
       "title": "Reclutamento, consenso e attivazione",
-      "narrative": "Il percorso che porta un contatto CRM a diventare un volontario operativo: invito, registrazione (vedi anche dominio Auth), consenso, attivazione admin.",
-      "children": [
-        "node:volunteer-management/cap-volunteer-invitation",
-        "node:volunteer-management/cap-consent-collection",
-        "node:volunteer-management/cap-volunteer-activation",
-        "node:volunteer-management/uc-volunteer-onboarding",
-        "node:volunteer-management/uc-admin-activates-volunteer",
-        "node:volunteer-management/dc-contact"
-      ],
+      "narrative": "The path that turns a CRM contact into an operational volunteer: invitation, registration (see also the authentication chapter), consent collection and admin activation.",
+      "children": [],
       "confluence_page_id": "2818136",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "grounding": [
+        "volunteer-management/cap-consent-collection",
+        "volunteer-management/cap-volunteer-activation",
+        "volunteer-management/cap-volunteer-invitation",
+        "volunteer-management/dc-contact",
+        "volunteer-management/uc-admin-activates-volunteer",
+        "volunteer-management/uc-volunteer-onboarding"
+      ],
+      "page_status": "as-built"
     },
     {
       "page_key": "group:volunteer-management:profile",
       "type": "structural",
       "title": "Profilo, attrezzatura e attività quotidiana",
-      "narrative": "Cosa gestisce il volontario già attivo: dati di profilo, stampanti registrate, il proprio carico di richieste assegnate.",
-      "children": [
-        "node:volunteer-management/cap-volunteer-profile-management",
-        "node:volunteer-management/cap-printer-registry",
-        "node:volunteer-management/uc-volunteer-manages-workload",
-        "node:volunteer-management/dc-volunteer",
-        "node:volunteer-management/dc-3d-printer"
-      ],
+      "narrative": "What an already active volunteer manages: profile data, registered printers and their own workload of assigned requests.",
+      "children": [],
       "confluence_page_id": "2687058",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "grounding": [
+        "volunteer-management/cap-printer-registry",
+        "volunteer-management/cap-volunteer-profile-management",
+        "volunteer-management/dc-3d-printer",
+        "volunteer-management/dc-volunteer",
+        "volunteer-management/uc-volunteer-manages-workload"
+      ],
+      "page_status": "as-built"
     },
     {
       "page_key": "domain:shipments",
       "type": "structural",
       "title": "Spedizioni",
-      "narrative": "Dominio compatto e separato dal ciclo di vita delle richieste dispositivo: gestisce solo la spedizione fisica di pacchi, con il proprio ciclo pending/approved/deleted.",
-      "children": [
-        "node:shipments/cap-shipment-request-lifecycle",
-        "node:shipments/cap-known-address-suggestion",
-        "node:shipments/uc-create-shipment-request",
-        "node:shipments/uc-approve-shipment-request",
-        "node:shipments/uc-delete-shipment-request",
-        "node:shipments/dc-shipment-request"
-      ],
+      "narrative": "A compact domain, separate from the device request lifecycle: it handles only the physical shipment of parcels, with its own pending, approved and deleted statuses. Volunteers or admins create a request, an admin approves it and an email is queued automatically, and deletion is a soft delete. A known-address suggestion helps filling the form. The domain is kept apart from device requests because a shipment request is not tied to the request status model; no link between the two is documented in the workspace.",
+      "children": [],
       "confluence_page_id": "3309569",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "reading_order": 9,
+      "reading_path": [
+        "architetto",
+        "sviluppatore"
+      ],
+      "page_status": "as-built",
+      "grounding": [
+        "shipments/cap-shipment-request-lifecycle",
+        "shipments/cap-known-address-suggestion"
+      ],
+      "diagrams": [
+        {
+          "title": "Shipment request statuses",
+          "derived_from": [
+            "shipments/cap-shipment-request-lifecycle"
+          ],
+          "mermaid": "flowchart LR\n  N[Created by volunteer or admin] --> P[pending]\n  P --> A[approved by admin]\n  P --> D[deleted]\n  A --> D"
+        }
+      ]
     },
     {
       "page_key": "domain:security",
       "type": "structural",
       "title": "Sicurezza e Anti-abuso",
-      "narrative": "Modulo trasversale usato da auth e device-requests, non un gruppo di Cloud Function dedicato. Tre meccanismi indipendenti: anti-spam (reCAPTCHA + rate limiting), audit log, e la console che lo espone agli admin.",
-      "children": [
-        "node:security/cap-rate-limiting",
-        "node:security/cap-recaptcha-verification",
-        "node:security/cap-security-audit-logging",
-        "node:security/cap-admin-security-log-console",
-        "node:security/uc-antispam-public-forms",
-        "node:security/uc-audit-trail-consulta",
-        "node:security/dc-security-log",
-        "node:security/dc-rate-limit-entry",
-        "node:security/dc-recaptcha-assessment"
-      ],
+      "narrative": "A cross-cutting module used by the public entry points of authentication and device requests, not a dedicated group of cloud functions. It combines three independent mechanisms: anti-spam (reCAPTCHA verification and rate limiting per email and IP address), the security audit log, and the admin console that exposes the log. It comes first among the chapters because every other domain depends on it.",
+      "children": [],
       "confluence_page_id": "3112981",
-      "narrative_stale": true
+      "section": 3,
+      "content_class": "narrative",
+      "reading_order": 4,
+      "reading_path": [
+        "architetto",
+        "sviluppatore",
+        "operations"
+      ],
+      "page_status": "as-built",
+      "grounding": [
+        "security/cap-rate-limiting",
+        "security/cap-recaptcha-verification",
+        "security/cap-security-audit-logging",
+        "security/cap-admin-security-log-console"
+      ],
+      "diagrams": [
+        {
+          "title": "Security mechanisms",
+          "derived_from": [
+            "security/cap-rate-limiting",
+            "security/cap-recaptcha-verification",
+            "security/cap-security-audit-logging",
+            "security/cap-admin-security-log-console"
+          ],
+          "mermaid": "flowchart TD\n  F[Public form or login] --> R[reCAPTCHA verification]\n  F --> L[Rate limiting]\n  R --> A[Audit log]\n  L --> A\n  A --> C[Admin log console]"
+        }
+      ]
     },
     {
       "page_key": "node:auth/cap-email-link-registration",
@@ -669,14 +782,19 @@
       ],
       "children": [
         "arch-overview",
+        "domain:security",
+        "domain:auth",
         "domain:contacts",
+        "domain:volunteer-management",
         "domain:process-organizer-core",
         "domain:attachments",
+        "domain:device-requests",
+        "domain:shipments",
         "domain:special-projects-initiatives",
         "domain:super-admin",
         "generated-decision-index"
       ],
-      "narrative": "This section presents the system from the top: first an overview of how the ten domains relate, then one chapter per domain with its intent, boundaries and entry points, and finally the index of design decisions computed from the solution studies. Chapters (the existing ones for security, authentication, volunteers, device requests and shipments join this section once the proposed moves are approved) are ordered from cross-cutting foundations (security, authentication) through the people-facing domains, then the two generic modules (checklists and attachments), then the domains that consume them, and finally platform operations."
+      "narrative": "This section presents the system from the top: first an overview of how the ten domains relate, then one chapter per domain with its intent, boundaries and entry points, and finally the index of design decisions computed from the solution studies. Chapters are ordered from cross-cutting foundations (security, authentication) through the people-facing domains (contacts, volunteers), then the two generic modules (checklists and attachments), then the domains that consume them (device requests, shipments, special projects), and finally platform operations. No approved project plan exists yet, so this order is a reading proposal rather than a delivery sequence."
     },
     {
       "page_key": "arch-overview",
@@ -2140,7 +2258,17 @@
       "content_class": "narrative",
       "purpose": "Node reference pages of the security domain.",
       "audience": "Developer",
-      "children": [],
+      "children": [
+        "node:security/cap-admin-security-log-console",
+        "node:security/cap-rate-limiting",
+        "node:security/cap-recaptcha-verification",
+        "node:security/cap-security-audit-logging",
+        "node:security/dc-rate-limit-entry",
+        "node:security/dc-recaptcha-assessment",
+        "node:security/dc-security-log",
+        "node:security/uc-antispam-public-forms",
+        "node:security/uc-audit-trail-consulta"
+      ],
       "narrative": "Reference pages of the capabilities, use cases and domain concepts of the security domain. The architectural reading is in the domain chapter of section 3."
     },
     {
@@ -2151,7 +2279,18 @@
       "content_class": "narrative",
       "purpose": "Node reference pages of the auth domain.",
       "audience": "Developer",
-      "children": [],
+      "children": [
+        "node:auth/cap-email-link-registration",
+        "node:auth/cap-google-oauth-registration",
+        "node:auth/cap-password-login",
+        "node:auth/cap-set-password",
+        "node:auth/dc-must-set-password",
+        "node:auth/dc-oob-code",
+        "node:auth/dc-pending-registration",
+        "node:auth/uc-google-oauth-login",
+        "node:auth/uc-post-registration-password-setup",
+        "node:auth/uc-volunteer-email-registration"
+      ],
       "narrative": "Reference pages of the capabilities, use cases and domain concepts of the auth domain. The architectural reading is in the domain chapter of section 3."
     },
     {
@@ -2186,7 +2325,19 @@
       "children": [
         "node:volunteer-management/cap-volunteer-requests-workspace",
         "node:volunteer-management/cap-volunteer-checklist-todo",
-        "node:volunteer-management/cap-volunteer-contacts-csv-import"
+        "node:volunteer-management/cap-volunteer-contacts-csv-import",
+        "node:volunteer-management/cap-admin-volunteer-view",
+        "node:volunteer-management/cap-consent-collection",
+        "node:volunteer-management/cap-printer-registry",
+        "node:volunteer-management/cap-volunteer-activation",
+        "node:volunteer-management/cap-volunteer-invitation",
+        "node:volunteer-management/cap-volunteer-profile-management",
+        "node:volunteer-management/dc-3d-printer",
+        "node:volunteer-management/dc-contact",
+        "node:volunteer-management/dc-volunteer",
+        "node:volunteer-management/uc-admin-activates-volunteer",
+        "node:volunteer-management/uc-volunteer-manages-workload",
+        "node:volunteer-management/uc-volunteer-onboarding"
       ],
       "narrative": "Reference pages of the capabilities, use cases and domain concepts of the volunteer-management domain. The architectural reading is in the domain chapter of section 3."
     },
@@ -2271,7 +2422,39 @@
         "node:device-requests/dc-archived-flag",
         "node:device-requests/dc-checklist-ids",
         "node:device-requests/dc-checklist-share-link",
-        "node:device-requests/dc-family-consent"
+        "node:device-requests/dc-family-consent",
+        "node:device-requests/cap-admin-request-views",
+        "node:device-requests/cap-email-log-monitoring",
+        "node:device-requests/cap-global-messaging",
+        "node:device-requests/cap-internal-import",
+        "node:device-requests/cap-public-request-submission",
+        "node:device-requests/cap-request-lifecycle-management",
+        "node:device-requests/cap-request-validation",
+        "node:device-requests/cap-volunteer-assignment",
+        "node:device-requests/dc-age-range",
+        "node:device-requests/dc-amputation-type",
+        "node:device-requests/dc-counter",
+        "node:device-requests/dc-device-request",
+        "node:device-requests/dc-device-type",
+        "node:device-requests/dc-global-message",
+        "node:device-requests/dc-private-data-separation",
+        "node:device-requests/dc-public-status",
+        "node:device-requests/dc-request-event",
+        "node:device-requests/dc-request-number",
+        "node:device-requests/dc-requires-attention",
+        "node:device-requests/dc-status-lifecycle",
+        "node:device-requests/dc-volunteer-transition",
+        "node:device-requests/uc-admin-adds-note",
+        "node:device-requests/uc-admin-assigns-volunteer",
+        "node:device-requests/uc-admin-bulk-change-status",
+        "node:device-requests/uc-admin-imports-legacy-data",
+        "node:device-requests/uc-admin-marks-attention",
+        "node:device-requests/uc-admin-migrates-volunteer-field",
+        "node:device-requests/uc-admin-sends-global-message",
+        "node:device-requests/uc-admin-validates-request",
+        "node:device-requests/uc-citizen-requests-device",
+        "node:device-requests/uc-followup-failure",
+        "node:device-requests/uc-volunteer-advances-production"
       ],
       "narrative": "Reference pages of the capabilities, use cases and domain concepts of the device-requests domain. The architectural reading is in the domain chapter of section 3."
     },
@@ -2283,7 +2466,14 @@
       "content_class": "narrative",
       "purpose": "Node reference pages of the shipments domain.",
       "audience": "Developer",
-      "children": [],
+      "children": [
+        "node:shipments/cap-known-address-suggestion",
+        "node:shipments/cap-shipment-request-lifecycle",
+        "node:shipments/dc-shipment-request",
+        "node:shipments/uc-approve-shipment-request",
+        "node:shipments/uc-create-shipment-request",
+        "node:shipments/uc-delete-shipment-request"
+      ],
       "narrative": "Reference pages of the capabilities, use cases and domain concepts of the shipments domain. The architectural reading is in the domain chapter of section 3."
     },
     {
@@ -2363,5 +2553,5 @@
       "content_class": "generated"
     }
   ],
-  "revision": 1
+  "revision": 2
 }

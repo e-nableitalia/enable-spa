@@ -1180,6 +1180,612 @@
         "decided_at": "2026-11-17T00:43:07Z",
         "decided_by": "Alberto Navatta"
       }
+    },
+    {
+      "revision": 2,
+      "proposed_at": "2026-11-17T01:00:00Z",
+      "motivation": "Applies revision 1, approved by the operator ('apply the proposed moves and section assignments in a follow-up plan-docs session; documentation language is English'). The 11 legacy structural pages receive their section (home in 0, the five domain chapters and their three sub-groups in 3); the five domain chapters move from Home to section 3, ordered from cross-cutting foundations to dependents (security, auth, contacts, volunteer-management, process-organizer-core, attachments, device-requests, shipments, special-projects-initiatives, super-admin) because no approved project plan exists; the 74 legacy node pages move from the domain chapters and groups to the reference groups of section 9. The sub-groups of device-requests and volunteer-management stay as children of their chapters and now cite their former node pages through grounding. The narratives flagged stale are rewritten in English, with Mermaid diagrams derived only from node relates_to and bodies. Titles are not renamed: renames were not part of revision 1 and the Italian titles of the legacy pages remain for the operator to align in a dedicated revision. Section 2 stays omitted (no approved plan, no plan pages). The plan stays in draft because its structure changed.",
+      "changes": [
+        {
+          "kind": "moved",
+          "page_key": "domain:auth",
+          "from": "home",
+          "to": "section-3",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "domain:device-requests",
+          "from": "home",
+          "to": "section-3",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "domain:volunteer-management",
+          "from": "home",
+          "to": "section-3",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "domain:shipments",
+          "from": "home",
+          "to": "section-3",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "domain:security",
+          "from": "home",
+          "to": "section-3",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/cap-email-link-registration",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/cap-google-oauth-registration",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/cap-password-login",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/cap-set-password",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/dc-must-set-password",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/dc-oob-code",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/dc-pending-registration",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/uc-google-oauth-login",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/uc-post-registration-password-setup",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:auth/uc-volunteer-email-registration",
+          "from": "domain:auth",
+          "to": "reference:auth",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-admin-request-views",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-email-log-monitoring",
+          "from": "group:device-requests:messaging",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-global-messaging",
+          "from": "group:device-requests:messaging",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-internal-import",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-public-request-submission",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-request-lifecycle-management",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-request-validation",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/cap-volunteer-assignment",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-age-range",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-amputation-type",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-counter",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-device-request",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-device-type",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-global-message",
+          "from": "group:device-requests:messaging",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-private-data-separation",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-public-status",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-request-event",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-request-number",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-requires-attention",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-status-lifecycle",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/dc-volunteer-transition",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-adds-note",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-assigns-volunteer",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-bulk-change-status",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-imports-legacy-data",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-marks-attention",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-migrates-volunteer-field",
+          "from": "group:device-requests:admin-ops",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-sends-global-message",
+          "from": "group:device-requests:messaging",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-admin-validates-request",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-citizen-requests-device",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-followup-failure",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:device-requests/uc-volunteer-advances-production",
+          "from": "group:device-requests:lifecycle",
+          "to": "reference:device-requests",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/cap-admin-security-log-console",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/cap-rate-limiting",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/cap-recaptcha-verification",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/cap-security-audit-logging",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/dc-rate-limit-entry",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/dc-recaptcha-assessment",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/dc-security-log",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/uc-antispam-public-forms",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:security/uc-audit-trail-consulta",
+          "from": "domain:security",
+          "to": "reference:security",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:shipments/cap-known-address-suggestion",
+          "from": "domain:shipments",
+          "to": "reference:shipments",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:shipments/cap-shipment-request-lifecycle",
+          "from": "domain:shipments",
+          "to": "reference:shipments",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:shipments/dc-shipment-request",
+          "from": "domain:shipments",
+          "to": "reference:shipments",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:shipments/uc-approve-shipment-request",
+          "from": "domain:shipments",
+          "to": "reference:shipments",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:shipments/uc-create-shipment-request",
+          "from": "domain:shipments",
+          "to": "reference:shipments",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:shipments/uc-delete-shipment-request",
+          "from": "domain:shipments",
+          "to": "reference:shipments",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/cap-admin-volunteer-view",
+          "from": "domain:volunteer-management",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/cap-consent-collection",
+          "from": "group:volunteer-management:onboarding",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/cap-printer-registry",
+          "from": "group:volunteer-management:profile",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/cap-volunteer-activation",
+          "from": "group:volunteer-management:onboarding",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/cap-volunteer-invitation",
+          "from": "group:volunteer-management:onboarding",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/cap-volunteer-profile-management",
+          "from": "group:volunteer-management:profile",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/dc-3d-printer",
+          "from": "group:volunteer-management:profile",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/dc-contact",
+          "from": "group:volunteer-management:onboarding",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/dc-volunteer",
+          "from": "group:volunteer-management:profile",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/uc-admin-activates-volunteer",
+          "from": "group:volunteer-management:onboarding",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/uc-volunteer-manages-workload",
+          "from": "group:volunteer-management:profile",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "moved",
+          "page_key": "node:volunteer-management/uc-volunteer-onboarding",
+          "from": "group:volunteer-management:onboarding",
+          "to": "reference:volunteer-management",
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "home",
+          "from": null,
+          "to": 0,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "domain:auth",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "domain:device-requests",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "group:device-requests:lifecycle",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "group:device-requests:admin-ops",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "group:device-requests:messaging",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "domain:volunteer-management",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "group:volunteer-management:onboarding",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "group:volunteer-management:profile",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "domain:shipments",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        },
+        {
+          "kind": "section_changed",
+          "page_key": "domain:security",
+          "from": null,
+          "to": 3,
+          "note": "authorized by revision 1"
+        }
+      ],
+      "notes_addressed": [
+        1
+      ],
+      "decision": null
     }
   ]
 }
