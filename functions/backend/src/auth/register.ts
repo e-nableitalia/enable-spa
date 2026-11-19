@@ -273,6 +273,11 @@ export const completeRegistration = onCall(
       const email = user.email;
       if (!email) throw new HttpsError("internal", "User has no email");
 
+      // Never overwrite an existing user (would reset role/active of admins and approved volunteers)
+      const existing = await db.collection("users").doc(uid).get();
+      if (existing.exists) {
+        throw new HttpsError("already-exists", "User already registered");
+      }
       // users are created with active=false, so we need to enable them here
       await db.collection("users").doc(uid).set({
         email,
