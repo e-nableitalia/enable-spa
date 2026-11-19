@@ -41,7 +41,8 @@ export async function resolveDeviceRequestAttachmentAccess(
   const role = userSnap.exists ? userSnap.data()?.role : undefined;
 
   const isAdmin = role === "admin";
-  const isAssignedVolunteer = role === "volunteer" && assignedVolunteers.includes(uid);
+  const isActive = userSnap.data()?.active !== false;
+  const isAssignedVolunteer = role === "volunteer" && isActive && assignedVolunteers.includes(uid);
 
   if (!isAdmin && !isAssignedVolunteer) {
     throw new HttpsError(

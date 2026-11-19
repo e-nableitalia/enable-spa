@@ -50,11 +50,8 @@ export { createChecklistShareLink } from "./device-requests/createChecklistShare
 export { getChecklistShareStatus } from "./device-requests/getChecklistShareStatus";
 export { updateDeviceRequestChecklistTitle } from "./device-requests/updateDeviceRequestChecklistTitle";
 export { sendDocumentsEmail } from "./device-requests/sendDocumentsEmail";
-export { uploadAttachment } from "./attachments/uploadAttachment";
-export { listAttachments } from "./attachments/listAttachments";
-export { downloadAttachment } from "./attachments/downloadAttachment";
-export { updateAttachmentDescription } from "./attachments/updateAttachmentDescription";
-export { deleteAttachment } from "./attachments/deleteAttachment";
+// Generic attachments/* callables are NOT exported: they only check the role and
+// bypass the per-entity RBAC. They are used via .run() by the device-request/project wrappers.
 export { uploadDeviceRequestAttachment } from "./device-requests/uploadDeviceRequestAttachment";
 export { listDeviceRequestAttachments } from "./device-requests/listDeviceRequestAttachments";
 export { downloadDeviceRequestAttachment } from "./device-requests/downloadDeviceRequestAttachment";
